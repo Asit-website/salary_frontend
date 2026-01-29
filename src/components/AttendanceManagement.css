@@ -1,0 +1,119 @@
+.att-card {
+  border-radius: 12px;
+  border: 1px solid #eee;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.att-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.att-title {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.att-stats {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.att-stat {
+  min-width: 150px;
+  padding: 10px 14px;
+  border: 1px solid #f0f0f0;
+  background: #fff;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 0;
+}
+
+.att-stat-label {
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-bottom: 4px;
+}
+
+.att-stat-value {
+  font-weight: 700;
+  color: #262626;
+}
+
+.att-stat-icon {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+.att-stat-icon img { width: 48px; height: 48px; display: block; }
+/* .att-stat-icon.present { background: #e6fffb; color: #08979c; }
+.att-stat-icon.absent { background: #fff1f0; color: #cf1322; }
+.att-stat-icon.leave { background: #fff7e6; color: #d46b08; } */
+
+.att-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.att-toolbar-left { display: flex; gap: 12px; align-items: center; }
+.att-toolbar-right { display: flex; gap: 12px; align-items: center; }
+
+.att-search {
+  width: 240px;
+}
+
+.att-filter {
+  width: 180px;
+}
+
+/* Status tag colors closer to design */
+.ant-tag-green {
+  background: #f6ffed;
+  border-color: #b7eb8f;
+  color: #389e0d;
+}
+
+.ant-tag-red {
+  background: #fff1f0;
+  border-color: #ffa39e;
+  color: #cf1322;
+}
+
+.ant-tag-blue {
+  background: #e6f4ff;
+  border-color: #91caff;
+  color: #0958d9;
+}
+
+.ant-card .ant-card-body {
+  padding-top: 16px;
+}
+
+/* Compact inputs/selects like design */
+.att-card .ant-select-selector,
+.att-card .ant-input,
+.att-card .ant-picker {
+  height: 36px !important;
+  border-radius: 8px !important;
+}
+.att-card .ant-select-selector .ant-select-selection-item,
+.att-card .ant-input,
+.att-card .ant-picker-input > input {
+  line-height: 34px !important;
+}
+
+/* Table container subtle rounding */
+.att-card .ant-table-container {
+  border-radius: 10px;
+}

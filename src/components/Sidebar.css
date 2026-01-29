@@ -1,0 +1,48 @@
+/* Sidebar Active Menu Item Styling */
+.ant-menu-light.ant-menu-inline .ant-menu-item-selected {
+  background-color: #125EC9 !important;
+  color: white !important;
+  border-radius: 6px !important;
+  margin: 4px 8px !important;
+  width: calc(100% - 16px) !important;
+}
+
+.ant-menu-light.ant-menu-inline .ant-menu-item-selected::after {
+  display: none !important;
+}
+
+
+
+.ant-menu-light.ant-menu-inline .ant-menu-item {
+  margin: 4px 8px !important;
+  border-radius: 6px !important;
+  width: calc(100% - 16px) !important;
+  transition: all 0.3s ease !important;
+}
+
+.ant-menu-light.ant-menu-inline .ant-menu-item:hover {
+  background-color: #f0f8ff !important;
+  color: #125EC9 !important;
+}
+
+.ant-menu-light.ant-menu-inline .ant-menu-item-selected:hover {
+  background-color: #125EC9 !important;
+  color: white !important;
+}
+
+.ant-menu-light.ant-menu-inline .ant-menu-item-selected:hover .anticon {
+  color: white !important;
+}
+
+/* Icon styling */
+.ant-menu-light.ant-menu-inline .ant-menu-item .anticon {
+  color: #666 !important;
+  transition: color 0.3s ease !important;
+}
+
+.ant-menu-light.ant-menu-inline .ant-menu-item:hover .anticon {
+  color: #125EC9 !important;
+}
+.ant-menu-light.ant-menu-inline .ant-menu-item-selected .anticon {
+  color: white !important;
+}
