@@ -19,6 +19,8 @@ import {
   Select
 } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
+import { jsPDF } from 'jspdf';
+import moment from 'moment';
 import Sidebar from './Sidebar';
 import api from '../api';
 
@@ -164,7 +166,15 @@ export default function PayrollCycle() {
     try {
       setLoading(true);
       const res = await api.post(`/admin/payroll/${cycle.id}/mark-paid`);
-      if (res?.data?.success) { setCycle(res.data.cycle); message.success('Marked as paid'); }
+      if (res?.data?.success) { 
+        setCycle(res.data.cycle); 
+        message.success('Marked as paid');
+        // Refresh payroll lines to show paid status
+        const payrollRes = await api.get(`/admin/payroll?monthKey=${cycle.monthKey}`);
+        if (payrollRes?.data?.success) {
+          setLines(payrollRes.data.lines || []);
+        }
+      }
       else message.error('Mark paid failed');
     } catch (_) { message.error('Mark paid failed'); } finally { setLoading(false); }
   };
@@ -191,14 +201,40 @@ export default function PayrollCycle() {
     }
   };
 
-  const openBulkPaid = () => {
+  const openBulkPaid = async () => {
     if (!cycle) return;
     if (!selectedRowKeys || selectedRowKeys.length === 0) {
       message.warning('Select at least one line');
       return;
     }
-    paidForm.resetFields();
-    setPaidOpen(true);
+    try {
+      setLoading(true);
+      // Direct payment without popup
+      const payload = {
+        lineIds: selectedRowKeys,
+        paidAt: new Date().toISOString(),
+        paidMode: 'CASH',
+        paidRef: null,
+        paidAmount: null, // Use net salary from payroll line
+      };
+      const res = await api.post(`/admin/payroll/${cycle.id}/lines/mark-paid`, payload);
+      if (res?.data?.success) {
+        message.success(`Marked paid for ${res.data.updated} employees`);
+        setSelectedRowKeys([]);
+        // Refresh data
+        const payrollRes = await api.get(`/admin/payroll?monthKey=${cycle.monthKey}`);
+        if (payrollRes?.data?.success) {
+          setCycle(payrollRes.data.cycle);
+          setLines(payrollRes.data.lines || []);
+        }
+      } else {
+        message.error('Failed to mark paid');
+      }
+    } catch (e) {
+      message.error('Failed to mark paid');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const submitBulkPaid = async () => {
@@ -274,23 +310,385 @@ export default function PayrollCycle() {
   const columns = [
     { title: 'Employee', key: 'emp', render: (_, r) => staffMap[r.userId || r.user_id] || (r.userId || r.user_id) },
     { title: 'Gross', dataIndex: ['totals', 'grossSalary'], key: 'gross', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` },
+    { 
+      title: 'Earnings', 
+      dataIndex: ['totals', 'totalEarnings'], 
+      key: 'earnings', 
+      render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` 
+    },
     { title: 'Deductions', dataIndex: ['totals', 'totalDeductions'], key: 'deductions', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` },
     { title: 'Net', dataIndex: ['totals', 'netSalary'], key: 'net', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` },
-    { title: 'Status', dataIndex: 'status', key: 'status', render: (s) => <Tag color={s === 'INCLUDED' ? 'blue' : 'default'}>{s}</Tag> },
+    // { title: 'Status', dataIndex: 'status', key: 'status', render: (s) => <Tag color={s === 'INCLUDED' ? 'blue' : 'default'}>{s}</Tag> },
     {
       title: 'Actions', key: 'actions', render: (_, r) => (
         <Space>
-          <Button size="small" onClick={() => onOpenEdit(r)} disabled={cycle?.status === 'PAID'}>Edit</Button>
+          {/* <Button size="small" onClick={() => onOpenEdit(r)} disabled={cycle?.status === 'PAID'}>Edit</Button> */}
           <Button size="small" onClick={() => setViewRow(r)}>View</Button>
+          <Button size="small" type="primary" onClick={() => generatePayslipPDF(r)}>Generate Payslip</Button>
         </Space>
       )
     },
   ];
 
+  const generatePayslipPDF = async (payrollLine) => {
+    try {
+      console.log('Starting payslip generation...');
+      
+      if (!cycle || !payrollLine) {
+        console.error('Missing cycle or payroll data');
+        message.error('Payroll data not available');
+        return;
+      }
+
+      // Get staff details
+      const staff = staffMap[payrollLine.userId || payrollLine.user_id];
+      if (!staff) {
+        console.error('Staff not found for ID:', payrollLine.userId);
+        message.error('Staff details not found');
+        return;
+      }
+
+      // Get organization brand info from same endpoint as sidebar
+      let brandInfo = { displayName: 'ThinkTech Solutions' };
+      try {
+        const brandResponse = await api.get('/admin/settings/brand');
+        if (brandResponse.data?.brand?.displayName) {
+          brandInfo.displayName = brandResponse.data.brand.displayName;
+        }
+      } catch (error) {
+        console.log('Using default brand info');
+      }
+
+      console.log('Generating payslip for:', staff);
+
+      // Attendance data: try payroll line summary -> API -> safe defaults
+      let attendanceData = {
+        workingDays: 0,
+        presentDays: 0,
+        absentDays: 0,
+        paidLeaveDays: 0,
+        unpaidLeaveDays: 0,
+        weeklyOffDays: 0,
+        holidays: 0,
+        halfDays: 0
+      };
+
+      // 1) Prefer summary embedded in payroll line (fast, consistent with payroll compute)
+      const sum = payrollLine.attendanceSummary || {};
+      if (sum && (sum.present != null || sum.absent != null || sum.paidLeave != null)) {
+        attendanceData.presentDays = Number(sum.present || 0);
+        attendanceData.absentDays = Number(sum.absent || 0);
+        attendanceData.paidLeaveDays = Number(sum.paidLeave || 0);
+        attendanceData.unpaidLeaveDays = Number(sum.unpaidLeave || 0);
+        attendanceData.weeklyOffDays = Number(sum.weeklyOff || 0);
+        attendanceData.holidays = Number(sum.holidays || 0);
+        attendanceData.halfDays = Number(sum.half || 0);
+        attendanceData.workingDays = attendanceData.presentDays + attendanceData.absentDays + attendanceData.paidLeaveDays + attendanceData.unpaidLeaveDays + attendanceData.weeklyOffDays + attendanceData.holidays + attendanceData.halfDays;
+      }
+
+      // 2) If still zero, try API for the month
+      if (attendanceData.workingDays === 0) {
+        try {
+          const attendanceRes = await api.get(`/admin/staff/${payrollLine.userId}/attendance`, { params: { month: cycle.monthKey } });
+          const att = attendanceRes?.data?.data || attendanceRes?.data?.attendance || [];
+          if (Array.isArray(att)) {
+            for (const record of att) {
+              const status = String(record.status || record.dayStatus || '').toLowerCase();
+              switch (status) {
+                case 'p':
+                case 'present':
+                  attendanceData.presentDays++; break;
+                case 'a':
+                case 'absent':
+                  attendanceData.absentDays++; break;
+                case 'hd':
+                case 'half':
+                case 'half_day':
+                  attendanceData.halfDays++; break;
+                case 'l':
+                case 'leave':
+                case 'paid_leave':
+                  attendanceData.paidLeaveDays++; break;
+                case 'ul':
+                case 'unpaid_leave':
+                  attendanceData.unpaidLeaveDays++; break;
+                case 'wo':
+                case 'weekly_off':
+                  attendanceData.weeklyOffDays++; break;
+                case 'h':
+                case 'holiday':
+                  attendanceData.holidays++; break;
+              }
+            }
+            attendanceData.workingDays = attendanceData.presentDays + attendanceData.absentDays + attendanceData.paidLeaveDays + attendanceData.unpaidLeaveDays + attendanceData.weeklyOffDays + attendanceData.holidays + attendanceData.halfDays;
+          }
+        } catch (e) {
+          // ignore; will fallback to defaults below
+        }
+      }
+
+      // 3) Final fallback defaults if still zero (ensures PDF never shows blank values)
+      if (attendanceData.workingDays === 0) {
+        attendanceData = {
+          workingDays: 26,
+          presentDays: 26,
+          absentDays: 0,
+          paidLeaveDays: 0,
+          unpaidLeaveDays: 0,
+          weeklyOffDays: 0,
+          holidays: 0,
+          halfDays: 0
+        };
+      }
+
+      // Create PDF with professional format
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 20;
+      let yPosition = margin;
+      const lineHeight = 8;
+      const tableStartX = margin;
+      const tableWidth = pageWidth - 2 * margin;
+      const centerX = pageWidth / 2;
+
+      // Helper function to add text
+      const addText = (text, fontSize = 11, isBold = false, x = margin) => {
+        pdf.setFontSize(fontSize);
+        pdf.setFont('helvetica', isBold ? 'bold' : 'normal');
+        pdf.text(text, x, yPosition);
+        yPosition += lineHeight;
+      };
+
+      // Helper: ensure space, add page if needed
+      const ensureSpace = (needed = 20) => {
+        if (yPosition + needed > pageHeight - margin) {
+          pdf.addPage();
+          yPosition = margin;
+        }
+      };
+
+      // Currency formatter - Match screenshot format exactly
+      const formatAmount = (n) => {
+        const amount = Number(n || 0).toLocaleString('en-IN');
+        return amount; // Just return the number, no prefix
+      };
+
+      // Helper function to draw table row (two fixed columns: label | value)
+      const drawTableRow = (leftText, rightText, isHeader = false) => {
+        if (isHeader) {
+          ensureSpace(lineHeight + 8);
+          pdf.setFillColor(240, 240, 240);
+          pdf.rect(tableStartX, yPosition - 2, tableWidth, lineHeight + 4, 'F');
+        } else {
+          ensureSpace(lineHeight + 6);
+        }
+        
+        const curY = yPosition; // keep same baseline for both columns
+        // font style
+        pdf.setFont('helvetica', isHeader ? 'bold' : 'normal');
+        pdf.setFontSize(isHeader ? 11 : 10);
+        // paddings and fixed columns for consistent alignment
+        const padX = 8;
+        const leftColX = tableStartX + padX;              // label column start
+        const labelWidth = 80;                            // increased label column width (mm)
+        const valueRightX = tableStartX + tableWidth - padX; // value column right edge
+        const valueStartX = leftColX + labelWidth + 4;    // small gap after label
+
+        // left label with text wrapping if needed
+        const label = String(leftText ?? '');
+        const maxLabelWidth = labelWidth - 8; // leave more padding
+        const lines = pdf.splitTextToSize(label, maxLabelWidth);
+        
+        // Calculate total height needed
+        const totalHeight = lineHeight * lines.length;
+        
+        // Draw each line of the label
+        lines.forEach((line, index) => {
+          pdf.text(line, leftColX, curY + (index * lineHeight));
+        });
+        
+        // value column right-aligned - center it vertically with the label
+        const value = String(rightText ?? '');
+        const valueY = curY + ((totalHeight - lineHeight) / 2);
+        pdf.text(value, valueRightX, valueY, { align: 'right' });
+        
+        // advance based on number of lines in label
+        yPosition += totalHeight + (isHeader ? 4 : 2);
+      };
+
+      // Header Section - Dynamic Brand Name like Sidebar
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(brandInfo.displayName || 'ThinkTech Solutions', centerX, yPosition, { align: 'center' });
+      yPosition += 8;
+
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Payslip for the month of ' + moment(cycle.monthKey).format('MMMM YYYY'), centerX, yPosition, { align: 'center' });
+      yPosition += 15;
+
+      // Employee Details - Simple Table Format with Department
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      
+      // Left column - Employee info
+      pdf.text('Employee Name: ' + staff, tableStartX, yPosition);
+      yPosition += 6;
+      pdf.text('Employee ID: ' + (payrollLine.userId || payrollLine.user_id), tableStartX, yPosition);
+      yPosition += 6;
+      pdf.text('Department: ' + (staff.department || 'General'), tableStartX, yPosition);
+      yPosition += 6;
+      pdf.text('Designation: ' + (staff.designation || 'Employee'), tableStartX, yPosition);
+      yPosition += 6;
+      
+      // Right column - Payment info (top-aligned with Employee Name)
+      const rightColX = centerX + 20;
+      const rightColStartY = yPosition - 24; // Start at same level as Employee Name
+      pdf.text('Pay Period: ' + cycle.monthKey, rightColX, rightColStartY);
+      pdf.text('Status: ' + (payrollLine.paidAt ? 'PAID' : 'DUE'), rightColX, rightColStartY + 6);
+      pdf.text('Generated: ' + moment().format('DD-MM-YYYY'), rightColX, rightColStartY + 12);
+      pdf.text('Working Days: ' + attendanceData.workingDays, rightColX, rightColStartY + 18);
+      
+      yPosition += 15;
+
+      // Draw line separator
+      pdf.setDrawColor(150, 150, 150);
+      pdf.line(tableStartX, yPosition, tableStartX + tableWidth, yPosition);
+      yPosition += 10;
+
+      // Side-by-side table: Earnings (incl. incentives) vs Deductions
+      // Build rows
+      const earningsObj = payrollLine.earnings || {};
+      const incentivesObj = payrollLine.incentives || {};
+      const earningsRows = [
+        ...Object.entries(earningsObj).map(([k, v]) => ({ label: k, amount: Number(v || 0) })),
+        ...Object.entries(incentivesObj).map(([k, v]) => ({ label: k + ' (Incentive)', amount: Number(v || 0) })),
+      ];
+      const deductionsObj = payrollLine.deductions || {};
+      const deductionRows = Object.entries(deductionsObj).map(([k, v]) => ({ label: k, amount: Number(v || 0) }));
+
+      const leftX = tableStartX;
+      const rightX = tableStartX + tableWidth / 2 + 2; // small gap
+      const colWidth = tableWidth / 2 - 2;
+
+      // Simple Table Headers - Like Screenshot with Amount columns
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.text('EARNINGS', leftX + 5, yPosition);
+      pdf.text('DEDUCTIONS', rightX + 5, yPosition);
+      yPosition += 10;
+
+      // Add Amount column headers
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.text('Description', leftX + 5, yPosition);
+      pdf.text('Amount', leftX + colWidth - 25, yPosition);
+      pdf.text('Description', rightX + 5, yPosition);
+      pdf.text('Amount', rightX + colWidth - 25, yPosition);
+      yPosition += 10;
+
+      // Render earnings and deductions rows - Match screenshot format (no borders)
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+
+      const maxRows = Math.max(earningsRows.length, deductionRows.length, 1);
+
+      for (let i = 0; i < maxRows; i++) {
+        const er = earningsRows[i];
+        const dr = deductionRows[i];
+        
+        // Earnings row - Left aligned label, right aligned amount
+        if (er) {
+          const label = er.label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          pdf.text(label, leftX + 5, yPosition);
+          pdf.text(formatAmount(er.amount), leftX + colWidth - 15, yPosition, { align: 'right' });
+        }
+        
+        // Deductions row - Same format as earnings
+        if (dr) {
+          let label = dr.label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          // Special formatting for loan EMI
+          if (dr.label === 'loan_emi') {
+            label = 'Loan Emi';
+          }
+          pdf.text(label, rightX + 5, yPosition);
+          pdf.text(formatAmount(dr.amount), rightX + colWidth - 15, yPosition, { align: 'right' });
+        }
+        
+        yPosition += 8;
+      }
+
+      // Column totals
+      const sumAmounts = (arr) => arr.reduce((acc, r) => acc + (Number(r?.amount || 0) || 0), 0);
+      const earningsTotalCalc = sumAmounts(earningsRows);
+      const deductionsTotalCalc = sumAmounts(deductionRows);
+
+      // Simple Totals Row - Match screenshot format
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.text('Total', leftX + 5, yPosition);
+      pdf.text(formatAmount(earningsTotalCalc), leftX + colWidth - 15, yPosition, { align: 'right' });
+      pdf.text('Total', rightX + 5, yPosition);
+      pdf.text(formatAmount(deductionsTotalCalc), rightX + colWidth - 15, yPosition, { align: 'right' });
+      yPosition += 15;
+
+      // Net Salary - Simple and Clean
+      const totals = payrollLine.totals || {};
+      const grossFromTotals = Number(totals.grossSalary || 0);
+      const totalDeductionsFromTotals = Number(totals.totalDeductions || deductionsTotalCalc || 0);
+      const netSalary = grossFromTotals - totalDeductionsFromTotals;
+      const finalNetSalary = Math.max(0, netSalary);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(12);
+      pdf.text('Net Salary: ' + formatAmount(finalNetSalary), centerX, yPosition, { align: 'center' });
+      yPosition += 15;
+
+      // Draw final line
+      pdf.setDrawColor(150, 150, 150);
+      pdf.line(tableStartX, yPosition, tableStartX + tableWidth, yPosition);
+      yPosition += 10;
+
+      // Add space for signatures
+      yPosition += 20;
+
+      // Signature sections like ss1
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      
+      // Employee Signature
+      pdf.text('Employee Signature', tableStartX, yPosition);
+      pdf.line(tableStartX, yPosition + 5, tableStartX + 80, yPosition + 5); // Signature line
+      yPosition += 15;
+      
+      // Employer Signature
+      pdf.text('Employer Signature', tableStartX + 100, yPosition - 15);
+      pdf.line(tableStartX + 100, yPosition - 10, tableStartX + 180, yPosition - 10); // Signature line
+      
+      yPosition += 10;
+
+      // Simple footer
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Generated on ' + moment().format('DD-MM-YYYY HH:mm:ss'), centerX, yPosition, { align: 'center' });
+      yPosition += 8;
+      pdf.text('This is a computer generated document', centerX, yPosition, { align: 'center' });
+
+      // Save the PDF
+      pdf.save(`Payslip_${staff}_${cycle.monthKey}.pdf`);
+      message.success('Payslip generated successfully!');
+      
+    } catch (error) {
+      console.error('Error generating payslip:', error);
+      message.error('Failed to generate payslip');
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    navigate('/');
   };
 
   return (

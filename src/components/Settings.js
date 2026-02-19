@@ -1,6 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layout, Row, Col, Card, Input, Typography, Space, Modal, message, Button, Select } from 'antd';
+import {
+  Layout,
+  Row,
+  Col,
+  Card,
+  Input,
+  Typography,
+  Space,
+  Modal,
+  message,
+  Button,
+  Select,
+  AutoComplete,
+  Menu,
+  Radio
+} from 'antd';
 import {
   SettingOutlined,
   EnvironmentOutlined,
@@ -18,7 +33,10 @@ import {
   TeamOutlined,
   SafetyCertificateOutlined,
   MobileOutlined,
-  ApiOutlined
+  ApiOutlined,
+  LogoutOutlined,
+  LayoutOutlined,
+  HomeOutlined
 } from '@ant-design/icons';
 import Sidebar from './Sidebar';
 import api, { API_BASE_URL } from '../api';
@@ -85,6 +103,9 @@ export default function Settings() {
   const [bizSaving, setBizSaving] = useState(false);
   const [bizState, setBizState] = useState('');
   const [bizCity, setBizCity] = useState('');
+  const [sidebarHeaderType, setSidebarHeaderType] = useState('name');
+  const [sidebarHeaderOpen, setSidebarHeaderOpen] = useState(false);
+  const [sidebarHeaderSaving, setSidebarHeaderSaving] = useState(false);
   const [addrOpen, setAddrOpen] = useState(false);
   const [addrSaving, setAddrSaving] = useState(false);
   const [addr1, setAddr1] = useState('');
@@ -102,6 +123,35 @@ export default function Settings() {
   const [accEmailOpen, setAccEmailOpen] = useState(false);
   const [accEmailSaving, setAccEmailSaving] = useState(false);
   const [accEmail, setAccEmail] = useState('');
+
+  // Load initial data
+  React.useEffect(() => {
+    const loadData = async () => {
+      try {
+        const resp = await api.get('/admin/settings/brand');
+        const name = resp?.data?.brand?.displayName || '';
+        setBrandName(String(name));
+      } catch (_) { }
+      try {
+        const r2 = await api.get('/me/profile');
+        setAccName(r2?.data?.profile?.name || '');
+        setAccPhone(r2?.data?.profile?.phone || '');
+        setAccEmail(r2?.data?.profile?.email || '');
+      } catch (_) { }
+      try {
+        const r3 = await api.get('/admin/settings/business-info');
+        const info = r3?.data?.info || {};
+        setBizState(info.state || '');
+        setBizCity(info.city || '');
+        setAddr1(info.addressLine1 || '');
+        setAddr2(info.addressLine2 || '');
+        setAddrPin(info.pincode || '');
+        setLogoUrl(info.logoUrl || '');
+        setSidebarHeaderType(info.sidebarHeaderType || 'name');
+      } catch (_) { }
+    };
+    loadData();
+  }, []);
 
   const openBrandModal = async () => {
     try {
@@ -150,9 +200,8 @@ export default function Settings() {
 
   const openAccPhoneModal = async () => {
     try {
-      // Prefer /me for canonical phone
-      const resp = await api.get('/me');
-      const phone = resp?.data?.user?.phone || '';
+      const resp = await api.get('/me/profile');
+      const phone = resp?.data?.profile?.phone || '';
       setAccPhone(phone);
     } catch (_) {
       setAccPhone('');
@@ -335,6 +384,24 @@ export default function Settings() {
     }
   };
 
+  const saveSidebarHeaderType = async () => {
+    try {
+      setSidebarHeaderSaving(true);
+      const resp = await api.put('/admin/settings/business-info', { sidebarHeaderType });
+      if (resp?.data?.success) {
+        message.success('Sidebar header preference updated');
+        setSidebarHeaderOpen(false);
+        try { window.dispatchEvent(new CustomEvent('sidebar-header-updated', { detail: { sidebarHeaderType } })); } catch (_) { }
+      } else {
+        message.error(resp?.data?.message || 'Failed to save');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to save');
+    } finally {
+      setSidebarHeaderSaving(false);
+    }
+  };
+
   const openKybModal = async () => {
     try {
       const resp = await api.get('/admin/settings/kyb');
@@ -414,7 +481,7 @@ export default function Settings() {
         try {
           const g = await api.get('/admin/settings/bank-account');
           setBankMasked(g?.data?.bank?.maskedAccount || '');
-        } catch (_) {}
+        } catch (_) { }
         setBankOpen(false);
       } else {
         message.error(resp?.data?.message || 'Failed to save');
@@ -436,8 +503,10 @@ export default function Settings() {
       const resp = await api.put('/admin/settings/brand', { displayName: brandName.trim() });
       if (resp?.data?.success) {
         message.success('Business name updated');
-        try { window.dispatchEvent(new CustomEvent('brand-updated', { detail: { displayName: brandName.trim() } })); } catch (_) {}
+        try { window.dispatchEvent(new CustomEvent('brand-updated', { detail: { displayName: brandName.trim() } })); } catch (_) { }
         setBrandOpen(false);
+        // Clear the input field
+        setBrandName('');
       } else {
         message.error(resp?.data?.message || 'Failed to save');
       }
@@ -447,7 +516,7 @@ export default function Settings() {
       setBrandSaving(false);
     }
   };
-  const tiles = [
+  const tiles = useMemo(() => [
     {
       key: 'attendance',
       title: 'Attendance Settings',
@@ -463,7 +532,7 @@ export default function Settings() {
       title: 'Salary Settings',
       items: [
         // { key: 'sal-settings', icon: <SettingOutlined />, label: 'Salary Settings', desc: 'Manage salaries, leaves, and other HR-related policies.' },
-        { key: 'sal-calendar', icon: <CalendarOutlined />, label: 'Salary Calculation logic', desc: 'Calendar Month', onClick: () => navigate('/settings/salary-calculation') },          
+        { key: 'sal-calendar', icon: <CalendarOutlined />, label: 'Salary Calculation logic', desc: 'Calendar Month', onClick: () => navigate('/settings/salary-calculation') },
         { key: 'sal-template', icon: <AppstoreOutlined />, label: 'Manage Salary Template', desc: 'Create and apply standard salary structures', onClick: () => navigate('/settings/salary-templates') },
         { key: 'sal-access', icon: <EyeOutlined />, label: 'Salary Details Access', desc: 'Control who can view salary information', onClick: () => navigate('/settings/salary-access') },
       ],
@@ -476,6 +545,7 @@ export default function Settings() {
         { key: 'leave-policy', icon: <FileTextOutlined />, label: 'Leave Policy', desc: 'Define leave categories and rules', onClick: () => navigate('/settings/leave-templates') },
         { key: 'departments', icon: <ApartmentOutlined />, label: 'Manage Business Functions', desc: 'Add or update departments and roles', onClick: () => navigate('/settings/business-functions') },
         { key: 'weekly', icon: <BorderOuterOutlined />, label: 'Weekly Holidays', desc: 'Configure weekly holidays', onClick: () => navigate('/settings/weekly-off') },
+        { key: 'letter-mgmt', icon: <FileTextOutlined />, label: 'Letter Management', desc: 'Manage and issue organization letters', onClick: () => navigate('/settings/letters') },
       ],
     },
     {
@@ -484,9 +554,9 @@ export default function Settings() {
       items: [
         { key: 'bank-statement-name', icon: <BankOutlined />, label: 'Business Name in Bank Statement', desc: 'Shown on payouts and statements', onClick: openBrandModal },
         { key: 'bank-account', icon: <BankOutlined />, label: 'Business Bank Account', desc: bankMasked ? `XXXX XXXX XXXX ${String(bankMasked).slice(-4)}` : 'Account used for settlements', onClick: openBankModal },
-        { key: 'kyb', icon: <SafetyCertificateOutlined />, label: 'KYB', desc: 'Upload and verify business documents', onClick: openKybModal },
+        { key: 'kyc', icon: <SafetyCertificateOutlined />, label: 'KYB', desc: 'Upload and verify business documents', onClick: openKybModal },
         // { key: 'payment-methods', icon: <AppstoreOutlined />, label: 'Payment Methods', desc: 'Instant payment through virtual account' },
-      ],   
+      ],
     },
     {
       key: 'business-info',
@@ -494,7 +564,8 @@ export default function Settings() {
       items: [
         { key: 'biz-name', icon: <ProfileOutlined />, label: 'Business Name', desc: brandName ? brandName : '—', onClick: openBrandModal },
         { key: 'biz-state', icon: <EnvironmentOutlined />, label: 'Business State & City', desc: [bizState, bizCity].filter(Boolean).join(', ') || '—', onClick: openBizModal },
-        { key: 'biz-address', icon: <FileTextOutlined />, label: 'Business Address', desc: addr1 ? addr1 : '—', onClick: openAddressModal },
+        { key: 'sidebar-header', icon: <LayoutOutlined />, label: 'Sidebar Header Display', desc: sidebarHeaderType === 'logo' ? 'Business Logo' : 'Business Name', onClick: () => setSidebarHeaderOpen(true) },
+        { key: 'biz-address', icon: <HomeOutlined />, label: 'Business Address', desc: [addr1, addr2].filter(Boolean).join(', ') || '—', onClick: () => setAddrOpen(true) },
         { key: 'biz-logo', icon: <ProfileOutlined />, label: 'Business Logo', desc: logoUrl ? 'Logo added' : 'Logo not added', onClick: openLogoModal, thumb: logoUrl ? (logoUrl.startsWith('/') ? `${API_BASE_URL}${logoUrl}` : logoUrl) : undefined },
       ],
     },
@@ -504,7 +575,7 @@ export default function Settings() {
       items: [
         { key: 'acc-name', icon: <ProfileOutlined />, label: 'Name', desc: accName || '—', onClick: openAccNameModal },
         { key: 'acc-phone', icon: <MobileOutlined />, label: 'Phone Number', desc: accPhone || '—', onClick: openAccPhoneModal },
-        { key: 'acc-email', icon: <ProfileOutlined />, label: 'Email Address', desc: (accEmail ? `${accEmail}  ` : '—  ') + 'Email Verified', onClick: openAccEmailModal },
+        { key: 'acc-email', icon: <ProfileOutlined />, label: 'Email Address', desc: accEmail || '—', onClick: openAccEmailModal },
         // { key: 'acc-subscriptions', icon: <AppstoreOutlined />, label: 'Subscriptions', desc: '—' },
         // { key: 'acc-businesses', icon: <ProfileOutlined />, label: 'Add/Delete Business', desc: '1 Active Business' },
       ],
@@ -522,7 +593,7 @@ export default function Settings() {
       items: [
         { key: 'broadcast', icon: <NotificationOutlined />, label: 'Broadcast Messages', desc: 'Company-wide communication for employees' },
         { key: 'manage-users', icon: <TeamOutlined />, label: 'Manage Users', desc: 'Configure user profiles and access' },
-        { key: 'roles', icon: <SafetyCertificateOutlined />, label: 'Roles & Permissions', desc: 'Create roles and assign permissions' },
+        { key: 'roles', icon: <SafetyCertificateOutlined />, label: 'Roles & Permissions', desc: 'Create roles and assign permissions', onClick: () => navigate('/roles-permissions') },
       ],
     },
     {
@@ -539,7 +610,13 @@ export default function Settings() {
         { key: 'manage-integrations', icon: <ApiOutlined />, label: 'Manage Integrations', desc: 'Connect to third-party applications and services' },
       ],
     },
-  ];
+  ], [brandName, bizState, bizCity, addr1, logoUrl, accName, accPhone, bankMasked]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/');
+  };
 
   const displayTiles = useMemo(() => {
     const q = (search || '').trim().toLowerCase();
@@ -560,8 +637,21 @@ export default function Settings() {
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar />
       <Layout style={{ marginLeft: 200, background: '#f5f7fb' }}>
-        <Header style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #f0f0f0' }}>
+        <Header style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Title level={4} style={{ margin: 0 }}>Settings</Title>
+          <Menu
+            theme="light"
+            mode="horizontal"
+            items={[
+              {
+                key: 'logout',
+                icon: <LogoutOutlined />,
+                label: 'Logout',
+                onClick: handleLogout
+              }
+            ]}
+            style={{ borderRight: 'none', backgroundColor: 'transparent' }}
+          />
         </Header>
         <Content style={{ padding: 24 }}>
           <Card bodyStyle={{ padding: 12 }} style={{ marginBottom: 16 }}>
@@ -597,6 +687,7 @@ export default function Settings() {
             placeholder="Enter business display name"
             value={brandName}
             onChange={(e) => setBrandName(e.target.value)}
+            autoComplete="off"
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button onClick={() => setBrandOpen(false)}>Cancel</Button>
@@ -639,6 +730,7 @@ export default function Settings() {
               const v = e.target.value.replace(/\D/g, '').slice(0, 10);
               setAccPhone(v);
             }}
+            autoComplete="off"
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button onClick={() => setAccPhoneOpen(false)}>Cancel</Button>
@@ -656,7 +748,7 @@ export default function Settings() {
       >
         <Space direction="vertical" style={{ width: '100%' }}>
           <div style={{ color: '#6b7280', fontSize: 12, marginBottom: 4 }}>Name</div>
-          <Input placeholder="Enter full name" value={accName} onChange={(e) => setAccName(e.target.value)} />
+          <Input placeholder="Enter full name" value={accName} onChange={(e) => setAccName(e.target.value)} autoComplete="off" />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button onClick={() => setAccNameOpen(false)}>Cancel</Button>
             <Button type="primary" loading={accNameSaving} onClick={saveAccName}>Save</Button>
@@ -694,11 +786,30 @@ export default function Settings() {
                 const resp = await api.get('/admin/settings/business-info');
                 const info = resp?.data?.info || {};
                 setLogoUrl(info.logoUrl || '');
-              } catch (_) {}
+              } catch (_) { }
               setLogoOpen(false);
             }}>Save</Button>
           </div>
         </Space>
+      </Modal>
+
+      <Modal
+        title="Sidebar Header Display"
+        open={sidebarHeaderOpen}
+        onOk={saveSidebarHeaderType}
+        onCancel={() => setSidebarHeaderOpen(false)}
+        confirmLoading={sidebarHeaderSaving}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <p>Choose what to display at the top of the sidebar:</p>
+          <Radio.Group onChange={(e) => setSidebarHeaderType(e.target.value)} value={sidebarHeaderType}>
+            <Radio value="name">Business Name (Default)</Radio>
+            <Radio value="logo">Business Logo</Radio>
+          </Radio.Group>
+        </div>
+        {sidebarHeaderType === 'logo' && !logoUrl && (
+          <p style={{ color: '#faad14' }}>Note: You haven't added a business logo yet. It will show letters if logo is missing.</p>
+        )}
       </Modal>
 
       <Modal
@@ -720,13 +831,18 @@ export default function Settings() {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ marginBottom: 6, color: '#6b7280', fontSize: 12 }}>State</div>
-              <Select
-                placeholder="Select State"
+              <AutoComplete
+                placeholder="Search and select state"
                 value={bizState || undefined}
                 onChange={(v) => setBizState(v)}
+                onSelect={(v) => setBizState(v)}
                 options={[
-                  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu','Delhi','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'
+                  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
                 ].map((s) => ({ value: s, label: s }))}
+                filterOption={(inputValue, option) =>
+                  option.label.toLowerCase().includes(inputValue.toLowerCase())
+                }
+                style={{ width: '100%' }}
               />
             </div>
           </div>
@@ -755,13 +871,18 @@ export default function Settings() {
           <div style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1 }}>
               <div style={{ marginBottom: 6, color: '#6b7280', fontSize: 12 }}>State</div>
-              <Select
-                placeholder="Select State"
+              <AutoComplete
+                placeholder="Search and select state"
                 value={bizState || undefined}
                 onChange={(v) => setBizState(v)}
+                onSelect={(v) => setBizState(v)}
                 options={[
-                  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu','Delhi','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'
+                  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
                 ].map((s) => ({ value: s, label: s }))}
+                filterOption={(inputValue, option) =>
+                  option.label.toLowerCase().includes(inputValue.toLowerCase())
+                }
+                style={{ width: '100%' }}
               />
             </div>
             <div style={{ flex: 1 }}>
@@ -803,14 +924,14 @@ export default function Settings() {
       </Modal>
 
       <Modal
-        title="KYB"
+        title="KYC"
         open={kybOpen}
         onCancel={() => setKybOpen(false)}
         footer={null}
         destroyOnClose
       >
         <Space direction="vertical" style={{ width: '100%' }}>
-          <div style={{ color: '#6b7280' }}>Complete KYB to avail online payment services</div>
+          <div style={{ color: '#6b7280' }}>Complete KYC to avail online payment services</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1 }}>
               <div style={{ marginBottom: 6, color: '#6b7280', fontSize: 12 }}>Business Type</div>
@@ -818,7 +939,7 @@ export default function Settings() {
                 value={kyb.businessType || undefined}
                 onChange={(v) => setKyb({ ...kyb, businessType: v })}
                 style={{ width: '100%' }}
-                placeholder="Select"
+                placeholder="Choose business type"
                 options={[
                   { value: 'Proprietorship', label: 'Proprietorship' },
                   { value: 'Partnership', label: 'Partnership' },
@@ -833,20 +954,20 @@ export default function Settings() {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ marginBottom: 6, color: '#6b7280', fontSize: 12 }}>GSTIN Number</div>
-              <Input placeholder="GSTIN" value={kyb.gstin} onChange={(e) => setKyb({ ...kyb, gstin: e.target.value.toUpperCase() })} />
+              <Input placeholder="GSTIN" value={kyb.gstin} onChange={(e) => setKyb({ ...kyb, gstin: e.target.value.toUpperCase() })} autoComplete="off" />
             </div>
           </div>
-          <Input placeholder="Business Name" value={kyb.businessName} onChange={(e) => setKyb({ ...kyb, businessName: e.target.value })} />
-          <Input.TextArea placeholder="Business Address" value={kyb.businessAddress} onChange={(e) => setKyb({ ...kyb, businessAddress: e.target.value })} rows={3} />
+          <Input placeholder="Business Name" value={kyb.businessName} onChange={(e) => setKyb({ ...kyb, businessName: e.target.value })} autoComplete="off" />
+          <Input.TextArea placeholder="Business Address" value={kyb.businessAddress} onChange={(e) => setKyb({ ...kyb, businessAddress: e.target.value })} rows={3} autoComplete="off" />
           <div style={{ display: 'flex', gap: 8 }}>
-            <Input style={{ flex: 1 }} placeholder="CIN Number" value={kyb.cin} onChange={(e) => setKyb({ ...kyb, cin: e.target.value.toUpperCase() })} />
-            <Input style={{ flex: 1 }} placeholder="Director's Name" value={kyb.directorName} onChange={(e) => setKyb({ ...kyb, directorName: e.target.value })} />
+            <Input style={{ flex: 1 }} placeholder="CIN Number" value={kyb.cin} onChange={(e) => setKyb({ ...kyb, cin: e.target.value.toUpperCase() })} autoComplete="off" />
+            <Input style={{ flex: 1 }} placeholder="Director's Name" value={kyb.directorName} onChange={(e) => setKyb({ ...kyb, directorName: e.target.value })} autoComplete="off" />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Input style={{ flex: 1 }} placeholder="Company PAN Number" value={kyb.companyPan} onChange={(e) => setKyb({ ...kyb, companyPan: e.target.value.toUpperCase() })} />
-            <Input style={{ flex: 1 }} placeholder="Bank Account Number" value={kyb.bankAccountNumber} onChange={(e) => setKyb({ ...kyb, bankAccountNumber: e.target.value })} />
+            <Input style={{ flex: 1 }} placeholder="Company PAN Number" value={kyb.companyPan} onChange={(e) => setKyb({ ...kyb, companyPan: e.target.value.toUpperCase() })} autoComplete="off" />
+            <Input style={{ flex: 1 }} placeholder="Bank Account Number" value={kyb.bankAccountNumber} onChange={(e) => setKyb({ ...kyb, bankAccountNumber: e.target.value })} autoComplete="off" />
           </div>
-          <Input placeholder="IFSC Code" value={kyb.ifsc} onChange={(e) => setKyb({ ...kyb, ifsc: e.target.value.toUpperCase() })} />
+          <Input placeholder="IFSC Code" value={kyb.ifsc} onChange={(e) => setKyb({ ...kyb, ifsc: e.target.value.toUpperCase() })} autoComplete="off" />
 
           <div style={{ marginTop: 8, fontWeight: 600 }}>Business Documents</div>
           <div style={{ color: '#6b7280', fontSize: 12 }}>Upload pdf, png, or jpeg. Max size 10 MB.</div>

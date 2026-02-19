@@ -18,7 +18,7 @@ const TemplateCard = ({ name, status, createdBy, assigned, onMenu }) => {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <Text strong>{name}</Text>
           <Space>
-            <Tag color={status === 'Draft' ? 'default' : 'blue'}>{status}</Tag>
+            {/* <Tag color={status === 'Draft' ? 'default' : 'blue'}>{status}</Tag> */}
             <Dropdown menu={{ items, onClick: ({ key }) => onMenu?.(key) }} trigger={[ 'click' ]}>
               <Button size="small" icon={<MoreOutlined />} />
             </Dropdown>
@@ -160,7 +160,7 @@ export default function AttendanceTemplates() {
               <Space wrap>
                 <Input.Search placeholder="Search templates..." allowClear style={{ width: 280 }} />
                 <Select defaultValue="All Statuses" style={{ width: 160 }}
-                  options={[{ value: 'All Statuses', label: 'All Statuses' }, { value: 'Draft', label: 'Draft' }]} />
+                  options={[{ value: 'All Statuses', label: 'All Statuses' }]} />
                 <Select defaultValue="Name | A-Z" style={{ width: 140 }}
                   options={[{ value: 'Name | A-Z', label: 'Name | A-Z' }, { value: 'Name | Z-A', label: 'Name | Z-A' }]} />
               </Space>
@@ -170,7 +170,7 @@ export default function AttendanceTemplates() {
                 <Col key={t.id} xs={24} sm={12} lg={8}>
                   <TemplateCard
                     name={t.name || 'Template'}
-                    status={t.status || 'Draft'}
+                    status={t.status || 'Active'}
                     createdBy={t.createdBy || 'Admin'}
                     assigned={(t.assignedCount ? `${t.assignedCount} Staffs` : '')}
                     onMenu={(key) => key === 'edit' ? openEdit(t) : openAssign(t)}

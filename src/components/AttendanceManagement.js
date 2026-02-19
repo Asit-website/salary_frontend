@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Table, Button, DatePicker, Select, message, Space, Typography, Tag, Menu, Input, Modal, Form, Radio, TimePicker } from 'antd';
+import { Layout, Card, Table, Button, DatePicker, Select, message, Space, Typography, Tag, Menu, Input, Modal, Form, Radio, TimePicker, Input as AntInput } from 'antd';
 import './AttendanceManagement.css';
-import { 
-  CalendarOutlined, 
-  UserOutlined, 
+import {
+  CalendarOutlined,
+  UserOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ExportOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  CoffeeOutlined
+  CoffeeOutlined,
+  FilterOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
@@ -29,14 +30,28 @@ const AttendanceManagement = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
+  const [staffNameFilter, setStaffNameFilter] = useState('all');
   const [staffList, setStaffList] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [selectedStaff, setSelectedStaff] = useState('all');
+  const [dateFilter, setDateFilter] = useState(null);
   const [markOpen, setMarkOpen] = useState(false);
+  const [bulkMarkOpen, setBulkMarkOpen] = useState(false);
   const [markForm] = Form.useForm();
+  const [bulkMarkForm] = Form.useForm();
   const [effectiveTemplate, setEffectiveTemplate] = useState(null);
-  
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteForm] = Form.useForm();
+  const [selectedRecord, setSelectedRecord] = useState(null);
+
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchStaff();
+    fetchDepartments();
+    fetchAttendance();
+  }, []);
 
   useEffect(() => {
     fetchStaff();
@@ -73,6 +88,24 @@ const AttendanceManagement = () => {
     }
   };
 
+  const fetchDepartments = async () => {
+    try {
+      const resp = await api.get('/admin/business-functions');
+      const list = resp?.data?.data || [];
+      const deptFn = list.find((f) => String(f.name || '').toLowerCase() === 'department');
+      const values = Array.isArray(deptFn?.values) ? deptFn.values : [];
+      const items = values
+        .filter((v) => v && v.value)
+        .map((v) => ({ id: v.id, name: v.value }));
+      console.log('Fetched departments:', items);
+      console.log('Setting departments state:', items.length, 'items'); // Debug log
+      setDepartments(items);
+    } catch (error) {
+      console.error('Failed to fetch departments:', error);
+      setDepartments([]);
+    }
+  };
+
   const openMarkModal = () => {
     markForm.resetFields();
     markForm.setFieldsValue({
@@ -105,13 +138,44 @@ const AttendanceManagement = () => {
     }
   };
 
+  const openBulkMarkModal = () => {
+    bulkMarkForm.resetFields();
+    bulkMarkForm.setFieldsValue({
+      date: selectedDate,
+      status: 'present',
+      checkIn: dayjs('09:30', 'HH:mm'),
+      checkOut: dayjs('18:00', 'HH:mm'),
+    });
+    setBulkMarkOpen(true);
+  };
+
+  const submitBulkMark = async () => {
+    try {
+      const values = await bulkMarkForm.validateFields();
+      const payload = {
+        date: values.date?.format('YYYY-MM-DD'),
+        status: values.status,
+        checkIn: values.checkIn ? values.checkIn.format('HH:mm:ss') : null,
+        checkOut: values.checkOut ? values.checkOut.format('HH:mm:ss') : null,
+        staffIds: values.staffIds || [],
+      };
+      await api.post('/admin/attendance/bulk', payload);
+      message.success(`Bulk attendance saved for ${payload.staffIds.length} staff members`);
+      setBulkMarkOpen(false);
+      fetchAttendance();
+    } catch (err) {
+      if (err?.errorFields) return; // validation error
+      message.error(err?.response?.data?.message || 'Failed to save bulk attendance');
+    }
+  };
+
   const fetchAttendance = async () => {
     setLoading(true);
     try {
       const params = {
         date: selectedDate.format('YYYY-MM-DD'),
       };
-      
+
       if (selectedStaff !== 'all') {
         params.staffId = selectedStaff;
       }
@@ -132,7 +196,7 @@ const AttendanceManagement = () => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    navigate('/');
   };
 
   const handleExport = async () => {
@@ -140,16 +204,16 @@ const AttendanceManagement = () => {
       const params = {
         date: selectedDate.format('YYYY-MM-DD'),
       };
-      
+
       if (selectedStaff !== 'all') {
         params.staffId = selectedStaff;
       }
 
-      const response = await api.get('/admin/attendance/export', { 
+      const response = await api.get('/admin/attendance/export', {
         params,
         responseType: 'blob'
       });
-      
+
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -157,10 +221,68 @@ const AttendanceManagement = () => {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      
-      message.success('Attendance exported successfully');
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       message.error('Failed to export attendance');
+    }
+  };
+
+  const openNoteModal = (record) => {
+    console.log('Record keys:', Object.keys(record));
+    console.log('Record values:', {
+      user_id: record.user_id,
+      userId: record.userId,
+      user: record.user,
+      id: record.id
+    });
+
+    setSelectedRecord(record);
+    noteForm.resetFields();
+
+    // Ensure we have the correct staff ID
+    const staffId = record.userId || record.user?.id || record.id;
+    console.log('Extracted staffId:', staffId);
+
+    noteForm.setFieldsValue({
+      staffId: staffId,
+      date: dayjs(record.date),
+      note: record.note || '',
+    });
+    setNoteOpen(true);
+  };
+
+  const closeNoteModal = () => {
+    setNoteOpen(false);
+    setSelectedRecord(null);
+    noteForm.resetFields();
+  };
+
+  const submitNote = async () => {
+    try {
+      const values = await noteForm.validateFields();
+      console.log('Submitting note with values:', values);
+
+      if (!values.staffId) {
+        message.error('Staff ID is missing');
+        return;
+      }
+
+      const payload = {
+        staffId: values.staffId,
+        date: values.date.format('YYYY-MM-DD'), // Format dayjs date to string
+        note: values.note,
+      };
+
+      console.log('Sending payload:', payload);
+
+      await api.post('/admin/attendance/note', payload);
+      message.success('Note saved successfully');
+      closeNoteModal();
+      fetchAttendance(); // Refresh data
+    } catch (err) {
+      console.error('Submit note error:', err);
+      if (err?.errorFields) return; // validation error
+      message.error(err?.response?.data?.message || 'Failed to save note');
     }
   };
 
@@ -179,10 +301,11 @@ const AttendanceManagement = () => {
     const q = search.trim().toLowerCase();
     const matchesSearch = q
       ? (row.user?.name || '').toLowerCase().includes(q) ||
-        (row.staffProfile?.staffId || '').toString().toLowerCase().includes(q)
+      (row.staffProfile?.staffId || '').toString().toLowerCase().includes(q)
       : true;
     const matchesDept = departmentFilter === 'all' ? true : (row.staffProfile?.department || '') === departmentFilter;
-    return matchesSearch && matchesDept;
+    const matchesDate = dateFilter ? row.date === dateFilter.format('YYYY-MM-DD') : true;
+    return matchesSearch && matchesDept && matchesDate;
   });
   const presentCount = baseForCounts.filter(a => a.status === 'present').length;
   const absentCount = baseForCounts.filter(a => a.status === 'absent').length;
@@ -192,23 +315,42 @@ const AttendanceManagement = () => {
     const q = search.trim().toLowerCase();
     const matchesSearch = q
       ? (row.user?.name || '').toLowerCase().includes(q) ||
-        (row.staffProfile?.staffId || '').toString().toLowerCase().includes(q)
+      (row.staffProfile?.staffId || '').toString().toLowerCase().includes(q)
       : true;
     const matchesStatus = statusFilter === 'all' ? true : row.status === statusFilter;
     const matchesDept = departmentFilter === 'all' ? true : (row.staffProfile?.department || '') === departmentFilter;
-    return matchesSearch && matchesStatus && matchesDept;
+    const matchesStaffName = staffNameFilter === 'all' ? true : (row.user?.name || '') === staffNameFilter;
+    const matchesDate = dateFilter ? row.date === dateFilter.format('YYYY-MM-DD') : true;
+    return matchesSearch && matchesStatus && matchesDept && matchesStaffName && matchesDate;
   });
 
   const columns = [
     {
       title: 'Staff Name',
-      dataIndex: ['user', 'name'],
-      key: 'name',
+      key: 'staffName',
+      render: (_, record) => {
+        const name = record.user?.name || 'Unknown';
+        const staffId = record.staffProfile?.staffId || 'N/A';
+        return (
+          <div>
+            <div>{name} ({staffId})</div>
+            <Button
+              type="link"
+              size="small"
+              onClick={() => openNoteModal(record)}
+              style={{ padding: 0, height: 'auto', fontSize: '12px' }}
+            >
+              + Add Note
+            </Button>
+          </div>
+        );
+      },
     },
     {
-      title: 'Staff ID',
-      dataIndex: ['staffProfile', 'staffId'],
-      key: 'staffId',
+      title: 'Department',
+      dataIndex: ['staffProfile', 'department'],
+      key: 'department',
+      render: (dept) => dept || '-',
     },
     {
       title: 'Date',
@@ -227,6 +369,17 @@ const AttendanceManagement = () => {
       dataIndex: 'checkOut',
       key: 'checkOut',
       render: (time) => time || '-',
+    },
+    {
+      title: 'Break',
+      dataIndex: 'breakMinutes',
+      key: 'breakMinutes',
+      render: (minutes) => {
+        if (minutes && minutes > 0) {
+          return `${minutes} min`;
+        }
+        return '-';
+      },
     },
     {
       title: 'Status',
@@ -253,10 +406,14 @@ const AttendanceManagement = () => {
     },
   ];
 
+  console.log('Departments state:', departments); // Debug log
+  console.log('Departments length:', departments.length); // Debug log
+  console.log('Department filter:', departmentFilter); // Debug log
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} />
-      
+
       <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
         <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -280,7 +437,7 @@ const AttendanceManagement = () => {
             ]}
           />
         </Header>
-        
+
         <Content style={{ margin: '24px 24px', padding: 24, background: '#fff', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
           <Card
             className="att-card"
@@ -294,18 +451,28 @@ const AttendanceManagement = () => {
                 <DatePicker
                   value={selectedDate}
                   onChange={(date) => setSelectedDate(date)}
+                  picker="date"
                   format="DD MMM YYYY"
+                  placeholder="Select date"
                 />
+                {/* <DatePicker
+                  value={dateFilter}
+                  onChange={(date) => setDateFilter(date)}
+                  format="DD MMM YYYY"
+                  placeholder="Filter by date"
+                  allowClear
+                /> */}
                 <Button type="primary" onClick={openMarkModal}>Mark Attendance</Button>
+                <Button type="primary" onClick={openBulkMarkModal}>Bulk Mark Attendance</Button>
                 <Button icon={<ExportOutlined />} onClick={handleExport}>Export</Button>
               </Space>
             }
           >
             {selectedStaff !== 'all' && (
-              <div style={{ marginBottom: 12, background:'#fafafa', padding:12, border:'1px solid #f0f0f0', borderRadius:6 }}>
+              <div style={{ marginBottom: 12, background: '#fafafa', padding: 12, border: '1px solid #f0f0f0', borderRadius: 6 }}>
                 <Space size={24} wrap>
                   <span><strong>Effective Template:</strong> {effectiveTemplate?.name || '—'}</span>
-                  <span><strong>Mode:</strong> {(effectiveTemplate?.attendanceMode || '').replace(/_/g,' ') || '—'}</span>
+                  <span><strong>Mode:</strong> {(effectiveTemplate?.attendanceMode || '').replace(/_/g, ' ') || '—'}</span>
                   <span><strong>Holidays:</strong> {effectiveTemplate?.holidaysRule || '—'}</span>
                   <span><strong>Track In/Out:</strong> {effectiveTemplate?.trackInOutEnabled ? 'Yes' : 'No'}</span>
                   <span><strong>Require Punch Out:</strong> {effectiveTemplate?.requirePunchOut ? 'Yes' : 'No'}</span>
@@ -353,9 +520,13 @@ const AttendanceManagement = () => {
                   className="att-filter"
                 >
                   <Option value="all">Department</Option>
-                  {[...new Set(attendance.map(a => a.staffProfile?.department).filter(Boolean))].map(dep => (
-                    <Option key={dep} value={dep}>{dep}</Option>
-                  ))}
+                  {departments.length > 0 ? (
+                    departments.map(dep => (
+                      <Option key={dep.id || dep.name} value={dep.name}>{dep.name}</Option>
+                    ))
+                  ) : (
+                    <Option value="" disabled>No departments available</Option>
+                  )}
                 </Select>
                 <Select
                   value={statusFilter}
@@ -367,6 +538,18 @@ const AttendanceManagement = () => {
                   <Option value="absent">Absent</Option>
                   <Option value="half_day">Half Day</Option>
                   <Option value="leave">Leave</Option>
+                </Select>
+                <Select
+                  value={staffNameFilter}
+                  onChange={setStaffNameFilter}
+                  className="att-filter"
+                >
+                  <Option value="all">Staff Name</Option>
+                  {staffList.map(staff => (
+                    <Option key={staff.id} value={staff.name}>
+                      {staff.name}
+                    </Option>
+                  ))}
                 </Select>
               </div>
             </div>
@@ -391,17 +574,17 @@ const AttendanceManagement = () => {
             okText="Save Record"
           >
             <Form form={markForm} layout="vertical">
-              <Form.Item name="staffId" label="Select Staff Member" rules={[{ required: true, message: 'Please select staff' }]}>
+              <Form.Item name="staffId" label="Select Staff Member" rules={[{ required: true, message: 'Please select staff' }]} >
                 <Select placeholder="Select staff">
                   {Array.isArray(staffList) && staffList.map(s => (
                     <Option key={s.id} value={s.id}>{s.name} ({s.staffId || 'N/A'})</Option>
                   ))}
                 </Select>
               </Form.Item>
-              <Form.Item name="date" label="Date" rules={[{ required: true, message: 'Please choose date' }]}>
-                <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+              <Form.Item name="date" label="Month" rules={[{ required: true, message: 'Please choose month' }]} >
+                <DatePicker style={{ width: '100%' }} picker="month" format="MMM YYYY" />
               </Form.Item>
-              <Form.Item name="status" label="Status" rules={[{ required: true }]}> 
+              <Form.Item name="status" label="Status" rules={[{ required: true }]}>
                 <Radio.Group>
                   <Radio value="present">Present</Radio>
                   <Radio value="absent">Absent</Radio>
@@ -414,6 +597,74 @@ const AttendanceManagement = () => {
               </Form.Item>
               <Form.Item name="checkOut" label="Check-out Time">
                 <TimePicker style={{ width: '100%' }} format="hh:mm A" use12Hours />
+              </Form.Item>
+            </Form>
+          </Modal>
+          <Modal
+            title="Bulk Mark Attendance"
+            open={bulkMarkOpen}
+            onCancel={() => setBulkMarkOpen(false)}
+            onOk={submitBulkMark}
+            okText="Save Bulk Attendance"
+            width={600}
+          >
+            <Form form={bulkMarkForm} layout="vertical">
+              <Form.Item name="staffIds" label="Select Staff Members" rules={[{ required: true, message: 'Please select staff members' }]}>
+                <Select
+                  mode="multiple"
+                  placeholder="Select multiple staff members"
+                  style={{ width: '100%' }}
+                >
+                  {Array.isArray(staffList) && staffList.map(s => (
+                    <Option key={s.id} value={s.id}>{s.name} ({s.staffId || 'N/A'})</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+              <Form.Item name="date" label="Date" rules={[{ required: true, message: 'Please select date' }]}>
+                <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+              </Form.Item>
+              <Form.Item name="status" label="Status" rules={[{ required: true }]}>
+                <Radio.Group>
+                  <Radio value="present">Present</Radio>
+                  <Radio value="absent">Absent</Radio>
+                  <Radio value="half_day">Half Day</Radio>
+                  <Radio value="leave">Leave</Radio>
+                </Radio.Group>
+              </Form.Item>
+              <Form.Item name="checkIn" label="Check-in Time">
+                <TimePicker style={{ width: '100%' }} format="hh:mm A" use12Hours />
+              </Form.Item>
+              <Form.Item name="checkOut" label="Check-out Time">
+                <TimePicker style={{ width: '100%' }} format="hh:mm A" use12Hours />
+              </Form.Item>
+            </Form>
+          </Modal>
+          <Modal
+            title="Add Note"
+            open={noteOpen}
+            onCancel={closeNoteModal}
+            onOk={submitNote}
+            okText="Save Note"
+            width={500}
+          >
+            <Form form={noteForm} layout="vertical">
+              <Form.Item name="staffId" label="Staff Member" style={{ display: "none" }}>
+                <AntInput disabled />
+              </Form.Item>
+              <Form.Item name="date" label="Date">
+                <DatePicker style={{ width: '100%' }} disabled />
+              </Form.Item>
+              <Form.Item
+                name="note"
+                label="Note"
+                rules={[{ required: true, message: 'Please enter a note' }]}
+              >
+                <Input.TextArea
+                  rows={4}
+                  placeholder="Enter your note here..."
+                  maxLength={500}
+                  showCount
+                />
               </Form.Item>
             </Form>
           </Modal>

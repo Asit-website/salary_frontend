@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 // import { Layout, Typography, Tabs, Button, Card, Table, Space, message, Modal, Form, Input, Select, DatePicker, Dropdown, Tag } from 'antd';
-import { Layout, Typography, Tabs, Button, Card, Table, Space, message, Modal, Form, Input, Select, DatePicker, Dropdown, Tag, Switch } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined, MoreOutlined } from '@ant-design/icons';
+import { Layout, Typography, Tabs, Button, Card, Table, Space, message, Modal, Form, Input, Select, DatePicker, Dropdown, Tag, Switch, Menu } from 'antd';
+import { ArrowLeftOutlined, PlusOutlined, MoreOutlined, LogoutOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
@@ -47,7 +47,18 @@ export default function Sales() {
   const [viewOrder, setViewOrder] = useState(null);
   const [viewOpen, setViewOpen] = useState(false);
 
+  // Visit detail modal state
+  const [selectedVisit, setSelectedVisit] = useState(null);
+  const [visitDetailOpen, setVisitDetailOpen] = useState(false);
+  const [visitDetailLoading, setVisitDetailLoading] = useState(false);
+
   const printRef = React.useRef(null);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/');
+  };
 
   // Load clients
   useEffect(() => {
@@ -368,6 +379,26 @@ export default function Sales() {
     }
   };
 
+  const openViewVisit = async (row) => {
+    try {
+      setVisitDetailLoading(true);
+      setVisitDetailOpen(true);
+      // Fetch full visit detail from backend admin endpoint
+      const resp = await api.get(`/admin/sales/visits/${encodeURIComponent(String(row.id))}`);
+      if (resp?.data?.success && resp.data.visit) {
+        setSelectedVisit(resp.data.visit);
+      } else {
+        message.error(resp?.data?.message || 'Failed to load visit details');
+        setVisitDetailOpen(false);
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to load visit details');
+      setVisitDetailOpen(false);
+    } finally {
+      setVisitDetailLoading(false);
+    }
+  };
+
   // Clients table columns
   const clientColumns = [
     { title: 'Name', dataIndex: 'name' },
@@ -487,7 +518,19 @@ export default function Sales() {
         />
       )
     },
-    { title: 'Amount', dataIndex: 'amount', render: (v) => v ? `₹${v}` : 0 },
+    // { title: 'Amount', dataIndex: 'amount', render: (v) => v ? `₹${v}` : 0 },
+    {
+      title: 'Actions',
+      key: 'v_actions',
+      render: (_, row) => (
+        <Dropdown
+          trigger={['click']}
+          menu={{ items: [{ key: 'view', label: 'View', onClick: () => openViewVisit(row) }] }}
+        >
+          <Button icon={<MoreOutlined />} />
+        </Dropdown>
+      ),
+    }
   ];
 
   const orderColumns = [
@@ -574,7 +617,7 @@ export default function Sales() {
         </Card>
       )
     },
-  // ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading]);
+    // ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading]);
   ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading, visits, visitsLoading, orders, ordersLoading]);
 
 
@@ -583,11 +626,26 @@ export default function Sales() {
     <Layout style={{ minHeight: '100vh', marginLeft: 200 }}>
       <Sidebar />
       <Layout>
-        <Header style={{ background: '#fff', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
-            Back to Dashboard
-          </Button>
-          <Title level={4} style={{ margin: 0 }}>Sales</Title>
+        <Header style={{ background: '#fff', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
+              Back to Dashboard
+            </Button>
+            <Title level={4} style={{ margin: 0 }}>Sales</Title>
+          </div>
+          <Menu
+            theme="light"
+            mode="horizontal"
+            items={[
+              {
+                key: 'logout',
+                icon: <LogoutOutlined />,
+                label: 'Logout',
+                onClick: handleLogout
+              }
+            ]}
+            style={{ borderRight: 'none', backgroundColor: 'transparent' }}
+          />
         </Header>
         <Content style={{ padding: 24 }}>
           <Tabs defaultActiveKey="clients" items={tabs} />
@@ -777,6 +835,98 @@ export default function Sales() {
           </div>
         ) : null}
       </Modal>
+
+      {/* Visit Detail Modal */}
+      <Modal
+        open={visitDetailOpen}
+        title={`Visit Details #${selectedVisit?.id || ''}`}
+        onCancel={() => { setVisitDetailOpen(false); setSelectedVisit(null); }}
+        footer={null}
+        width={800}
+        destroyOnClose
+      >
+        {visitDetailLoading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <div>Loading visit details...</div>
+          </div>
+        ) : selectedVisit ? (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div>
+                <strong>Visit Date:</strong> {selectedVisit.visitDate ? dayjs(selectedVisit.visitDate).format('DD MMMM YYYY hh:mm A') : 'N/A'}
+              </div>
+              <div>
+                <strong>Sales Person:</strong> {selectedVisit.staffName || selectedVisit.salesPerson || 'N/A'}
+              </div>
+              <div>
+                <strong>Visit Type:</strong> {selectedVisit.visitType || 'N/A'}
+              </div>
+              <div>
+                <strong>Client Name:</strong> {selectedVisit.clientName || 'N/A'}
+              </div>
+              <div>
+                <strong>Phone:</strong> {selectedVisit.phone || 'N/A'}
+              </div>
+              <div>
+                <strong>Client Type:</strong> {selectedVisit.clientType || 'N/A'}
+              </div>
+              <div>
+                <strong>Location:</strong> {selectedVisit.location || 'N/A'}
+              </div>
+              <div>
+                <strong>Client OTP:</strong> {selectedVisit.clientOtp || 'N/A'}
+              </div>
+              {selectedVisit.checkInLat && selectedVisit.checkInLng && (
+                <div>
+                  <strong>Check-in Location:</strong> Lat: {selectedVisit.checkInLat}, Lng: {selectedVisit.checkInLng}
+                </div>
+              )}
+              <div>
+                <strong>Status:</strong> {selectedVisit.status || 'Completed'}
+              </div>
+              <div>
+                <strong>Created At:</strong> {selectedVisit.createdAt ? dayjs(selectedVisit.createdAt).format('DD MMMM YYYY hh:mm A') : 'N/A'}
+              </div>
+              {selectedVisit.updatedAt && (
+                <div>
+                  <strong>Updated At:</strong> {dayjs(selectedVisit.updatedAt).format('DD MMMM YYYY hh:mm A')}
+                </div>
+              )}
+            </div>
+
+            {selectedVisit.clientSignature && (
+              <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #f0f0f0' }}>
+                <strong>Client Signature:</strong>
+                <div style={{ marginTop: '8px' }}>
+                  <img
+                    src={selectedVisit.clientSignature}
+                    alt="Client Signature"
+                    style={{ maxWidth: '100%', maxHeight: '200px', border: '1px solid #d9d9d9', borderRadius: '4px' }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {selectedVisit.attachments && selectedVisit.attachments.length > 0 && (
+              <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #f0f0f0' }}>
+                <strong>Attachments:</strong>
+                <div style={{ marginTop: '8px' }}>
+                  {selectedVisit.attachments.map((attachment, index) => (
+                    <div key={index} style={{ padding: '8px', backgroundColor: '#f9f9f9', marginBottom: '4px', borderRadius: '4px' }}>
+                      {attachment.name || `Attachment ${index + 1}`}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <div>No visit details found</div>
+          </div>
+        )}
+      </Modal>
+
     </Layout>
   );
 }

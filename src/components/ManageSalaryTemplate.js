@@ -49,32 +49,34 @@ export default function ManageSalaryTemplate() {
 
   // EXACT Step-2 defaults + requested additions
   const defaultEarningsList = [
-    'basic_salary',
-    'hra',
-    'da',
-    'special_allowance',
-    'conveyance_allowance',
-    'medical_allowance',
-    'other_allowances',
-    'travel_allowance',
+    'BASIC SALARY',
+    'HRA',
+    'DA',
+    'SPECIAL ALLOWANCE',
+    'CONVEYANCE ALLOWANCE',
+    'MEDICAL ALLOWANCE',
+    'OTHER ALLOWANCES',
+    'TRAVEL ALLOWANCE',
   ];
   const defaultDeductionsList = [
-    'provident_fund',
-    'esi',
-    'professional_tax',
-    'income_tax',
-    'loan_deduction',
-    'other_deductions',
+    'PROVIDENT FUND',
+    'ESI',
+    'PROFESSIONAL TAX',
+    'INCOME TAX',
   ];
 
   const openAdd = () => {
     setEditing(null);
     form.resetFields();
     const defaultEarnings = defaultEarningsList.map((k) => ({ name: k, amount: 0 }));
-    // const defaultDeductions = defaultDeductionsList.map((k) => ({ name: k, amount: 0 }));
     const defaultDeductions = defaultDeductionsList.map((k) => ({
       name: k,
-      amount: k === 'provident_fund' ? undefined : 0
+      amount: k === 'PROVIDENT FUND' ? 12 : k === 'ESI' ? 0.75 : 0,
+      employerAmount: k === 'PROVIDENT FUND' ? 12 : k === 'ESI' ? 3.25 : 0,
+      slabs:
+        k === 'PROFESSIONAL TAX'
+          ? [{ min: 0, max: null, amount: 0 }]
+          : undefined,
     }));
     form.setFieldsValue({
       name: '',
@@ -107,7 +109,7 @@ export default function ManageSalaryTemplate() {
       const rawDed = parseMaybeJson(tpl.deductions);
 
       const toArray = (val) => {
-        if (Array.isArray(val)) return val;
+        if (Array.isArray(val)) return val.flatMap((x) => (Array.isArray(x) ? x : [x]));
         if (val && typeof val === 'object') {
           return Object.entries(val).map(([k, v]) => ({
             key: k,
@@ -121,15 +123,114 @@ export default function ManageSalaryTemplate() {
         name: it.key || it.name || '',
         amount: Number(it.valueNumber ?? it.value ?? 0),
       }));
-      let dEntries = toArray(rawDed).map((it) => ({
-        name: it.key || it.name || '',
-        amount: Number(it.valueNumber ?? it.value ?? 0),
-      }));
-      dEntries = dEntries.map(it => it.name === 'provident_fund' ? { ...it, amount: undefined } : it);
+      let dEntries = [];
+      let pfEmployeeAmount = 0;
+      let pfEmployerAmount = 0;
+      let esiEmployeeAmount = 0;
+      let esiEmployerAmount = 0;
+      let hasEsiKeys = false;
+      let ptFixedAmount = 0;
+      let ptSlabs = [];
+
+      toArray(rawDed).forEach((it) => {
+        const rawKey = String(it?.key ?? it?.name ?? '').trim();
+        const key = rawKey.toUpperCase();
+        const value = Number(it?.valueNumber ?? it?.value_number ?? it?.value ?? it?.amount ?? 0);
+
+        if (key === 'PROVIDENT_FUND_EMPLOYEE' || key === 'PROVIDENT FUND - EMPLOYEE') {
+          pfEmployeeAmount = Number.isFinite(value) ? value : 0;
+          return;
+        }
+        if (key === 'PROVIDENT_FUND_EMPLOYER' || key === 'PROVIDENT FUND - EMPLOYER') {
+          pfEmployerAmount = Number.isFinite(value) ? value : 0;
+          return;
+        }
+
+        if (key === 'ESI_EMPLOYEE' || key === 'ESI - EMPLOYEE') {
+          esiEmployeeAmount = Number.isFinite(value) ? value : 0;
+          hasEsiKeys = true;
+          return;
+        }
+        if (key === 'ESI_EMPLOYER' || key === 'ESI - EMPLOYER') {
+          esiEmployerAmount = Number.isFinite(value) ? value : 0;
+          hasEsiKeys = true;
+          return;
+        }
+
+        if (key === 'PROFESSIONAL TAX' || key === 'PROFESSIONAL_TAX') {
+          ptFixedAmount = Number.isFinite(value) ? value : 0;
+          const slabs = it?.meta?.slabs;
+          ptSlabs = Array.isArray(slabs) ? slabs : [];
+          return;
+        }
+
+        if (!rawKey) return;
+        if (key === 'PROVIDENT FUND') return;
+        if (key === 'ESI') {
+          // Legacy ESI support: treat as employee percentage when new keys aren't present
+          if (!hasEsiKeys) {
+            esiEmployeeAmount = Number.isFinite(value) ? value : 0;
+            esiEmployerAmount = 0;
+          }
+          return;
+        }
+
+        dEntries.push({
+          name: rawKey,
+          amount: Number.isFinite(value) ? value : 0,
+        });
+      });
+
+      // Always add all default deductions including PF with proper values
+      const finalDeductions = [];
+
+      // Add PF first with correct values
+      finalDeductions.push({
+        name: 'PROVIDENT FUND',
+        amount: Number.isFinite(pfEmployeeAmount) ? pfEmployeeAmount : 12,
+        employerAmount: Number.isFinite(pfEmployerAmount) ? pfEmployerAmount : 12
+      });
+
+      // Add ESI like PF (percent slabs)
+      finalDeductions.push({
+        name: 'ESI',
+        amount: Number.isFinite(esiEmployeeAmount) ? esiEmployeeAmount : 0.75,
+        employerAmount: Number.isFinite(esiEmployerAmount) ? esiEmployerAmount : 3.25
+      });
+
+      finalDeductions.push({
+        name: 'PROFESSIONAL TAX',
+        amount: Number.isFinite(ptFixedAmount) ? ptFixedAmount : 0,
+        slabs: Array.isArray(ptSlabs) && ptSlabs.length ? ptSlabs : [{ min: 0, max: null, amount: 0 }],
+      });
+
+      // Add other deductions from template
+      dEntries.forEach((entry) => {
+        const n = String(entry?.name ?? '').trim();
+        if (!n) return;
+        if (n.toUpperCase() === 'PROVIDENT FUND') return;
+        if (n.toUpperCase() === 'ESI') return;
+        if (n.toUpperCase() === 'PROFESSIONAL TAX') return;
+        finalDeductions.push({
+          ...entry,
+          name: n,
+          amount: Number(entry?.amount ?? 0),
+        });
+      });
+
+      // Remove blanks + duplicates (prevents the extra "Enter deduction name" row)
+      const seenDed = new Set();
+      dEntries = finalDeductions.filter((d) => {
+        const n = String(d?.name ?? '').trim();
+        if (!n) return false;
+        const k = n.toUpperCase();
+        if (seenDed.has(k)) return false;
+        seenDed.add(k);
+        return true;
+      });
 
       // Backfill defaults if empty
       if (!eEntries.length) eEntries = defaultEarningsList.map((k) => ({ name: k, amount: 0 }));
-      if (!dEntries.length) dEntries = defaultDeductionsList.map((k) => ({ name: k, amount: 0 }));
 
       form.setFieldsValue({
         name: tpl.name,
@@ -150,25 +251,77 @@ export default function ManageSalaryTemplate() {
 
       const toItems = (arr = [], isDeduction = false) =>
         (arr || [])
-          .map((it) => ({ name: String(it?.name || '').trim(), amount: Number(it?.amount || 0) }))
+          .map((it) => ({ 
+            name: String(it?.name || '').trim(), 
+            amount: Number(it?.amount || 0),
+            employerAmount: Number(it?.employerAmount || 0),
+            slabs: Array.isArray(it?.slabs) ? it.slabs : [],
+          }))
           .filter((it) => it.name)
-          .map((it) => {
-            if (isDeduction && it.name === 'provident_fund') {
-              // PF = 12% of basic_salary
-              return {
-                key: 'provident_fund',
-                label: 'Provident Fund (PF)',
-                type: 'percent',
-                valueNumber: 12,
-                meta: { basedOn: 'basic_salary' },
-              };
+          .flatMap((it) => {
+            if (isDeduction && it.name === 'PROVIDENT FUND') {
+              return [
+                {
+                  key: 'PROVIDENT_FUND_EMPLOYEE',
+                  label: 'Provident Fund - Employee',
+                  type: 'percent',
+                  valueNumber: Number.isFinite(it.amount) ? it.amount : 12,
+                  meta: { basedOn: 'BASIC SALARY' },
+                },
+                {
+                  key: 'PROVIDENT_FUND_EMPLOYER',
+                  label: 'Provident Fund - Employer',
+                  type: 'percent',
+                  valueNumber: Number.isFinite(it.employerAmount) ? it.employerAmount : 12,
+                  meta: { basedOn: 'BASIC SALARY' },
+                }
+              ];
             }
-            return {
-              key: it.name,
-              label: it.name.replace(/_/g, ' '),
-              type: 'fixed',
-              valueNumber: it.amount,
-            };
+            if (isDeduction && it.name === 'ESI') {
+              return [
+                {
+                  key: 'ESI_EMPLOYEE',
+                  label: 'ESI - Employee',
+                  type: 'percent',
+                  valueNumber: Number.isFinite(it.amount) ? it.amount : 0.75,
+                  meta: { basedOn: 'TOTAL EARNINGS' },
+                },
+                {
+                  key: 'ESI_EMPLOYER',
+                  label: 'ESI - Employer',
+                  type: 'percent',
+                  valueNumber: Number.isFinite(it.employerAmount) ? it.employerAmount : 3.25,
+                  meta: { basedOn: 'TOTAL EARNINGS' },
+                }
+              ];
+            }
+            if (isDeduction && it.name === 'PROFESSIONAL TAX') {
+              const normalizedSlabs = (it.slabs || [])
+                .map((s) => ({
+                  min: Number(s?.min ?? 0),
+                  max: s?.max === null || s?.max === undefined || s?.max === '' ? null : Number(s?.max),
+                  amount: Number(s?.amount ?? 0),
+                }))
+                .filter((s) => Number.isFinite(s.min) && (s.max === null || Number.isFinite(s.max)));
+
+              return [
+                {
+                  key: 'PROFESSIONAL TAX',
+                  label: 'Professional Tax',
+                  type: 'fixed',
+                  valueNumber: Number.isFinite(it.amount) ? it.amount : 0,
+                  meta: { basedOn: 'TOTAL EARNINGS', slabs: normalizedSlabs },
+                },
+              ];
+            }
+            return [
+              {
+                key: it.name,
+                label: it.name.replace(/_/g, ' '),
+                type: 'fixed',
+                valueNumber: it.amount,
+              },
+            ];
           });
 
       const payload = {
@@ -296,7 +449,7 @@ export default function ManageSalaryTemplate() {
                               name={[name, 'name']}
                               rules={[{ required: true, message: 'Name' }]}
                             >
-                              <Input placeholder="e.g. basic_salary" />
+                              <Input placeholder="e.g. BASIC SALARY" />
                             </Form.Item>
                           </Col>
                           <Col span={8}>
@@ -318,42 +471,238 @@ export default function ManageSalaryTemplate() {
                   )}
                 </Form.List>
               </Card>
-
               <Card size="small" title="Deductions">
                 <Form.List name="deductions">
                   {(fields, { add, remove }) => (
                     <>
-                      {fields.map(({ key, name, ...rest }) => (
-                        <Row key={key} gutter={8} style={{ marginBottom: 8 }}>
-                          <Col span={14}>
-                            <Form.Item
-                              {...rest}
-                              name={[name, 'name']}
-                              rules={[{ required: true, message: 'Name' }]}
-                            >
-                              <Input placeholder="e.g. provident_fund" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={8}>
-                            {/* <Form.Item {...rest} name={[name, 'amount']}>
-                              <InputNumber disabled min={0} style={{ width: '100%' }} />
-                            </Form.Item> */}
-                            <Form.Item {...rest} name={[name, 'amount']}>
-                              <InputNumber
-                                disabled
-                                min={0}
-                                style={{ width: '100%' }}
-                                placeholder={form.getFieldValue(['deductions', name, 'name']) === 'provident_fund' ? '12%' : undefined}
-                              />
-                            </Form.Item>
-                          </Col>
-                          <Col span={2}>
-                            <Button danger onClick={() => remove(name)}>
-                              X
-                            </Button>
-                          </Col>
-                        </Row>
-                      ))}
+                      {fields.map(({ key, name, ...rest }) => {
+                        // Get the initial value to determine if this is PF
+                        const initialValues = form.getFieldValue(['deductions', name]);
+                        const isPF = String(initialValues?.name || '').trim().toUpperCase() === 'PROVIDENT FUND';
+                        const isESI = String(initialValues?.name || '').trim().toUpperCase() === 'ESI';
+                        const isPT = String(initialValues?.name || '').trim().toUpperCase() === 'PROFESSIONAL TAX';
+
+                        if (isPF) {
+                          return (
+                            <div key={key} style={{ marginBottom: 16, padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fafafa' }}>
+                              <Row gutter={8} style={{ marginBottom: 8 }}>
+                                <Col span={22}>
+                                  <Form.Item
+                                    {...rest}
+                                    name={[name, 'name']}
+                                    rules={[{ required: true, message: 'Name' }]}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="PROVIDENT FUND" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={2}>
+                                  <Button danger onClick={() => remove(name)} size="small">
+                                    X
+                                  </Button>
+                                </Col>
+                              </Row>
+                              <Row gutter={8}>
+                                <Col span={12}>
+                                  <Form.Item
+                                    label="Employee Contribution (%)"
+                                    {...rest}
+                                    name={[name, 'amount']}
+                                    style={{ marginBottom: 0 }}                    
+                                  >
+                                    <InputNumber
+                                      min={0}
+                                      max={100}
+                                      style={{ width: '100%' }}
+                                      placeholder="12%"
+                                      addonAfter="%"
+                                    />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={12}>
+                                  <Form.Item
+                                    label="Employer Contribution (%)"
+                                    {...rest}
+                                    name={[name, 'employerAmount']}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <InputNumber
+                                      min={0}
+                                      max={100}
+                                      style={{ width: '100%' }}
+                                      placeholder="12%"
+                                      addonAfter="%"
+                                    />
+                                  </Form.Item>
+                                </Col>
+                              </Row>
+                            </div>
+                          );
+                        }
+
+                        if (isPT) {
+                          return (
+                            <div key={key} style={{ marginBottom: 16, padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fafafa' }}>
+                              <Row gutter={8} style={{ marginBottom: 8 }}>
+                                <Col span={22}>
+                                  <Form.Item
+                                    {...rest}
+                                    name={[name, 'name']}
+                                    rules={[{ required: true, message: 'Name' }]}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="PROFESSIONAL TAX" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={2}>
+                                  <Button danger onClick={() => remove(name)} size="small">
+                                    X
+                                  </Button>
+                                </Col>
+                              </Row>
+
+                              <Form.List name={[name, 'slabs']}>
+                                {(slabFields, { add: addSlab, remove: removeSlab }) => (
+                                  <>
+                                    {slabFields.map(({ key: sKey, name: sName, ...sRest }) => (
+                                      <Row key={sKey} gutter={8} style={{ marginBottom: 8 }}>
+                                        <Col span={7}>
+                                          <Form.Item
+                                            label={sName === 0 ? 'From (₹)' : ''}
+                                            {...sRest}
+                                            name={[sName, 'min']}
+                                            style={{ marginBottom: 0 }}
+                                          >
+                                            <InputNumber min={0} style={{ width: '100%' }} placeholder="0" />
+                                          </Form.Item>
+                                        </Col>
+                                        <Col span={7}>
+                                          <Form.Item
+                                            label={sName === 0 ? 'To (₹)' : ''}
+                                            {...sRest}
+                                            name={[sName, 'max']}
+                                            style={{ marginBottom: 0 }}
+                                          >
+                                            <InputNumber min={0} style={{ width: '100%' }} placeholder="max" />
+                                          </Form.Item>
+                                        </Col>
+                                        <Col span={8}>
+                                          <Form.Item
+                                            label={sName === 0 ? 'PT Amount (₹)' : ''}
+                                            {...sRest}
+                                            name={[sName, 'amount']}
+                                            style={{ marginBottom: 0 }}
+                                          >
+                                            <InputNumber min={0} style={{ width: '100%' }} placeholder="0" />
+                                          </Form.Item>
+                                        </Col>
+                                        <Col span={2} style={{ display: 'flex', alignItems: 'end' }}>
+                                          <Button danger onClick={() => removeSlab(sName)} size="small">
+                                            X
+                                          </Button>
+                                        </Col>
+                                      </Row>
+                                    ))}
+                                    <Button
+                                      type="dashed"
+                                      onClick={() => addSlab({ min: 0, max: null, amount: 0 })}
+                                      icon={<PlusOutlined />}
+                                    >
+                                      Add Slab
+                                    </Button>
+                                  </>
+                                )}
+                              </Form.List>
+                            </div>
+                          );
+                        }
+
+                        if (isESI) {
+                          return (
+                            <div key={key} style={{ marginBottom: 16, padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fafafa' }}>
+                              <Row gutter={8} style={{ marginBottom: 8 }}>
+                                <Col span={22}>
+                                  <Form.Item
+                                    {...rest}
+                                    name={[name, 'name']}
+                                    rules={[{ required: true, message: 'Name' }]}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <Input placeholder="ESI" />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={2}>
+                                  <Button danger onClick={() => remove(name)} size="small">
+                                    X
+                                  </Button>
+                                </Col>
+                              </Row>
+                              <Row gutter={8}>
+                                <Col span={12}>
+                                  <Form.Item
+                                    label="Employee Contribution (%)"
+                                    {...rest}
+                                    name={[name, 'amount']}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <InputNumber
+                                      min={0}
+                                      max={100}
+                                      style={{ width: '100%' }}
+                                      placeholder="0%"
+                                      addonAfter="%"
+                                    />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={12}>
+                                  <Form.Item
+                                    label="Employer Contribution (%)"
+                                    {...rest}
+                                    name={[name, 'employerAmount']}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    <InputNumber
+                                      min={0}
+                                      max={100}
+                                      style={{ width: '100%' }}
+                                      placeholder="0%"
+                                      addonAfter="%"
+                                    />
+                                  </Form.Item>
+                                </Col>
+                              </Row>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <Row key={key} gutter={8} style={{ marginBottom: 8 }}>
+                            <Col span={14}>
+                              <Form.Item
+                                {...rest}
+                                name={[name, 'name']}
+                                rules={[{ required: true, message: 'Name' }]}
+                              >
+                                <Input placeholder="Enter deduction name" />
+                              </Form.Item>
+                            </Col>
+                            <Col span={8}>
+                              <Form.Item {...rest} name={[name, 'amount']}>
+                                <InputNumber
+                                  min={0}
+                                  style={{ width: '100%' }}
+                                  placeholder="0"
+                                />
+                              </Form.Item>
+                            </Col>
+                            <Col span={2}>
+                              <Button danger onClick={() => remove(name)}>
+                                X
+                              </Button>
+                            </Col>
+                          </Row>
+                        );
+                      })}
                       <Button type="dashed" onClick={() => add({ name: '', amount: 0 })} icon={<PlusOutlined />}>
                         Add More
                       </Button>

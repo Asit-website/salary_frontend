@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Table, Button, Modal, Form, Input, Select, message, Space, Typography, Tag, Menu, Row, Col, DatePicker, Dropdown, Switch } from 'antd';
-import { 
-  UserOutlined, 
-  PlusOutlined, 
+import { Layout, Card, Table, Button, Modal, Form, Input, Select, message, Space, Typography, Tag, Menu, Row, Col, DatePicker, Dropdown, Switch, Upload } from 'antd';
+import {
+  UserOutlined,
+  PlusOutlined,
   DownloadOutlined,
   MoreOutlined,
   CalendarOutlined,
@@ -13,14 +13,16 @@ import {
   DeleteOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
-  MenuUnfoldOutlined
+  MenuUnfoldOutlined,
+  FileTextOutlined,
+  UploadOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
 
 const { Header, Content } = Layout;
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { Option } = Select;
 const { Search } = Input;
 const { RangePicker } = DatePicker;
@@ -38,12 +40,29 @@ const StaffManagement = () => {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filteredStaff, setFilteredStaff] = useState([]);
   const [salaryTemplates, setSalaryTemplates] = useState([]);
+  const [letterTemplates, setLetterTemplates] = useState([]);
+  const [issueModalVisible, setIssueModalVisible] = useState(false);
+  const [issuingLetter, setIssuingLetter] = useState(false);
+  const [issuingForStaff, setIssuingForStaff] = useState(null);
+  const [importModalVisible, setImportModalVisible] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importResults, setImportResults] = useState(null);
+  const [issueForm] = Form.useForm();
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchStaff();
     fetchSalaryTemplates();
+    fetchLetterTemplates();
   }, []);
+
+  const fetchLetterTemplates = async () => {
+    try {
+      const resp = await api.get('/admin/letters/templates');
+      if (resp.data.success) setLetterTemplates(resp.data.templates);
+    } catch (_) { }
+  };
 
   useEffect(() => {
     applyFilters();
@@ -51,28 +70,28 @@ const StaffManagement = () => {
 
   const applyFilters = () => {
     let filtered = [...staff];
-    
+
     if (searchText) {
-      filtered = filtered.filter(member => 
+      filtered = filtered.filter(member =>
         member.name.toLowerCase().includes(searchText.toLowerCase()) ||
         member.email.toLowerCase().includes(searchText.toLowerCase()) ||
         member.staffId.toLowerCase().includes(searchText.toLowerCase()) ||
         member.phone.toLowerCase().includes(searchText.toLowerCase())
       );
     }
-    
+
     if (filterRole) {
       filtered = filtered.filter(member => member.role === filterRole);
     }
-    
+
     if (filterStatus) {
       filtered = filtered.filter(member => member.status === filterStatus);
     }
-    
+
     if (filterDepartment) {
       filtered = filtered.filter(member => member.department === filterDepartment);
     }
-    
+
     setFilteredStaff(filtered);
   };
 
@@ -96,7 +115,7 @@ const StaffManagement = () => {
         const staffData = response.data.staff || response.data.data || [];
         // Map API response to frontend structure
         const mappedData = staffData.map(staff => ({
-          id: staff.id,
+          ...staff,
           name: staff.name || 'Unknown',
           email: staff.email || '',
           staffId: staff.staffId || 'N/A',
@@ -141,10 +160,10 @@ const StaffManagement = () => {
   const totalEmployees = filteredStaff.length;
   const activeEmployees = filteredStaff.filter(s => s.status === 'active').length;
   const onLeaveEmployees = filteredStaff.filter(s => s.status === 'inactive').length;
-  
+
   // Get unique departments for filter
   const uniqueDepartments = [...new Set(staff.map(s => s.department).filter(Boolean))].sort();
-  
+
   // Calculate new hires from last 7 days
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -157,7 +176,7 @@ const StaffManagement = () => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    navigate('/');
   };
 
   const handleAddRegularStaff = () => {
@@ -179,6 +198,11 @@ const StaffManagement = () => {
       key: 'contractual',
       label: 'Contractual Staff',
       icon: <UserOutlined />,
+    },
+    {
+      key: 'import',
+      label: 'Import Staff',
+      icon: <UploadOutlined />,
     }
   ];
 
@@ -187,6 +211,9 @@ const StaffManagement = () => {
       handleAddRegularStaff();
     } else if (key === 'contractual') {
       handleAddContractualStaff();
+    } else if (key === 'import') {
+      setImportModalVisible(true);
+      setImportResults(null);
     }
   };
 
@@ -215,6 +242,28 @@ const StaffManagement = () => {
     });
   };
 
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const response = await api.get('/admin/staff/export', {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `staff_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      message.success('Staff list exported successfully');
+    } catch (error) {
+      console.error('Failed to export staff:', error);
+      message.error('Failed to export staff list');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleSubmit = async (values) => {
     try {
       // Calculate total salary components
@@ -226,9 +275,9 @@ const StaffManagement = () => {
       const medical_allowance = parseFloat(values.medical_allowance) || 0;
       const telephone_allowance = parseFloat(values.telephone_allowance) || 0;
       const other_allowances = parseFloat(values.other_allowances) || 0;
-      
+
       const total_earnings = basic_salary + hra + da + special_allowance + conveyance_allowance + medical_allowance + telephone_allowance + other_allowances;
-      
+
       // Create staff member with all details
       const staffData = {
         staffId: values.staffId,
@@ -334,7 +383,7 @@ const StaffManagement = () => {
       dataIndex: 'status',
       key: 'status',
       render: (status) => (
-        <Tag 
+        <Tag
           color={status === 'active' ? 'green' : 'red'}
           style={{ fontSize: '12px' }}
         >
@@ -356,6 +405,22 @@ const StaffManagement = () => {
                 onClick: () => handleViewStaff(record)
               },
               {
+                key: 'edit',
+                icon: <EditOutlined style={{ color: '#faad14' }} />,
+                label: 'Edit',
+                onClick: () => handleEditStaff(record)
+              },
+              {
+                key: 'issue_letter',
+                icon: <FileTextOutlined style={{ color: '#52c41a' }} />,
+                label: 'Issue Letter',
+                onClick: () => {
+                  setIssuingForStaff(record);
+                  setIssueModalVisible(true);
+                  issueForm.resetFields();
+                }
+              },
+              {
                 type: 'divider',
               },
               {
@@ -373,8 +438,8 @@ const StaffManagement = () => {
           <Button
             type="text"
             icon={<MoreOutlined />}
-            style={{ 
-              border: 'none', 
+            style={{
+              border: 'none',
               boxShadow: 'none',
               padding: '4px 8px',
               height: 'auto'
@@ -388,7 +453,7 @@ const StaffManagement = () => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} />
-      
+
       <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
         <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -412,14 +477,52 @@ const StaffManagement = () => {
             ]}
           />
         </Header>
-        
+
         <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+          <Modal
+            title={`Issue Letter to ${issuingForStaff?.name}`}
+            open={issueModalVisible}
+            onCancel={() => setIssueModalVisible(false)}
+            onOk={() => issueForm.submit()}
+            confirmLoading={issuingLetter}
+            destroyOnClose
+          >
+            <Form form={issueForm} layout="vertical" onFinish={async (values) => {
+              setIssuingLetter(true);
+              try {
+                const resp = await api.post('/admin/letters/issue', {
+                  staffUserId: issuingForStaff.id,
+                  templateId: values.templateId,
+                });
+                if (resp.data.success) {
+                  message.success('Letter issued successfully');
+                  setIssueModalVisible(false);
+                  navigate('/settings/letters');
+                } else {
+                  message.error(resp.data.message || 'Failed to issue letter');
+                }
+              } catch (e) {
+                message.error('Failed to issue letter');
+              } finally {
+                setIssuingLetter(false);
+              }
+            }}>
+              <Form.Item name="templateId" label="Select Letter Template" rules={[{ required: true }]}>
+                <Select placeholder="Choose a template">
+                  {letterTemplates.map(t => (
+                    <Option key={t.id} value={t.id}>{t.title}</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+              <Text type="secondary">The letter will be generated based on the selected template with staff details automatically filled in.</Text>
+            </Form>
+          </Modal>
           {/* Search Filter at Top */}
           <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
             <Col xs={24}>
-              <Card 
-                style={{ 
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)', 
+              <Card
+                style={{
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
                   borderRadius: '4px',
                   border: '1px solid #e8e8e8'
                 }}
@@ -478,7 +581,7 @@ const StaffManagement = () => {
                     </Select>
                   </Col>
                   <Col xs={24} md={4}>
-                    <Button 
+                    <Button
                       icon={<FilterOutlined />}
                       size="large"
                       onClick={handleFilterReset}
@@ -495,8 +598,8 @@ const StaffManagement = () => {
           {/* Top Stats Cards */}
           <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
             <Col xs={24} sm={12} md={6}>
-              <Card 
-                style={{ 
+              <Card
+                style={{
                   background: '#fff',
                   border: '1px solid #e8e8e8',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
@@ -509,10 +612,10 @@ const StaffManagement = () => {
                     <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>Total Employees</div>
                     <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>{totalEmployees}</div>
                   </div>
-                  <div style={{ 
-                    width: '40px', 
-                    height: '40px', 
-                    background: '#e6f7ff', 
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: '#e6f7ff',
                     borderRadius: '6px',
                     display: 'flex',
                     alignItems: 'center',
@@ -522,13 +625,13 @@ const StaffManagement = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                 
+
                 </div>
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card 
-                style={{ 
+              <Card
+                style={{
                   background: '#fff',
                   border: '1px solid #e8e8e8',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
@@ -543,10 +646,10 @@ const StaffManagement = () => {
                       {activeEmployees}
                     </div>
                   </div>
-                  <div style={{ 
-                    width: '40px', 
-                    height: '40px', 
-                    background: '#f6ffed', 
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: '#f6ffed',
                     borderRadius: '6px',
                     display: 'flex',
                     alignItems: 'center',
@@ -556,14 +659,14 @@ const StaffManagement = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                
-                
+
+
                 </div>
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card 
-                style={{ 
+              <Card
+                style={{
                   background: '#fff',
                   border: '1px solid #e8e8e8',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
@@ -578,10 +681,10 @@ const StaffManagement = () => {
                       {onLeaveEmployees}
                     </div>
                   </div>
-                  <div style={{ 
-                    width: '40px', 
-                    height: '40px', 
-                    background: '#fff2e8', 
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: '#fff2e8',
                     borderRadius: '6px',
                     display: 'flex',
                     alignItems: 'center',
@@ -591,14 +694,14 @@ const StaffManagement = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                 
-                
+
+
                 </div>
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card 
-                style={{ 
+              <Card
+                style={{
                   background: '#fff',
                   border: '1px solid #e8e8e8',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
@@ -611,10 +714,10 @@ const StaffManagement = () => {
                     <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>New Hires</div>
                     <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>{newHires}</div>
                   </div>
-                  <div style={{ 
-                    width: '40px', 
-                    height: '40px', 
-                    background: '#f9f0ff', 
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: '#f9f0ff',
                     borderRadius: '6px',
                     display: 'flex',
                     alignItems: 'center',
@@ -624,8 +727,8 @@ const StaffManagement = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  
-                 
+
+
                 </div>
               </Card>
             </Col>
@@ -693,9 +796,9 @@ const StaffManagement = () => {
             </Col>
           </Row> */}
 
-          <Card 
-            style={{ 
-              boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)', 
+          <Card
+            style={{
+              boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
               borderRadius: '4px',
               border: '1px solid #e8e8e8'
             }}
@@ -703,15 +806,17 @@ const StaffManagement = () => {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Title level={4} style={{ margin: 0, color: '#262626' }}>Staff Management</Title>
                 <Space>
-                  <Button 
+                  <Button
                     icon={<DownloadOutlined />}
                     type="text"
                     style={{ color: '#1890ff' }}
+                    onClick={handleExport}
+                    loading={exporting}
                   >
                     Export
                   </Button>
-                  <Dropdown 
-                    menu={{ 
+                  <Dropdown
+                    menu={{
                       items: staffMenuItems,
                       onClick: handleMenuClick
                     }}
@@ -742,7 +847,7 @@ const StaffManagement = () => {
               }}
               scroll={{ x: 1000 }}
               size="middle"
-              style={{ 
+              style={{
                 background: '#fff',
                 borderRadius: '4px'
               }}
@@ -941,6 +1046,107 @@ const StaffManagement = () => {
                 </Space>
               </Form.Item>
             </Form>
+          </Modal>
+
+          <Modal
+            title="Import Staff from Excel"
+            open={importModalVisible}
+            onCancel={() => setImportModalVisible(false)}
+            footer={null}
+            width={600}
+          >
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <p>Download the template, fill it with staff details, and upload it back.</p>
+
+              <div style={{ textAlign: 'left', marginBottom: '24px', padding: '12px', background: '#e6f7ff', borderRadius: '4px', border: '1px solid #91d5ff' }}>
+                <Text strong>Expected Excel Fields:</Text>
+                <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                  <li><Text code>Name</Text> (Full name of the staff)</li>
+                  <li><Text code>Staff ID</Text> (Unique employee ID)</li>
+                  <li><Text code>Phone Number</Text> (Required - used for login)</li>
+                  <li><Text code>Designation</Text> (Job title)</li>
+                  <li><Text code>Joining Date</Text> (Format: YYYY-MM-DD)</li>
+                  <li><Text code>Email Address</Text></li>
+                </ul>
+              </div>
+
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={async () => {
+                  try {
+                    const response = await api.get('/admin/staff/import-template', {
+                      responseType: 'blob',
+                    });
+                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.setAttribute('download', 'staff_import_template.xlsx');
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                  } catch (error) {
+                    message.error('Failed to download template');
+                  }
+                }}
+                style={{ marginBottom: '24px' }}
+                type="primary"
+                ghost
+              >
+                Download Excel Template
+              </Button>
+
+              <Upload.Dragger
+                name="file"
+                multiple={false}
+                action={`${api.defaults.baseURL}/admin/staff/import`}
+                headers={{
+                  Authorization: `Bearer ${localStorage.getItem('token')}`
+                }}
+                onChange={(info) => {
+                  const { status } = info.file;
+                  if (status === 'uploading') {
+                    setImporting(true);
+                  }
+                  if (status === 'done') {
+                    setImporting(false);
+                    message.success(`${info.file.name} file uploaded successfully.`);
+                    setImportResults(info.file.response?.results);
+                    fetchStaff();
+                  } else if (status === 'error') {
+                    setImporting(false);
+                    message.error(`${info.file.name} file upload failed.`);
+                  }
+                }}
+                showUploadList={false}
+                disabled={importing}
+              >
+                <p className="ant-upload-drag-icon">
+                  <UploadOutlined />
+                </p>
+                <p className="ant-upload-text">Click or drag Excel file to this area to upload</p>
+                <p className="ant-upload-hint">Support for a single .xlsx file.</p>
+              </Upload.Dragger>
+
+              {importResults && (
+                <div style={{ marginTop: '24px', textAlign: 'left', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
+                  <Typography.Title level={5}>Import Results</Typography.Title>
+                  <div style={{ marginBottom: '8px' }}>
+                    <Tag color="success">Success: {importResults.success}</Tag>
+                    <Tag color="warning">Skipped: {importResults.skipped}</Tag>
+                    <Tag color="error">Failed: {importResults.failed}</Tag>
+                  </div>
+                  {importResults.errors && importResults.errors.length > 0 && (
+                    <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '12px', borderTop: '1px solid #ddd', paddingTop: '8px' }}>
+                      <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                        {importResults.errors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </Modal>
         </Content>
       </Layout>

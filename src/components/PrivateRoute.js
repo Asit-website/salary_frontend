@@ -5,8 +5,9 @@ import { Layout, Spin } from 'antd';
 const { Content } = Layout;
 
 const PrivateRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
-  
+  // Check sessionStorage first (for impersonated sessions), then localStorage
+  const token = sessionStorage.getItem('impersonate_token') || localStorage.getItem('token');
+
   if (!token) {
     return <Navigate to="/login" replace />;
   }

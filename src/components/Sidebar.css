@@ -46,3 +46,30 @@
 .ant-menu-light.ant-menu-inline .ant-menu-item-selected .anticon {
   color: white !important;
 }
+
+/* Sidebar layout - logo fixed, menu scrollable */
+.sidebar-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar-sider .ant-menu {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar-sider .ant-menu::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-sider .ant-menu::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 4px;
+}
+
+.sidebar-sider .ant-menu::-webkit-scrollbar-track {
+  background: transparent;
+}

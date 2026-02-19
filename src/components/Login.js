@@ -39,16 +39,7 @@ const Login = () => {
         message.success('OTP sent');
         setStep('otp');
         setCounter(60);
-        setTimeout(() => inputsRef.current?.[0]?.focus?.(), 100);
-        // Optional dev autofill
-        try {
-          const latest = await api.get('/auth/otp/latest', { params: { phone: ph } });
-          const code = String(latest.data?.otp || '');
-          if (code.length === 6) {
-            // Prefill but do NOT auto-verify; user can review then tap Verify
-            setOtp(code.split(''));
-          }
-        } catch {}
+        setOtp(['', '', '', '', '', '']); // Reset OTP fields
       } else {
         message.error(res.data?.message || 'Failed to send OTP');
       }
@@ -89,85 +80,114 @@ const Login = () => {
     try {
       setVerifying(true);
       const res = await api.post('/auth/verify-otp', { phone: ph, code });
+      if (res.data?.requireSignup) {
+        message.info('Not registered. Please complete signup.');
+        setTimeout(() => navigate(`/signup-admin?phone=${ph}`), 500);
+        return;
+      }
       if (res.data?.success) {
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('user', JSON.stringify(res.data.user));
         message.success('Login successful');
-        // Small delay before redirect so the user can see success
-        setTimeout(() => navigate('/dashboard'), 800);
+        const role = res.data?.user?.role || 'admin';
+        const dest = role === 'superadmin' ? '/superadmin/clients' : '/dashboard';
+        setTimeout(() => navigate(dest), 800);
       } else {
-        message.error(res.data?.message || 'Invalid OTP');
+        message.error('Your subscription is expired');
       }
     } catch (e) {
-      message.error('Invalid OTP');
+      message.error('Your suscription is expired');
     } finally {
       setVerifying(false);
     }
   };
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-      <Header style={{ background: '#001529', textAlign: 'center' }}>
-        <div style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>
-          ThinkTech Attendance Admin
-        </div>
-      </Header>
-      <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '50px' }}>
-        <Card 
-          title="Admin Login" 
-          style={{ width: 400, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
-        >
-          {step === 'phone' && (
-            <>
-              <Form layout="vertical" size="large" onFinish={sendOtp}>
-                <Form.Item label="Phone Number" required>
-                  <Input
-                    prefix={<PhoneOutlined />}
-                    placeholder="Enter 10-digit phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    maxLength={10}
-                  />
-                </Form.Item>
-                <Form.Item>
-                  <Button type="primary" htmlType="submit" loading={sending} style={{ width: '100%' }}>
-                    Send OTP
-                  </Button>
-                </Form.Item>
-              </Form>
-            </>
-          )}
+    <Layout
+      style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #f0f3ff 0%, #f8fbff 35%, #eff6ff 100%)',
+      }}
+    >
+      <Content
+        style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '48px' }}
+      >
+        <div style={{ width: 420 }}>
 
-          {step === 'otp' && (
-            <>
-              <div style={{ marginBottom: 8 }}>Enter the 6-digit OTP sent to +91-{phone}</div>
-              <Space size={8} onPaste={onPasteOtp}>
-                {otp.map((v, i) => (
-                  <Input
-                    key={i}
-                    ref={(el) => (inputsRef.current[i] = el)}
-                    value={v}
-                    onChange={(e) => setOtpAt(i, e.target.value)}
-                    maxLength={1}
-                    style={{ width: 40, textAlign: 'center' }}
-                    inputMode="numeric"
-                  />
-                ))}
-              </Space>
-              <div style={{ marginTop: 12 }}>
-                <Button type="primary" icon={<SafetyCertificateOutlined />} loading={verifying} onClick={() => verify()} style={{ width: '100%' }}>
-                  Verify & Login
-                </Button>
-              </div>
-              <div style={{ marginTop: 12, textAlign: 'center' }}>
-                <Button type="link" icon={<ReloadOutlined />} onClick={sendOtp} disabled={counter > 0}>
-                  Resend OTP {counter > 0 ? `(${counter}s)` : ''}
-                </Button>
-              </div>
-            </>
-          )}
-        </Card>
+          <Card
+            style={{
+              borderRadius: 12,
+              boxShadow: '0 8px 24px rgba(15,23,42,0.08)',
+              border: '1px solid #eef2ff',
+            }}
+            bodyStyle={{ padding: 24 }}
+          >
+            {step === 'phone' && (
+              <>
+                <Form layout="vertical" size="large" onFinish={sendOtp}>
+                  <Form.Item label="" required>
+                    <Title style={{ fontSize: 14 }} level={5}>start your
+                      hassle-free payroll management journey today!</Title>
+                    <p style={{ fontSize: 14 }} level={5}>Enter your mobile number to continue</p>
+                    <Input
+                      style={{ marginTop: 12 }}
+                      prefix={<PhoneOutlined />}
+                      placeholder="Enter 10-digit phone"
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      maxLength={10}
+                    />
+                  </Form.Item>
+                  <Form.Item>
+                    <Button type="primary" htmlType="submit" loading={sending} style={{ width: '100%', height: 40, fontWeight: 600 }}>
+                      Continue
+                    </Button>
+                  </Form.Item>
+                </Form>
+              </>
+            )}
+
+            {step === 'otp' && (
+              <>
+                <div style={{ marginBottom: 8, color: '#475467' }}>Enter the 6-digit OTP sent to +91-{phone}</div>
+                <Space size={10} onPaste={onPasteOtp}>
+                  {otp.map((v, i) => (
+                    <Input
+                      key={i}
+                      ref={(el) => (inputsRef.current[i] = el)}
+                      value={v}
+                      onChange={(e) => setOtpAt(i, e.target.value)}
+                      maxLength={1}
+                      style={{
+                        width: 48,
+                        height: 48,
+                        textAlign: 'center',
+                        borderRadius: 10,
+                        fontSize: 18,
+                        boxShadow: '0 2px 6px rgba(2,6,23,0.06)'
+                      }}
+                      inputMode="numeric"
+                    />
+                  ))}
+                </Space>
+                <div style={{ marginTop: 14 }}>
+                  <Button type="primary" icon={<SafetyCertificateOutlined />} loading={verifying} onClick={() => verify()} style={{ width: '100%', height: 40, fontWeight: 600 }}>
+                    Verify & Login
+                  </Button>
+                </div>
+                <div style={{ marginTop: 10, textAlign: 'center' }}>
+                  <Button type="link" icon={<ReloadOutlined />} onClick={sendOtp} disabled={counter > 0}>
+                    Resend OTP {counter > 0 ? `(${counter}s)` : ''}
+                  </Button>
+                </div>
+              </>
+            )}
+          </Card>
+          <div style={{ textAlign: 'center', marginTop: 14, color: '#98a2b3', fontSize: 12 }}>
+            By continuing you agree to our Terms & Privacy Policy
+          </div>
+        </div>
       </Content>
     </Layout>
   );
