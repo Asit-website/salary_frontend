@@ -1,9 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:4000';
-// const API_BASE_URL = 'http://15.206.144.225:4000'
-// const API_BASE_URL = '/api';
-// const API_BASE_URL = "https://backend.vetansutra.com";
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE_URL = isLocal ? 'http://localhost:4000' : 'https://backend.vetansutra.com';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -19,6 +17,18 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // Automatically add X-Org-Id if user is in context (crucial for superadmin/impersonation)
+  const userStr = sessionStorage.getItem('impersonate_user') || localStorage.getItem('user');
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      if (user?.orgAccountId) {
+        config.headers['X-Org-Id'] = user.orgAccountId;
+      }
+    } catch (_) { }
+  }
+
   if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
     if (config.headers) {
       delete config.headers['Content-Type'];

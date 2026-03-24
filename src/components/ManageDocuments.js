@@ -2,7 +2,7 @@ import React from 'react';
 import { Layout, Card, Typography, Form, Input, Button, Table, Space, message, Tag, Switch, Modal } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import Sidebar from './Sidebar';
-import api from '../api';
+import api, { API_BASE_URL } from '../api';
 import dayjs from 'dayjs';
 
 const { Header, Content } = Layout;
@@ -12,6 +12,7 @@ export default function ManageDocuments() {
   const [loading, setLoading] = React.useState(false);
   const [listLoading, setListLoading] = React.useState(false);
   const [types, setTypes] = React.useState([]);
+  const [recentDocs, setRecentDocs] = React.useState([]);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
   const [form] = Form.useForm();
@@ -28,7 +29,16 @@ export default function ManageDocuments() {
     }
   };
 
-  React.useEffect(() => { loadTypes(); }, []);
+  const loadRecentDocs = async () => {
+    try {
+      const res = await api.get('/admin/documents/recent');
+      if (res.data?.success) setRecentDocs(res.data.data || []); else setRecentDocs([]);
+    } catch (_) {
+      setRecentDocs([]);
+    }
+  };
+
+  React.useEffect(() => { loadTypes(); loadRecentDocs(); }, []);
 
   const openAdd = () => {
     setEditing(null);
@@ -72,6 +82,20 @@ export default function ManageDocuments() {
     }
   };
 
+  const handleDocStatus = async (docId, status) => {
+    try {
+      const res = await api.put(`/admin/documents/${docId}/status`, { status });
+      if (res.data?.success) {
+        message.success(`Document ${status.toLowerCase()} successfully`);
+        loadRecentDocs();
+      } else {
+        message.error(res.data?.message || 'Failed to update status');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to update status');
+    }
+  };
+
   const columns = [
     { title: 'Name', dataIndex: 'name', key: 'name' },
     { title: 'Key', dataIndex: 'key', key: 'key' },
@@ -83,6 +107,45 @@ export default function ManageDocuments() {
           <Button size="small" onClick={() => openEdit(r)}>Edit</Button>
         </Space>
       ) },
+  ];
+
+  const docStatusColor = (s) => {
+    const v = String(s || '').toUpperCase();
+    if (v === 'APPROVED') return 'green';
+    if (v === 'REJECTED') return 'red';
+    return 'gold';
+  };
+
+  const recentColumns = [
+    { title: 'Staff', dataIndex: 'staffName', key: 'staffName', render: (v, r) => v || r.phone || `Staff ${r.userId}` },
+    { title: 'Phone', dataIndex: 'phone', key: 'phone', render: (v) => v || '-' },
+    { title: 'Document', key: 'doc', render: (_, r) => r.documentTypeName || r.fileName || `Doc ${r.id}` },
+    {
+      title: 'File',
+      key: 'file',
+      render: (_, r) => r.fileUrl ? (
+        <a href={String(r.fileUrl).startsWith('http') ? r.fileUrl : `${API_BASE_URL}${r.fileUrl}`} target="_blank" rel="noreferrer">View</a>
+      ) : '-',
+    },
+    { title: 'Status', dataIndex: 'status', key: 'status', render: (s) => <Tag color={docStatusColor(s)}>{String(s || 'SUBMITTED').toUpperCase()}</Tag> },
+    { title: 'Updated', dataIndex: 'updatedAt', key: 'updatedAt', render: (d) => d ? dayjs(d).format('DD MMM YYYY hh:mm A') : '-' },
+    {
+      title: 'Action',
+      key: 'action',
+      render: (_, r) => {
+        const s = String(r.status || 'SUBMITTED').toUpperCase();
+        return (
+          <Space>
+            <Button size="small" type="primary" disabled={s === 'APPROVED'} onClick={() => handleDocStatus(r.id, 'APPROVED')}>
+              Approve
+            </Button>
+            <Button size="small" danger disabled={s === 'REJECTED'} onClick={() => handleDocStatus(r.id, 'REJECTED')}>
+              Reject
+            </Button>
+          </Space>
+        );
+      }
+    },
   ];
 
   return (
@@ -100,6 +163,17 @@ export default function ManageDocuments() {
               dataSource={(types || []).map((d) => ({ key: d.id, ...d }))}
               columns={columns}
               pagination={{ pageSize: 10 }}
+            />
+          </Card>
+
+          <Card title="Recent Staff Documents" style={{ marginTop: 16 }}>
+            <Table
+              size="small"
+              rowKey={(r) => r.id}
+              dataSource={recentDocs}
+              columns={recentColumns}
+              pagination={{ pageSize: 10 }}
+              locale={{ emptyText: 'No staff documents uploaded yet' }}
             />
           </Card>
 

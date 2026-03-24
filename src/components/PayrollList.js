@@ -29,7 +29,71 @@ import api, { API_BASE_URL } from '../api';
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 
-export default function PayrollList() {
+const categoryNames = {
+  'cl': 'Casual Leave',
+  'sl': 'Sick Leave',
+  'el': 'Earned Leave',
+  'ml': 'Maternity Leave',
+  'pt': 'Paternity Leave',
+  'unpaid': 'Unpaid Leave'
+};
+
+const getDaysInMonthFromMonthKey = (monthKey) => {
+  const [y, m] = String(monthKey || '').split('-').map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return 0;
+  return new Date(y, m, 0).getDate();
+};
+
+const normalizeAttendanceSummary = (summary, monthKey) => {
+  const s = (summary && typeof summary === 'object') ? summary : {};
+  const present = Number(s.present || 0);
+  const half = Number(s.half || 0);
+  const paidLeave = Number(s.paidLeave || 0);
+  const unpaidLeave = Number(s.unpaidLeave || 0);
+  const leave = Number(s.leave != null ? s.leave : (paidLeave + unpaidLeave));
+  const weeklyOff = Number(s.weeklyOff || 0);
+  const holidays = Number(s.holidays || 0);
+  const daysInMonth = getDaysInMonthFromMonthKey(monthKey);
+  const existingAbsent = Number(s.absent || 0);
+  const classifiedDays = present + half + leave + weeklyOff + holidays + existingAbsent;
+
+  const [yy, mm] = String(monthKey || '').split('-').map(Number);
+  const now = new Date();
+  const isCurrentMonth = Number.isFinite(yy) && Number.isFinite(mm)
+    && yy === now.getFullYear()
+    && mm === (now.getMonth() + 1);
+
+  // For current month projections, backend can store partial-month absence while still
+  // including future WO/Holidays. In that case, use existing classified total as reference.
+  const referenceDays = (isCurrentMonth && classifiedDays > 0 && classifiedDays < daysInMonth)
+    ? classifiedDays
+    : daysInMonth;
+
+  let absent = existingAbsent;
+  if (referenceDays > 0) {
+    absent = Math.max(0, referenceDays - (present + half + leave + weeklyOff + holidays));
+  }
+
+  const latePenaltyDays = Number(s.latePenaltyDays || 0);
+  const pUnits = present + (half * 0.5) + paidLeave + weeklyOff + holidays;
+  const payableDays = Math.max(0, pUnits - latePenaltyDays);
+
+  return {
+    ...s,
+    present,
+    half,
+    leave,
+    paidLeave,
+    unpaidLeave,
+    absent,
+    weeklyOff,
+    holidays,
+    payableDays,
+    latePenaltyDays
+  };
+};
+
+const PayrollList = () => {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -424,12 +488,19 @@ export default function PayrollList() {
 
     setBaseData({ earnings: bE, incentives: bI, deductions: bD });
 
-    const toArr = (obj) => Object.entries(obj || {}).map(([k, v]) => ({
-      name: k,
-      amount: Math.ceil(Number(v || 0))
-    }));
+    const toArr = (obj) => Object.entries(obj || {}).map(([k, v]) => {
+      let label = k;
+      if (k.startsWith('LEAVE_ENCASHMENT:')) {
+        const key = k.split(': ')[1]?.toLowerCase();
+        if (key && categoryNames[key]) label = `LEAVE_ENCASHMENT: ${categoryNames[key]}`;
+      }
+      return {
+        name: label,
+        amount: Math.ceil(Number(v || 0))
+      };
+    });
 
-    const att = row?.attendanceSummary || {};
+    const att = normalizeAttendanceSummary(row?.attendanceSummary || {}, cycle?.monthKey);
 
     editForm.setFieldsValue({
       status: row?.status || 'INCLUDED',
@@ -467,7 +538,7 @@ export default function PayrollList() {
       const incentives = toObj(vals.incentives);
       const deductions = toObj(vals.deductions);
 
-      const attendanceSummary = {
+      const attendanceSummary = normalizeAttendanceSummary({
         ...(editRow.attendanceSummary || {}),
         present: Number(vals.present || 0),
         half: Number(vals.half || 0),
@@ -477,9 +548,7 @@ export default function PayrollList() {
         absent: Number(vals.absent || 0),
         weeklyOff: Number(vals.weeklyOff || 0),
         holidays: Number(vals.holidays || 0),
-        // We do NOT recalculate ratio here for money, but maybe for record keeping?
-        // Let's keep the user's manual attendance as record.
-      };
+      }, cycle?.monthKey);
 
       // Totals Recalculation (Ratio = 1)
       const sum = (o) => Object.values(o || {}).reduce((a, b) => a + (Number(b) || 0), 0);
@@ -777,22 +846,32 @@ export default function PayrollList() {
               let ul = Number(all.unpaidLeave || 0);
               let wo = Number(all.weeklyOff || 0);
               let ho = Number(all.holidays || 0);
+              let totalLeave = Number(all.leave || 0);
+              const existingAbsent = Number(all.absent || 0);
 
               // Auto-sync Total Leave if Paid/Unpaid changed
               if (changed.paidLeave !== undefined || changed.unpaidLeave !== undefined) {
-                editForm.setFieldsValue({ leave: pl + ul });
+                totalLeave = pl + ul;
+                editForm.setFieldsValue({ leave: totalLeave });
               }
               // Auto-sync Paid/Unpaid if Total Leave changed (assume all paid by default)
               if (changed.leave !== undefined) {
-                pl = Number(all.leave || 0);
+                totalLeave = Number(all.leave || 0);
+                pl = totalLeave;
                 ul = 0;
                 editForm.setFieldsValue({ paidLeave: pl, unpaidLeave: ul });
               }
 
-              const totalLeave = Number(editForm.getFieldValue('leave') || 0);
+              const classifiedDays = p + h + totalLeave + wo + ho + existingAbsent;
+              const [yy, mm] = cycle.monthKey.split('-').map(Number);
+              const now = new Date();
+              const isCurrentMonth = yy === now.getFullYear() && mm === (now.getMonth() + 1);
+              const referenceDays = (isCurrentMonth && classifiedDays > 0 && classifiedDays < daysInMonth)
+                ? classifiedDays
+                : daysInMonth;
 
-              // Auto-calculate Absent
-              const absent = Math.max(0, daysInMonth - (p + h + totalLeave + wo + ho));
+              // Auto-calculate Absent using smart reference days.
+              const absent = Math.max(0, referenceDays - (p + h + totalLeave + wo + ho));
               editForm.setFieldsValue({ absent });
 
               // Calculate new ratio
@@ -837,6 +916,8 @@ export default function PayrollList() {
               <Col span={6}><Form.Item name="unpaidLeave" label="Unpaid Leave"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
               <Col span={6}><Form.Item name="weeklyOff" label="Weekly Off"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
               <Col span={6}><Form.Item name="holidays" label="Holidays"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Late Count"><InputNumber value={editRow?.attendanceSummary?.lateCount || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Late Penalty (Days)"><InputNumber value={editRow?.attendanceSummary?.latePenaltyDays || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
             </Row>
           </Card>
           <div style={{ marginBottom: 16 }}>
@@ -907,21 +988,72 @@ export default function PayrollList() {
         width={700}
       >
         {viewRow && (
+          (() => {
+            const normalizedAtt = normalizeAttendanceSummary(viewRow?.attendanceSummary || {}, cycle?.monthKey);
+            return (
           <Descriptions column={2} bordered size="small">
             <Descriptions.Item label="Gross">₹{Number(viewRow?.totals?.grossSalary || 0).toLocaleString('en-IN')}</Descriptions.Item>
             <Descriptions.Item label="Net">₹{Number(viewRow?.totals?.netSalary || 0).toLocaleString('en-IN')}</Descriptions.Item>
             <Descriptions.Item label="Earnings">₹{Number(viewRow?.totals?.totalEarnings || 0).toLocaleString('en-IN')}</Descriptions.Item>
             <Descriptions.Item label="Deductions">₹{Number(viewRow?.totals?.totalDeductions || 0).toLocaleString('en-IN')}</Descriptions.Item>
             <Descriptions.Item label="Ratio" span={2}>{Number(viewRow?.totals?.ratio ?? 1).toFixed(4)}</Descriptions.Item>
-            <Descriptions.Item label="Present">{viewRow?.attendanceSummary?.present || 0}</Descriptions.Item>
-            <Descriptions.Item label="Half">{viewRow?.attendanceSummary?.half || 0}</Descriptions.Item>
-            <Descriptions.Item label="Leave">{viewRow?.attendanceSummary?.leave || 0}</Descriptions.Item>
-            <Descriptions.Item label="Absent">{viewRow?.attendanceSummary?.absent || 0}</Descriptions.Item>
-            <Descriptions.Item label="Weekly Off">{viewRow?.attendanceSummary?.weeklyOff || 0}</Descriptions.Item>
-            <Descriptions.Item label="Holiday">{viewRow?.attendanceSummary?.holidays || 0}</Descriptions.Item>
+            <Descriptions.Item label="Present">{normalizedAtt.present || 0}</Descriptions.Item>
+            <Descriptions.Item label="Half">{normalizedAtt.half || 0}</Descriptions.Item>
+            <Descriptions.Item label="Paid Leave">{normalizedAtt.paidLeave || 0}</Descriptions.Item>
+            <Descriptions.Item label="Unpaid Leave">{normalizedAtt.unpaidLeave || 0}</Descriptions.Item>
+            <Descriptions.Item label="Total Leave">{normalizedAtt.leave || 0}</Descriptions.Item>
+            <Descriptions.Item label="Absent">{normalizedAtt.absent || 0}</Descriptions.Item>
+            <Descriptions.Item label="Weekly Off">{normalizedAtt.weeklyOff || 0}</Descriptions.Item>
+            <Descriptions.Item label="Holiday">{normalizedAtt.holidays || 0}</Descriptions.Item>
+            <Descriptions.Item label="Late Count">{normalizedAtt.lateCount || 0}</Descriptions.Item>
+            <Descriptions.Item label="Late Penalty">{normalizedAtt.latePenaltyDays || 0} days</Descriptions.Item>
+            <Descriptions.Item label="Payable Days" span={2}>
+              <Text strong style={{ color: '#52c41a', fontSize: '16px' }}>
+                {normalizedAtt.payableDays || 0} days
+              </Text>
+            </Descriptions.Item>
+            {/* Show Leave Encashment if present in earnings */}
+            {Object.entries(viewRow?.earnings || {}).some(([k]) => k.startsWith('LEAVE_ENCASHMENT:')) && (
+              <Descriptions.Item label="Leave Encashment" span={2}>
+                <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                  {Object.entries(viewRow?.earnings || {})
+                    .filter(([k]) => k.startsWith('LEAVE_ENCASHMENT:'))
+                    .map(([k, v]) => {
+                      const key = k.split(': ')[1]?.toLowerCase();
+                      const name = categoryNames[key] || k.split(': ')[1] || 'Encashment';
+                      return (
+                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                          <Text type="secondary">{name}:</Text>
+                          <Text strong>₹{Number(v || 0).toLocaleString('en-IN')}</Text>
+                        </div>
+                      );
+                    })}
+                </Space>
+              </Descriptions.Item>
+            )}
+            {(Number(viewRow?.attendanceSummary?.overtimeMinutes || 0) > 0 ||
+              Number(viewRow?.attendanceSummary?.overtimePay || viewRow?.earnings?.overtime_pay || 0) > 0) ? (
+              <>
+                <Descriptions.Item label="OT Time">
+                  {Number(viewRow?.attendanceSummary?.overtimeHours || 0).toFixed(2)}h
+                  {` (${Number(viewRow?.attendanceSummary?.overtimeMinutes || 0)}m)`}
+                </Descriptions.Item>
+                <Descriptions.Item label="OT Pay">
+                  ₹{Number(
+                    viewRow?.attendanceSummary?.overtimePay
+                    || viewRow?.earnings?.overtime_pay
+                    || 0
+                  ).toLocaleString('en-IN')}
+                </Descriptions.Item>
+              </>
+            ) : null}
           </Descriptions>
+            );
+          })()
         )}
       </Modal>
     </Layout>
   );
-}
+};
+
+export default PayrollList;

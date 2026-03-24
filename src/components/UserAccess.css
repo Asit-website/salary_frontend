@@ -1,0 +1,39 @@
+.ua-hero-card {
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #e8f0ff 0%, #f7faff 50%, #eefbf4 100%);
+  box-shadow: 0 8px 24px rgba(14, 30, 72, 0.08);
+}
+
+.ua-stat-card {
+  border-radius: 10px;
+  border: 1px solid #e6edf8;
+  background: #ffffffcc;
+}
+
+.ua-section-card {
+  border-radius: 12px;
+}
+
+.ua-table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ua-table .ant-table-thead > tr > th {
+  background: #f6f9ff;
+  font-weight: 600;
+}
+
+.ua-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1546a0;
+  font-weight: 600;
+}
+

@@ -14,7 +14,8 @@ import {
   Select,
   AutoComplete,
   Menu,
-  Radio
+  Radio,
+  Switch
 } from 'antd';
 import {
   SettingOutlined,
@@ -75,6 +76,7 @@ const Tile = ({ title, items }) => (
 
 export default function Settings() {
   const navigate = useNavigate();
+  const DEFAULT_BRAND_TEXT = 'Your Company Name';
   const [search, setSearch] = useState('');
   const [brandOpen, setBrandOpen] = useState(false);
   const [brandSaving, setBrandSaving] = useState(false);
@@ -98,6 +100,7 @@ export default function Settings() {
     companyPan: '',
     bankAccountNumber: '',
     ifsc: '',
+    docs: {},
   });
   const [bizOpen, setBizOpen] = useState(false);
   const [bizSaving, setBizSaving] = useState(false);
@@ -123,6 +126,19 @@ export default function Settings() {
   const [accEmailOpen, setAccEmailOpen] = useState(false);
   const [accEmailSaving, setAccEmailSaving] = useState(false);
   const [accEmail, setAccEmail] = useState('');
+  const [smsOpen, setSmsOpen] = useState(false);
+  const [smsSaving, setSmsSaving] = useState(false);
+  const [smsSettings, setSmsSettings] = useState({
+    orderCreation: true,
+    attendanceMarking: true,
+    payslipGeneration: true,
+    missingAttendance: true
+  });
+  const normalizeBrand = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return DEFAULT_BRAND_TEXT;
+    return raw;
+  };
 
   // Load initial data
   React.useEffect(() => {
@@ -130,7 +146,7 @@ export default function Settings() {
       try {
         const resp = await api.get('/admin/settings/brand');
         const name = resp?.data?.brand?.displayName || '';
-        setBrandName(String(name));
+        setBrandName(normalizeBrand(name));
       } catch (_) { }
       try {
         const r2 = await api.get('/me/profile');
@@ -149,6 +165,17 @@ export default function Settings() {
         setLogoUrl(info.logoUrl || '');
         setSidebarHeaderType(info.sidebarHeaderType || 'name');
       } catch (_) { }
+      try {
+        const r4 = await api.get('/admin/settings/org');
+        if (r4.data?.config?.smsNotificationSettings) {
+          setSmsSettings({
+            orderCreation: r4.data.config.smsNotificationSettings.orderCreation !== false,
+            attendanceMarking: r4.data.config.smsNotificationSettings.attendanceMarking !== false,
+            payslipGeneration: r4.data.config.smsNotificationSettings.payslipGeneration !== false,
+            missingAttendance: r4.data.config.smsNotificationSettings.missingAttendance !== false,
+          });
+        }
+      } catch (_) { }
     };
     loadData();
   }, []);
@@ -157,7 +184,7 @@ export default function Settings() {
     try {
       const resp = await api.get('/admin/settings/brand');
       const name = resp?.data?.brand?.displayName || '';
-      setBrandName(String(name));
+      setBrandName(normalizeBrand(name));
       setBrandOpen(true);
     } catch (e) {
       message.error('Failed to load current business name');
@@ -416,9 +443,10 @@ export default function Settings() {
         companyPan: d.companyPan || '',
         bankAccountNumber: d.bankAccountNumber || '',
         ifsc: d.ifsc || '',
+        docs: d.docs || {},
       });
     } catch (_) {
-      setKyb({ businessType: '', gstin: '', businessName: '', businessAddress: '', cin: '', directorName: '', companyPan: '', bankAccountNumber: '', ifsc: '' });
+      setKyb({ businessType: '', gstin: '', businessName: '', businessAddress: '', cin: '', directorName: '', companyPan: '', bankAccountNumber: '', ifsc: '', docs: {} });
     } finally {
       setKybOpen(true);
     }
@@ -430,7 +458,7 @@ export default function Settings() {
       const payload = { ...kyb };
       const resp = await api.put('/admin/settings/kyb', payload);
       if (resp?.data?.success) {
-        message.success('KYB details saved');
+        message.success('KYC details saved');
         setKybOpen(false);
       } else {
         message.error(resp?.data?.message || 'Failed to save');
@@ -505,8 +533,8 @@ export default function Settings() {
         message.success('Business name updated');
         try { window.dispatchEvent(new CustomEvent('brand-updated', { detail: { displayName: brandName.trim() } })); } catch (_) { }
         setBrandOpen(false);
-        // Clear the input field
-        setBrandName('');
+        // Do not clear the brand name, as it is used for the display in the tile
+        setBrandName(normalizeBrand(brandName.trim()));
       } else {
         message.error(resp?.data?.message || 'Failed to save');
       }
@@ -514,6 +542,47 @@ export default function Settings() {
       message.error(e?.response?.data?.message || 'Failed to save');
     } finally {
       setBrandSaving(false);
+    }
+  };
+
+  const openSmsModal = async () => {
+    try {
+      const resp = await api.get('/admin/settings/org');
+      if (resp.data?.config?.smsNotificationSettings) {
+        setSmsSettings({
+          orderCreation: resp.data.config.smsNotificationSettings.orderCreation !== false,
+          attendanceMarking: resp.data.config.smsNotificationSettings.attendanceMarking !== false,
+          payslipGeneration: resp.data.config.smsNotificationSettings.payslipGeneration !== false,
+          missingAttendance: resp.data.config.smsNotificationSettings.missingAttendance !== false,
+        });
+      }
+    } catch (_) { }
+    setSmsOpen(true);
+  };
+
+  const saveSmsSettings = async () => {
+    try {
+      setSmsSaving(true);
+      // We need to preserve other org_config settings like industryType and features
+      const current = await api.get('/admin/settings/org');
+      const config = current.data?.config || {};
+
+      const payload = {
+        ...config,
+        smsNotificationSettings: smsSettings
+      };
+
+      const resp = await api.put('/admin/settings/org', payload);
+      if (resp?.data?.success) {
+        message.success('SMS notification settings updated');
+        setSmsOpen(false);
+      } else {
+        message.error(resp?.data?.message || 'Failed to save');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to save');
+    } finally {
+      setSmsSaving(false);
     }
   };
   const tiles = useMemo(() => [
@@ -524,7 +593,7 @@ export default function Settings() {
         { key: 'att-tpl', icon: <ProfileOutlined />, label: 'Attendance Templates', desc: 'Set standard baselines for attendance tracking', onClick: () => navigate('/settings/attendance-templates') },
         { key: 'att-geo', icon: <EnvironmentOutlined />, label: 'Attendance Geofence Settings', desc: 'Set up virtual boundaries for attendance tracking', onClick: () => navigate('/settings/geofence') },
         { key: 'shift', icon: <ScheduleOutlined />, label: 'Shift Settings', desc: 'Create and manage shifts for employees', onClick: () => navigate('/settings/shifts') },
-        { key: 'rules', icon: <ThunderboltOutlined />, label: 'Automation Rules', desc: 'Track late entry, breaks, early out, and leave rules' },
+        { key: 'rules', icon: <ThunderboltOutlined />, label: 'Automation Rules', desc: 'Track late entry, breaks, early out, and leave rules', onClick: () => navigate('/settings/automation-rules') },
       ],
     },
     {
@@ -543,7 +612,7 @@ export default function Settings() {
       items: [
         { key: 'holiday', icon: <CalendarOutlined />, label: 'Holiday', desc: 'Configure company holidays and templates', onClick: () => navigate('/settings/holidays') },
         { key: 'leave-policy', icon: <FileTextOutlined />, label: 'Leave Policy', desc: 'Define leave categories and rules', onClick: () => navigate('/settings/leave-templates') },
-        { key: 'departments', icon: <ApartmentOutlined />, label: 'Manage Business Functions', desc: 'Add or update departments and roles', onClick: () => navigate('/settings/business-functions') },
+        { key: 'departments', icon: <ApartmentOutlined />, label: 'Manage Departments', desc: 'Add or update departments and roles', onClick: () => navigate('/settings/business-functions') },
         { key: 'weekly', icon: <BorderOuterOutlined />, label: 'Weekly Holidays', desc: 'Configure weekly holidays', onClick: () => navigate('/settings/weekly-off') },
         { key: 'letter-mgmt', icon: <FileTextOutlined />, label: 'Letter Management', desc: 'Manage and issue organization letters', onClick: () => navigate('/settings/letters') },
       ],
@@ -552,9 +621,9 @@ export default function Settings() {
       key: 'payments',
       title: 'Payment Settings',
       items: [
-        { key: 'bank-statement-name', icon: <BankOutlined />, label: 'Business Name in Bank Statement', desc: 'Shown on payouts and statements', onClick: openBrandModal },
+        { key: 'bank-statement-name', icon: <BankOutlined />, label: 'Business Name in Bank Statement', desc: normalizeBrand(brandName), onClick: openBrandModal },
         { key: 'bank-account', icon: <BankOutlined />, label: 'Business Bank Account', desc: bankMasked ? `XXXX XXXX XXXX ${String(bankMasked).slice(-4)}` : 'Account used for settlements', onClick: openBankModal },
-        { key: 'kyc', icon: <SafetyCertificateOutlined />, label: 'KYB', desc: 'Upload and verify business documents', onClick: openKybModal },
+        { key: 'kyc', icon: <SafetyCertificateOutlined />, label: 'KYC', desc: 'Upload and verify business documents', onClick: openKybModal },
         // { key: 'payment-methods', icon: <AppstoreOutlined />, label: 'Payment Methods', desc: 'Instant payment through virtual account' },
       ],
     },
@@ -562,7 +631,7 @@ export default function Settings() {
       key: 'business-info',
       title: 'Business Info',
       items: [
-        { key: 'biz-name', icon: <ProfileOutlined />, label: 'Business Name', desc: brandName ? brandName : '—', onClick: openBrandModal },
+        { key: 'biz-name', icon: <ProfileOutlined />, label: 'Business Name', desc: normalizeBrand(brandName), onClick: openBrandModal },
         { key: 'biz-state', icon: <EnvironmentOutlined />, label: 'Business State & City', desc: [bizState, bizCity].filter(Boolean).join(', ') || '—', onClick: openBizModal },
         { key: 'sidebar-header', icon: <LayoutOutlined />, label: 'Sidebar Header Display', desc: sidebarHeaderType === 'logo' ? 'Business Logo' : 'Business Name', onClick: () => setSidebarHeaderOpen(true) },
         { key: 'biz-address', icon: <HomeOutlined />, label: 'Business Address', desc: [addr1, addr2].filter(Boolean).join(', ') || '—', onClick: () => setAddrOpen(true) },
@@ -576,6 +645,7 @@ export default function Settings() {
         { key: 'acc-name', icon: <ProfileOutlined />, label: 'Name', desc: accName || '—', onClick: openAccNameModal },
         { key: 'acc-phone', icon: <MobileOutlined />, label: 'Phone Number', desc: accPhone || '—', onClick: openAccPhoneModal },
         { key: 'acc-email', icon: <ProfileOutlined />, label: 'Email Address', desc: accEmail || '—', onClick: openAccEmailModal },
+        { key: 'sms-settings', icon: <NotificationOutlined />, label: 'SMS Notifications', desc: 'Enable/Disable SMS alerts', onClick: openSmsModal },
         // { key: 'acc-subscriptions', icon: <AppstoreOutlined />, label: 'Subscriptions', desc: '—' },
         // { key: 'acc-businesses', icon: <ProfileOutlined />, label: 'Add/Delete Business', desc: '1 Active Business' },
       ],
@@ -592,15 +662,23 @@ export default function Settings() {
       title: 'Users & Access',
       items: [
         { key: 'broadcast', icon: <NotificationOutlined />, label: 'Broadcast Messages', desc: 'Company-wide communication for employees' },
-        { key: 'manage-users', icon: <TeamOutlined />, label: 'Manage Users', desc: 'Configure user profiles and access' },
+        { key: 'manage-users', icon: <TeamOutlined />, label: 'Manage Users', desc: 'Assign badges and sidebar tab access', onClick: () => navigate('/settings/user-access') },
         { key: 'roles', icon: <SafetyCertificateOutlined />, label: 'Roles & Permissions', desc: 'Create roles and assign permissions', onClick: () => navigate('/roles-permissions') },
+      ],
+    },
+    {
+      key: 'sales-settings',
+      title: 'Sales Settings',
+      items: [
+        { key: 'order-products', icon: <AppstoreOutlined />, label: 'Order Product Settings', desc: 'Create products and assign to staff for order form', onClick: () => navigate('/settings/order-products') },
+        { key: 'sales-incentives', icon: <ThunderboltOutlined />, label: 'Sales Incentive Rules', desc: 'Define and assign sales incentive rules for staff', onClick: () => navigate('/settings/sales-incentives') },
       ],
     },
     {
       key: 'devices',
       title: 'Device Management',
       items: [
-        { key: 'device-mgmt', icon: <MobileOutlined />, label: 'Device Management', desc: 'Monitor and control devices used by employees' },
+        { key: 'device-mgmt', icon: <MobileOutlined />, label: 'Device Management', desc: 'Monitor and control devices used by employees', onClick: () => navigate('/settings/device-management') },
       ],
     },
     {
@@ -610,7 +688,7 @@ export default function Settings() {
         { key: 'manage-integrations', icon: <ApiOutlined />, label: 'Manage Integrations', desc: 'Connect to third-party applications and services' },
       ],
     },
-  ], [brandName, bizState, bizCity, addr1, logoUrl, accName, accPhone, bankMasked]);
+  ], [brandName, bizState, bizCity, addr1, addr2, addrPin, logoUrl, accName, accPhone, accEmail, bankMasked, sidebarHeaderType]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -984,7 +1062,12 @@ export default function Settings() {
               <div>
                 <div style={{ fontWeight: 600 }}>{d.label}</div>
                 {kyb?.docs?.[d.key] ? (
-                  <a href={kyb.docs[d.key]} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+                  <a
+                    href={kyb.docs[d.key].startsWith('/') ? `${API_BASE_URL}${kyb.docs[d.key]}` : kyb.docs[d.key]}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: 12 }}
+                  >
                     View current file
                   </a>
                 ) : (
@@ -1016,12 +1099,75 @@ export default function Settings() {
                 } catch (e) {
                   message.error(e?.response?.data?.message || 'Upload failed');
                 }
-              }}>Upload</Button>
+              }}>{kyb?.docs?.[d.key] ? 'Replace' : 'Upload'}</Button>
             </Card>
           ))}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button onClick={() => setKybOpen(false)}>Cancel</Button>
             <Button type="primary" loading={kybSaving} onClick={saveKyb}>Save</Button>
+          </div>
+        </Space>
+      </Modal>
+
+      <Modal
+        title="SMS Notification Settings"
+        open={smsOpen}
+        onCancel={() => setSmsOpen(false)}
+        footer={null}
+        destroyOnClose
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+          <div style={{ color: '#6b7280', fontSize: 13, marginBottom: 8 }}>
+            Choose which activities should trigger an SMS notification to the staff or client.
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontWeight: 500 }}>Order Creation</div>
+              <div style={{ fontSize: 12, color: '#8c8c8c' }}>Send SMS when a new sales order is created</div>
+            </div>
+            <Switch
+              checked={smsSettings.orderCreation}
+              onChange={(val) => setSmsSettings(s => ({ ...s, orderCreation: val }))}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontWeight: 500 }}>Attendance Marking</div>
+              <div style={{ fontSize: 12, color: '#8c8c8c' }}>Send SMS when attendance is marked (present/absent)</div>
+            </div>
+            <Switch
+              checked={smsSettings.attendanceMarking}
+              onChange={(val) => setSmsSettings(s => ({ ...s, attendanceMarking: val }))}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontWeight: 500 }}>Payslip Generation</div>
+              <div style={{ fontSize: 12, color: '#8c8c8c' }}>Send SMS when a payslip is generated for staff</div>
+            </div>
+            <Switch
+              checked={smsSettings.payslipGeneration}
+              onChange={(val) => setSmsSettings(s => ({ ...s, payslipGeneration: val }))}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontWeight: 500 }}>Missing Attendance Reminder</div>
+              <div style={{ fontSize: 12, color: '#8c8c8c' }}>Send daily reminders for missing attendance</div>
+            </div>
+            <Switch
+              checked={smsSettings.missingAttendance}
+              onChange={(val) => setSmsSettings(s => ({ ...s, missingAttendance: val }))}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+            <Button onClick={() => setSmsOpen(false)}>Cancel</Button>
+            <Button type="primary" loading={smsSaving} onClick={saveSmsSettings}>Save Settings</Button>
           </div>
         </Space>
       </Modal>

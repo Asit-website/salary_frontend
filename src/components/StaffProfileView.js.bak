@@ -1,19 +1,14 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
   Layout, Card, Button, Typography, Space, Menu, Dropdown, Tag, Row, Col, Modal, Form,
   Input, DatePicker, Select, Switch, message, Table, Radio, TimePicker, Collapse,
-  InputNumber, Divider, Tabs, Upload, Popconfirm, Tooltip, Empty, Statistic
+  InputNumber, Divider, Tabs, Upload, Popconfirm, Tooltip, Empty
 } from 'antd';
-import {
-  ArrowLeftOutlined, MoreOutlined, UserOutlined, FileTextOutlined, CalendarOutlined, DollarOutlined,
-  FileProtectOutlined, InboxOutlined, DownloadOutlined, PlusOutlined, MinusCircleOutlined, EditOutlined,
-  SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ExclamationCircleOutlined,
-  CoffeeOutlined, ScheduleOutlined
-} from '@ant-design/icons';
+import { ArrowLeftOutlined, MoreOutlined, UserOutlined, FileTextOutlined, CalendarOutlined, DollarOutlined, FileProtectOutlined, InboxOutlined, DownloadOutlined, PlusOutlined, MinusCircleOutlined, EditOutlined, SyncOutlined } from '@ant-design/icons';
 import jsPDF from 'jspdf';
 import { useNavigate, useParams } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import api, { API_BASE_URL } from '../api';
+import api from '../api';
 import dayjs from 'dayjs';
 
 const { Header, Content } = Layout;
@@ -42,7 +37,6 @@ export default function StaffProfileView() {
   const [attMonth, setAttMonth] = useState(dayjs());
   const [attLoading, setAttLoading] = useState(false);
   const [attRows, setAttRows] = useState([]);
-  const [attStats, setAttStats] = useState({});
   const [markOpen, setMarkOpen] = useState(false);
   const [markForm] = Form.useForm();
   const [salaryEditOpen, setSalaryEditOpen] = useState(false);
@@ -98,17 +92,6 @@ export default function StaffProfileView() {
     return Math.max(1, diff + 1);
   }, [staffStartMonth]);
 
-  const formatDateShort = (value) => {
-    if (!value) return '-';
-    const d = dayjs(value);
-    return d.isValid() ? d.format('DD-MM-YY') : '-';
-  };
-
-  const currency = (amt) => {
-    const n = Number(amt) || 0;
-    return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  };
-
   const normalizeDeductions = (deductions) => {
     if (!deductions || typeof deductions !== 'object') return {};
     const d = { ...deductions };
@@ -138,7 +121,7 @@ export default function StaffProfileView() {
         const keys = Object.keys(v);
         // simple heuristic: numeric keys or small object with index-like keys
         if (keys.length && keys.every(k => !isNaN(Number(k)))) {
-          return keys.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
+          return keys.sort((a,b)=>Number(a)-Number(b)).map(k => v[k]);
         }
         return [];
       } catch { return [] }
@@ -572,20 +555,27 @@ export default function StaffProfileView() {
   const fetchMonthAttendance = async () => {
     try {
       setAttLoading(true);
-      const res = await api.get(`/admin/staff/${id}/attendance-overview`, {
-        params: { month: attMonth.format('YYYY-MM') }
-      });
-      if (res.data?.success) {
-        setAttRows(res.data.dailyData || []);
-        setAttStats(res.data.stats || {});
-      } else {
-        setAttRows([]);
-        setAttStats({});
+      const start = attMonth.startOf('month');
+      const end = attMonth.endOf('month');
+      const days = end.date();
+      const requests = [];
+      for (let d = 1; d <= days; d++) {
+        const date = start.date(d).format('YYYY-MM-DD');
+        requests.push(api.get('/admin/attendance', { params: { date, staffId: id } }));
       }
+      const results = await Promise.allSettled(requests);
+      const merged = [];
+      results.forEach((r) => {
+        if (r.status === 'fulfilled' && r.value?.data?.success) {
+          const arr = Array.isArray(r.value.data.data) ? r.value.data.data : [];
+          if (arr.length) merged.push(...arr);
+        }
+      });
+      // Ensure we still show a row for days with no record? Keeping only existing entries for now
+      setAttRows(merged);
     } catch (e) {
       message.error('Failed to load attendance');
       setAttRows([]);
-      setAttStats({});
     } finally {
       setAttLoading(false);
     }
@@ -657,7 +647,7 @@ export default function StaffProfileView() {
   const getFullImageUrl = (url) => {
     if (!url) return '';
     if (url.startsWith('http')) return url;
-    return `${API_BASE_URL}${url}`;
+    return `http://localhost:4000${url}`;
   };
 
   const handlePhotoUpload = async (info) => {
@@ -818,7 +808,7 @@ export default function StaffProfileView() {
                     <Col span={12}><Text type="secondary">Designation</Text><div>{staff?.profile?.designation || '-'}</div></Col>
                     <Col span={12}><Text type="secondary">Staff Type</Text><div>{staff?.profile?.staffType || 'Regular'}</div></Col>
                     <Col span={12}><Text type="secondary">Contact Number</Text><div>{staff?.profile?.phone || '-'}</div></Col>
-                    <Col span={12}><Text type="secondary">Date of Joining</Text><div>{formatDateShort(staff?.profile?.dateOfJoining)}</div></Col>
+                    <Col span={12}><Text type="secondary">Date of Joining</Text><div>{staff?.profile?.dateOfJoining || '-'}</div></Col>
                     <Col span={12}><Text type="secondary">Department</Text><div>{staff?.profile?.department || '-'}</div></Col>
                   </Row>
                 </Card>
@@ -1208,52 +1198,6 @@ export default function StaffProfileView() {
               <Col span={8} style={{ textAlign: 'right' }}><strong>{currency(net)}</strong></Col>
             </Row>
           </Card>
-          <Modal title="Edit Salary Structure" open={salaryEditOpen} onCancel={() => setSalaryEditOpen(false)} onOk={saveSalary} okText="Save" width={700}>
-            <Form form={salaryForm} layout="vertical">
-              <Row gutter={12}>
-                <Col span={12}>
-                  <Card size="small" title="Earnings">
-                    <Form.List name="earnings">
-                      {(fields, { add, remove }) => (
-                        <>
-                          {fields.map(({ key, name, ...rest }) => (
-                            <Row key={key} gutter={8} style={{ marginBottom: 8 }} align="middle">
-                              <Col span={13}><Form.Item {...rest} name={[name, 'name']}><Input placeholder="Name" /></Form.Item></Col>
-                              <Col span={9}><Form.Item {...rest} name={[name, 'amount']}><InputNumber min={0} step={100} style={{ width: '100%' }} /></Form.Item></Col>
-                              <Col span={2} style={{ textAlign: 'right' }}>
-                                <Button type="text" danger icon={<MinusCircleOutlined />} onClick={() => remove(name)} />
-                              </Col>
-                            </Row>
-                          ))}
-                          <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ name: '', amount: 0 })} block>Add More</Button>
-                        </>
-                      )}
-                    </Form.List>
-                  </Card>
-                </Col>
-                <Col span={12}>
-                  <Card size="small" title="Deductions">
-                    <Form.List name="deductions">
-                      {(fields, { add, remove }) => (
-                        <>
-                          {fields.map(({ key, name, ...rest }) => (
-                            <Row key={key} gutter={8} style={{ marginBottom: 8 }} align="middle">
-                              <Col span={13}><Form.Item {...rest} name={[name, 'name']}><Input placeholder="Name" /></Form.Item></Col>
-                              <Col span={9}><Form.Item {...rest} name={[name, 'amount']}><InputNumber min={0} step={100} style={{ width: '100%' }} /></Form.Item></Col>
-                              <Col span={2} style={{ textAlign: 'right' }}>
-                                <Button type="text" danger icon={<MinusCircleOutlined />} onClick={() => remove(name)} />
-                              </Col>
-                            </Row>
-                          ))}
-                          <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ name: '', amount: 0 })} block>Add More</Button>
-                        </>
-                      )}
-                    </Form.List>
-                  </Card>
-                </Col>
-              </Row>
-            </Form>
-          </Modal>
         </Card>
       );
     }
@@ -1661,154 +1605,35 @@ export default function StaffProfileView() {
       );
     }
     if (activeKey === 'attendance') {
-      const getStatusColor = (status) => {
-        switch (status) {
-          case 'present': return 'success';
-          case 'absent': return 'error';
-          case 'half_day': return 'warning';
-          case 'leave': return 'processing';
-          case 'overtime': return 'purple';
-          case 'late': return 'orange';
-          case 'weekly_off':
-          case 'holiday': return 'default';
-          default: return 'default';
-        }
-      };
-
-      const getStatusIcon = (status) => {
-        switch (status) {
-          case 'present': return <CheckCircleOutlined />;
-          case 'absent': return <CloseCircleOutlined />;
-          case 'half_day': return <ClockCircleOutlined />;
-          case 'leave': return <CoffeeOutlined />;
-          case 'overtime': return <SyncOutlined />;
-          case 'late': return <ExclamationCircleOutlined />;
-          case 'weekly_off': return <ScheduleOutlined />;
-          case 'holiday': return <CalendarOutlined />;
-          default: return null;
-        }
-      };
-
       const columns = [
+        { title: 'Date', dataIndex: 'date', key: 'date', render: (d) => dayjs(d).format('DD MMM YYYY') },
+        { title: 'Staff Name', dataIndex: ['user', 'name'], key: 'name', render: (t) => t || staff?.profile?.name || '-' },
+        { title: 'Check In', dataIndex: 'checkIn', key: 'checkIn', render: (t) => t || '-' },
+        { title: 'Check Out', dataIndex: 'checkOut', key: 'checkOut', render: (t) => t || '-' },
         {
-          title: 'Date',
-          dataIndex: 'date',
-          key: 'date',
-          render: (d, r) => (
-            <Space direction="vertical" size={0}>
-              <Text strong>{dayjs(d).format('DD MMM')}</Text>
-              <Text type="secondary" size="small">{r.day}</Text>
-            </Space>
-          )
+          title: 'Total Hours', key: 'hrs', render: (_, r) => {
+            if (r.checkIn && r.checkOut) {
+              const start = dayjs(r.checkIn, r.checkIn.length > 5 ? 'HH:mm:ss' : 'HH:mm');
+              const end = dayjs(r.checkOut, r.checkOut.length > 5 ? 'HH:mm:ss' : 'HH:mm');
+              const h = end.diff(start, 'minute') / 60;
+              return `${h.toFixed(2)}h`;
+            }
+            return '-';
+          }
         },
-        {
-          title: 'Status',
-          dataIndex: 'status',
-          key: 'status',
-          render: (s, r) => (
-            <Space>
-              <Tag icon={getStatusIcon(s)} color={getStatusColor(s)}>
-                {(s || '').replace('_', ' ').toUpperCase()}
-              </Tag>
-              {r.isLate && <Tag color="orange" icon={<ClockCircleOutlined />}>LATE</Tag>}
-            </Space>
-          )
-        },
-        {
-          title: 'Check In',
-          key: 'checkIn',
-          render: (_, r) => (
-            <Space size="small">
-              <Text>{r.checkIn || '--:--'}</Text>
-              {r.source === 'biometric' && <Tooltip title="Biometric Punch"><SyncOutlined style={{ fontSize: 10, color: '#1890ff' }} /></Tooltip>}
-            </Space>
-          )
-        },
-        {
-          title: 'Break',
-          key: 'break',
-          render: (_, r) => (
-            <Text>{r.breakMinutes > 0 ? `${Math.floor(r.breakMinutes / 60)}h ${r.breakMinutes % 60}m` : '-'}</Text>
-          )
-        },
-        {
-          title: 'Work / OT',
-          key: 'duration',
-          render: (_, r) => (
-            <Space direction="vertical" size={0}>
-              {r.totalDurationMinutes > 0 ? (
-                <Text>{Math.floor(r.totalDurationMinutes / 60)}h {r.totalDurationMinutes % 60}m</Text>
-              ) : (
-                r.workDuration > 0 ? (
-                  <Text>{Math.floor(r.workDuration / 60)}h {r.workDuration % 60}m</Text>
-                ) : (
-                  <Text type="secondary">-</Text>
-                )
-              )}
-              {r.overtimeMinutes > 0 && <Text type="success" size="small">+{r.overtimeMinutes}m OT</Text>}
-            </Space>
-          )
-        },
+        { title: 'Status', dataIndex: 'status', key: 'status', render: (s) => <Tag color={s === 'present' ? 'green' : s === 'leave' ? 'blue' : s === 'half_day' ? 'orange' : 'red'}>{(s || '').replace('_', ' ').toUpperCase()}</Tag> },
       ];
 
       return (
-        <Card
-          title={<Space><CalendarOutlined /> Attendance Overview</Space>}
-          extra={
-            <Space>
-              <DatePicker picker="month" value={attMonth} onChange={(m) => setAttMonth(m)} allowClear={false} />
-              <Button icon={<DownloadOutlined />} onClick={exportMonth}>Export</Button>
-            </Space>
-          }
-        >
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-            <Col xs={12} sm={8} md={4}>
-              <Card size="small" className="stat-card">
-                <Statistic title="Present" value={attStats.present || 0} valueStyle={{ color: '#3f8600' }} prefix={<CheckCircleOutlined />} />
-              </Card>
-            </Col>
-            <Col xs={12} sm={8} md={4}>
-              <Card size="small" className="stat-card">
-                <Statistic title="Absent" value={attStats.absent || 0} valueStyle={{ color: '#cf1322' }} prefix={<CloseCircleOutlined />} />
-              </Card>
-            </Col>
-            <Col xs={12} sm={8} md={4}>
-              <Card size="small" className="stat-card">
-                <Statistic title="Late" value={attStats.late || 0} valueStyle={{ color: '#d46b08' }} prefix={<ClockCircleOutlined />} />
-              </Card>
-            </Col>
-            <Col xs={12} sm={8} md={4}>
-              <Card size="small" className="stat-card">
-                <Statistic title="OT Days" value={attStats.overtime || 0} valueStyle={{ color: '#722ed1' }} prefix={<SyncOutlined />} />
-              </Card>
-            </Col>
-            <Col xs={12} sm={8} md={4}>
-              <Card size="small" className="stat-card">
-                <Statistic title="Leave" value={attStats.leave || 0} valueStyle={{ color: '#1890ff' }} prefix={<CoffeeOutlined />} />
-              </Card>
-            </Col>
-            <Col xs={12} sm={8} md={4}>
-              <Card size="small" className="stat-card">
-                <Statistic
-                  title={<Tooltip title="Deduction based on company rules">Penalty</Tooltip>}
-                  value={attStats.latePenaltyDays || 0}
-                  valueStyle={{ color: '#cf1322' }}
-                  prefix={<MinusCircleOutlined />}
-                  suffix="Days"
-                />
-              </Card>
-            </Col>
-          </Row>
+        <Card title="Attendance" extra={
 
-          <Table
-            rowKey="date"
-            columns={columns}
-            dataSource={attRows}
-            loading={attLoading}
-            pagination={{ pageSize: 31, hideOnSinglePage: true }}
-            size="middle"
-            className="attendance-table"
-          />
+          <Space>
+            <DatePicker picker="month" value={attMonth} onChange={(m) => setAttMonth(m)} />
+            <Button icon={<DownloadOutlined />} onClick={exportMonth}>Export</Button>
+            <Button type="primary" onClick={openMark}>Mark Attendance</Button>
+          </Space>
+        }>
+          <Table rowKey={(r) => `${r.date}-${r.id || Math.random()}`} columns={columns} dataSource={attRows} loading={attLoading} pagination={{ pageSize: 10 }} />
 
           <Modal title="Mark Attendance" open={markOpen} onCancel={() => setMarkOpen(false)} onOk={saveMark} okText="Save">
             <Form form={markForm} layout="vertical">
@@ -1833,155 +1658,3 @@ export default function StaffProfileView() {
           </Modal>
         </Card>
       );
-    }
-    if (activeKey === 'documents') {
-      const columns = [
-        { title: 'Title', dataIndex: 'fileName', key: 'fileName', render: (t) => t || '-' },
-        {
-          title: 'Type', dataIndex: 'docType', key: 'docType', render: (_t, r) => {
-            const src = (r.fileName || r.fileUrl || '').toString();
-            const dot = src.lastIndexOf('.');
-            const ext = dot >= 0 ? src.substring(dot + 1).toLowerCase() : '';
-            const map = { jpg: 'JPEG', jpeg: 'JPEG', png: 'PNG', pdf: 'PDF', webp: 'WEBP' };
-            return map[ext] || (ext ? ext.toUpperCase() : '-');
-          }
-        },
-        {
-          title: 'File', dataIndex: 'fileUrl', key: 'fileUrl', render: (u) => {
-            if (!u) return '-';
-            const href = `${api.defaults.baseURL}${String(u)}`;
-            return <a href={href} target="_blank" rel="noreferrer">View</a>;
-          }
-        },
-        { title: 'Status', dataIndex: 'status', key: 'status', render: (s) => <Tag>{String(s || 'SUBMITTED')}</Tag> },
-        { title: 'Expires On', dataIndex: 'expiresAt', key: 'expiresAt', render: (d) => d ? dayjs(d).format('DD MMM YYYY') : '-' },
-        {
-          title: 'Actions', key: 'actions', render: (_, r) => {
-            const fileHref = r.fileUrl ? `${api.defaults.baseURL}${String(r.fileUrl)}` : null;
-            const items = [
-              fileHref ? { key: 'view', label: <a href={fileHref} target="_blank" rel="noreferrer">View</a> } : null,
-              { key: 'edit', label: <span onClick={() => { setEditingDoc(r); docForm.resetFields(); docForm.setFieldsValue({ title: r.fileName || '', docType: r.docType || r.documentTypeId || undefined, expiresAt: r.expiresAt ? dayjs(r.expiresAt) : null, notes: r.notes || '' }); setDocFile(null); setDocOpen(true); }}>Edit</span> },
-              {
-                key: 'delete', label: (
-                  <Popconfirm title="Delete document?" onConfirm={async () => {
-                    try { await api.delete(`/admin/documents/${r.id}`); const res = await api.get(`/admin/staff/${id}/documents`); if (res.data?.success) setDocuments(res.data.data || []); } catch (e) { message.error(e?.response?.data?.message || 'Failed'); }
-                  }}>
-                    <span style={{ color: '#ff4d4f' }}>Delete</span>
-                  </Popconfirm>
-                )
-              }
-            ].filter(Boolean);
-            return (
-              <Dropdown menu={{ items }} trigger={['click']} placement="bottomRight">
-                <Button size="small" icon={<MoreOutlined />} />
-              </Dropdown>
-            );
-          }
-        }
-      ];
-
-      const openAddDoc = () => {
-        setEditingDoc(null);
-        docForm.resetFields();
-        setDocFile(null);
-        docForm.setFieldsValue({ title: '', docType: undefined, expiresAt: null, notes: '' });
-        setDocOpen(true);
-      };
-
-      const saveDoc = async () => {
-        try {
-          const v = await docForm.validateFields();
-          const fd = new FormData();
-          if (v.docType !== undefined) fd.append('docType', v.docType);
-          if (v.title) fd.append('title', v.title);
-          if (v.expiresAt) fd.append('expiresAt', v.expiresAt.format('YYYY-MM-DD'));
-          if (v.notes) fd.append('notes', v.notes);
-          if (docFile) fd.append('file', docFile);
-          if (editingDoc) {
-            await api.put(`/admin/documents/${editingDoc.id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-            message.success('Document updated');
-          } else {
-            if (!docFile) { message.warning('Please select a file'); return; }
-            await api.post(`/admin/staff/${id}/documents`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-            message.success('Document uploaded');
-          }
-          setDocOpen(false);
-          setDocFile(null);
-          const res = await api.get(`/admin/staff/${id}/documents`);
-          if (res.data?.success) setDocuments(res.data.data || []);
-        } catch (e) {
-          if (e?.errorFields) return;
-          message.error(e?.response?.data?.message || 'Failed to save document');
-        }
-      };
-
-      return (
-        <Card title="Document Centre" extra={<Button type="primary" onClick={openAddDoc}>Add Document</Button>}>
-          <Table rowKey={(r) => r.id} columns={columns} dataSource={documents} loading={docsLoading} pagination={{ pageSize: 10 }} scroll={{ x: 'max-content' }} />
-          <Modal title={editingDoc ? 'Edit Document' : 'Add Document'} open={docOpen} onCancel={() => { setDocOpen(false); setDocFile(null); }} onOk={saveDoc} okText={editingDoc ? 'Save' : 'Upload'}>
-            <Form form={docForm} layout="vertical">
-              <Row gutter={12}>
-                <Col span={12}><Form.Item name="docType" label="Document Type"><Input placeholder="E.g. Aadhar, PAN" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="expiresAt" label="Expiry Date"><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
-              </Row>
-              <Form.Item name="title" label="Title"><Input placeholder="Document name" /></Form.Item>
-              <Form.Item name="notes" label="Notes"><Input.TextArea rows={3} /></Form.Item>
-              <Form.Item label="File">
-                <Upload.Dragger multiple={false} maxCount={1}
-                  beforeUpload={(file) => { setDocFile(file); return false; }}
-                  onRemove={() => { setDocFile(null); }}
-                  accept="image/*,.pdf"
-                >
-                  <p className="ant-upload-drag-icon">📄</p>
-                  <p className="ant-upload-text">Click or drag file to upload</p>
-                  <p className="ant-upload-hint">Images or PDFs. Max 1 file.</p>
-                </Upload.Dragger>
-              </Form.Item>
-            </Form>
-          </Modal>
-        </Card>
-      );
-    }
-    return (
-      <Card title="Section" loading={loading}>
-        <div>Coming soon</div>
-      </Card>
-    );
-  };
-
-  return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sidebar collapsed={collapsed} />
-      <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
-        <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
-          <Space align="center" style={{ padding: '0 24px' }}>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/staff-management')}>Back</Button>
-            <Title level={4} style={{ margin: 0 }}>Staff Profile</Title>
-          </Space>
-          <div style={{ paddingRight: 24 }}>{headerRight}</div>
-        </Header>
-        <Content style={{ margin: '24px 24px', padding: 0, background: 'transparent', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
-          <div style={{ padding: 24 }}>
-            {profileSummary}
-            <Row gutter={16}>
-              <Col xs={24} md={6}>
-                <Card bodyStyle={{ padding: 0 }}>
-                  <Menu
-                    mode="inline"
-                    selectedKeys={[activeKey]}
-                    onClick={(e) => setActiveKey(e.key)}
-                    className="staff-profile-menu"
-                    items={sections.map(s => ({ key: s.key, icon: s.icon, label: s.label }))}
-                  />
-                </Card>
-              </Col>
-              <Col xs={24} md={18}>
-                {renderSection()}
-              </Col>
-            </Row>
-          </div>
-        </Content>
-      </Layout>
-    </Layout>
-  );
-}

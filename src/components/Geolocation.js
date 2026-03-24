@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Layout, Card, DatePicker, Button, Select, Table, message, Space, Typography, Row, Col, Statistic, Menu, Tag, Timeline, Modal, Descriptions, List, Avatar, Spin, Empty, Switch } from 'antd';
 import {
   EnvironmentOutlined,
@@ -8,6 +8,8 @@ import {
   MenuUnfoldOutlined,
   ReloadOutlined,
   HistoryOutlined,
+  ExpandOutlined,
+  CompressOutlined,
   PhoneOutlined,
   ClockCircleOutlined,
   CalendarOutlined
@@ -22,6 +24,75 @@ const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
+const toRad = (deg) => (Number(deg) * Math.PI) / 180;
+const haversineMeters = (a, b) => {
+  if (!a || !b) return 0;
+  const R = 6371000;
+  const dLat = toRad(Number(b.lat) - Number(a.lat));
+  const dLng = toRad(Number(b.lng) - Number(a.lng));
+  const lat1 = toRad(Number(a.lat));
+  const lat2 = toRad(Number(b.lat));
+  const x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const y = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  return R * y;
+};
+
+const formatDuration = (ms) => {
+  if (!ms || ms <= 0) return '0m';
+  const totalSec = Math.floor(ms / 1000);
+  const hr = Math.floor(totalSec / 3600);
+  const min = Math.floor((totalSec % 3600) / 60);
+  if (hr <= 0) return `${min}m`;
+  return `${hr}h ${min}m`;
+};
+
+const formatCoord = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(6) : '-';
+};
+
+const hasValidCoord = (lat, lng) =>
+  Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+
+const formatLocationLabel = (address, lat, lng) => {
+  const cleanAddress = String(address || '').trim();
+  if (cleanAddress) return cleanAddress;
+  if (hasValidCoord(lat, lng)) return `Lat ${formatCoord(lat)}, Lng ${formatCoord(lng)}`;
+  return 'Unknown location';
+};
+
+const GOOGLE_MAPS_API_KEY = 'AIzaSyBukqAGI9NioKWUOgzVs0vXrBOg9DnbwLo';
+let gmapsLoading = false;
+let gmapsReady = false;
+const ensureGoogleMaps = () => new Promise((resolve) => {
+  if (gmapsReady || window.google?.maps) {
+    gmapsReady = true;
+    resolve();
+    return;
+  }
+  if (gmapsLoading) {
+    const id = setInterval(() => {
+      if (window.google?.maps) {
+        clearInterval(id);
+        gmapsReady = true;
+        resolve();
+      }
+    }, 50);
+    return;
+  }
+  gmapsLoading = true;
+  const script = document.createElement('script');
+  script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
+  script.async = true;
+  script.defer = true;
+  script.onload = () => {
+    gmapsReady = true;
+    resolve();
+  };
+  document.body.appendChild(script);
+});
+
 const Geolocation = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -32,8 +103,10 @@ const Geolocation = () => {
   const [timelineVisible, setTimelineVisible] = useState(false);
   const [selectedStaffTimeline, setSelectedStaffTimeline] = useState([]);
   const [selectedStaffName, setSelectedStaffName] = useState('');
+  const [focusedLocation, setFocusedLocation] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [isMapFullWidth, setIsMapFullWidth] = useState(false);
   const autoRefreshRef = useRef(null);
   const [stats, setStats] = useState({
     totalStaff: 0,
@@ -69,6 +142,7 @@ const Geolocation = () => {
   // Fetch location data when staff is selected or date changes
   useEffect(() => {
     if (selectedStaff && selectedDate) {
+      setFocusedLocation(null);
       fetchLocationData();
     }
   }, [selectedStaff, selectedDate]);
@@ -195,6 +269,99 @@ const Geolocation = () => {
     fetchStaffTimeline(staff.id, selectedDate);
   };
 
+  const selectedStaffData = useMemo(
+    () => staffList.find((s) => Number(s.id) === Number(selectedStaff)) || null,
+    [staffList, selectedStaff]
+  );
+
+  const selectedDayRecord = useMemo(() => {
+    if (!selectedStaff || locationData.length === 0) return null;
+    return locationData.find((r) => Number(r.staffId) === Number(selectedStaff)) || locationData[0] || null;
+  }, [locationData, selectedStaff]);
+
+  const selectedLocations = useMemo(() => selectedDayRecord?.locations || [], [selectedDayRecord]);
+
+  const trackingInsights = useMemo(() => {
+    const valid = selectedLocations.filter((loc) => Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lng)));
+    let distanceMeters = 0;
+    for (let i = 1; i < valid.length; i += 1) {
+      distanceMeters += haversineMeters(valid[i - 1], valid[i]);
+    }
+    const accuracyValues = valid
+      .map((loc) => Number(loc.accuracy))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const avgAccuracy = accuracyValues.length > 0
+      ? accuracyValues.reduce((s, x) => s + x, 0) / accuracyValues.length
+      : null;
+    const firstTs = valid.length > 0 ? new Date(valid[0].timestamp).getTime() : null;
+    const lastTs = valid.length > 0 ? new Date(valid[valid.length - 1].timestamp).getTime() : null;
+    const haltDistanceThresholdM = 50;
+    const haltTimeThresholdMs = 3 * 60 * 1000;
+    const halts = [];
+    let haltStart = null;
+    let haltEnd = null;
+    let haltRef = null;
+
+    for (let i = 1; i < valid.length; i += 1) {
+      const prev = valid[i - 1];
+      const curr = valid[i];
+      const prevTs = new Date(prev.timestamp).getTime();
+      const currTs = new Date(curr.timestamp).getTime();
+      if (!Number.isFinite(prevTs) || !Number.isFinite(currTs) || currTs <= prevTs) continue;
+
+      const moved = haversineMeters(prev, curr);
+      if (moved <= haltDistanceThresholdM) {
+        if (!haltStart) {
+          haltStart = prevTs;
+          haltRef = prev;
+        }
+        haltEnd = currTs;
+      } else if (haltStart && haltEnd && haltEnd - haltStart >= haltTimeThresholdMs) {
+        halts.push({
+          startTs: haltStart,
+          endTs: haltEnd,
+          durationMs: haltEnd - haltStart,
+          lat: haltRef?.lat,
+          lng: haltRef?.lng,
+          address: haltRef?.address || curr?.address || null,
+        });
+        haltStart = null;
+        haltEnd = null;
+        haltRef = null;
+      } else {
+        haltStart = null;
+        haltEnd = null;
+        haltRef = null;
+      }
+    }
+
+    if (haltStart && haltEnd && haltEnd - haltStart >= haltTimeThresholdMs) {
+      halts.push({
+        startTs: haltStart,
+        endTs: haltEnd,
+        durationMs: haltEnd - haltStart,
+        lat: haltRef?.lat,
+        lng: haltRef?.lng,
+        address: haltRef?.address || null,
+      });
+    }
+
+    const totalHaltMs = halts.reduce((sum, h) => sum + Number(h.durationMs || 0), 0);
+
+    return {
+      totalPings: selectedLocations.length,
+      validPings: valid.length,
+      distanceKm: distanceMeters / 1000,
+      avgAccuracy,
+      lastSeen: lastTs ? dayjs(lastTs) : null,
+      span: firstTs && lastTs ? formatDuration(lastTs - firstTs) : '0m',
+      recent: [...selectedLocations].slice(-8).reverse(),
+      halts,
+      haltCount: halts.length,
+      haltTotalMs: totalHaltMs,
+    };
+  }, [selectedLocations]);
+
   const columns = [
     {
       title: 'Staff Name',
@@ -239,9 +406,9 @@ const Geolocation = () => {
       key: 'firstLocation',
       render: (location) => location ? (
         <Space direction="vertical" size="small">
-          <span>{location.address || 'Unknown'}</span>
+          <span>{formatLocationLabel(location.address, location.lat, location.lng)}</span>
           <span style={{ fontSize: '12px', color: '#666' }}>
-            {location.lat?.toFixed(6)}, {location.lng?.toFixed(6)}
+            {formatCoord(location.lat)}, {formatCoord(location.lng)}
           </span>
         </Space>
       ) : '-',
@@ -252,9 +419,9 @@ const Geolocation = () => {
       key: 'lastLocation',
       render: (location) => location ? (
         <Space direction="vertical" size="small">
-          <span>{location.address || 'Unknown'}</span>
+          <span>{formatLocationLabel(location.address, location.lat, location.lng)}</span>
           <span style={{ fontSize: '12px', color: '#666' }}>
-            {location.lat?.toFixed(6)}, {location.lng?.toFixed(6)}
+            {formatCoord(location.lat)}, {formatCoord(location.lng)}
           </span>
         </Space>
       ) : '-',
@@ -287,9 +454,9 @@ const Geolocation = () => {
       key: 'address',
       render: (address, record) => (
         <Space direction="vertical" size="small">
-          <span>{address || 'Unknown location'}</span>
+          <span>{formatLocationLabel(address, record.lat, record.lng)}</span>
           <span style={{ fontSize: '12px', color: '#666' }}>
-            {record.lat?.toFixed(6)}, {record.lng?.toFixed(6)}
+            {formatCoord(record.lat)}, {formatCoord(record.lng)}
           </span>
         </Space>
       ),
@@ -303,109 +470,189 @@ const Geolocation = () => {
   ];
 
   // Map component
-  const SimpleMap = ({ locations, selectedStaffData }) => {
+  const SimpleMap = ({ locations, selectedStaffData, selectedDayRecord, insights, focusedLocation }) => {
     const [mapLoaded, setMapLoaded] = useState(false);
     const [mapInstance, setMapInstance] = useState(null);
+    const mapContainerRef = useRef(null);
+    const markersRef = useRef([]);
+    const markerIndexRef = useRef(new Map());
+    const pathRef = useRef(null);
+    const infoWindowRef = useRef(null);
 
     useEffect(() => {
-      // Always load Leaflet since we want to show the map even without locations
-      if (!mapLoaded && window.L) {
-        setMapLoaded(true);
-      } else if (!mapLoaded) {
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(link);
-
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        script.onload = () => setMapLoaded(true);
-        document.head.appendChild(script);
-      }
+      let mounted = true;
+      const loadGoogle = async () => {
+        await ensureGoogleMaps();
+        if (mounted) setMapLoaded(true);
+      };
+      if (!mapLoaded) loadGoogle();
+      return () => { mounted = false; };
     }, [mapLoaded]);
 
-    // Initialize and update map when locations or map is loaded
     useEffect(() => {
-      if (mapLoaded && !mapInstance) {
-        // Initialize map with default location if no locations available
-        const defaultLatLng = locations && locations.length > 0 && locations[0].lat && locations[0].lng
-          ? [locations[0].lat, locations[0].lng]
-          : [28.6139, 77.2090]; // Default to New Delhi coordinates
+      if (mapLoaded && !mapInstance && mapContainerRef.current && window.google?.maps) {
+        const firstValid = (locations || []).find((loc) => hasValidCoord(loc?.lat, loc?.lng));
+        const defaultCenter = firstValid
+          ? { lat: Number(firstValid.lat), lng: Number(firstValid.lng) }
+          : { lat: 28.6139, lng: 77.2090 };
+        const map = new window.google.maps.Map(mapContainerRef.current, {
+          center: defaultCenter,
+          zoom: 13,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        });
 
-        const map = window.L.map('map').setView(defaultLatLng, 13);
-
-        // Add tile layer
-        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
+        infoWindowRef.current = new window.google.maps.InfoWindow();
         setMapInstance(map);
       }
     }, [mapLoaded, mapInstance]);
 
-    // Update map markers and path when locations change
     useEffect(() => {
-      if (mapLoaded && mapInstance) {
-        // Clear existing markers and layers
-        mapInstance.eachLayer((layer) => {
-          if (layer instanceof window.L.Marker || layer instanceof window.L.Polyline) {
-            mapInstance.removeLayer(layer);
+      if (!mapLoaded || !mapInstance || !window.google?.maps) return;
+
+      markersRef.current.forEach((marker) => marker.setMap(null));
+      markersRef.current = [];
+      markerIndexRef.current = new Map();
+      if (pathRef.current) {
+        pathRef.current.setMap(null);
+        pathRef.current = null;
+      }
+
+      const findNearestLocation = (targetTime, points) => {
+        if (!targetTime) return null;
+        const target = new Date(targetTime).getTime();
+        if (!Number.isFinite(target)) return null;
+        let nearest = null;
+        let diff = Number.MAX_SAFE_INTEGER;
+        (points || []).forEach((loc) => {
+          const t = new Date(loc.timestamp).getTime();
+          const d = Math.abs(t - target);
+          if (d < diff) {
+            diff = d;
+            nearest = loc;
           }
         });
+        return nearest;
+      };
 
-        // Add markers only if we have valid locations
-        if (locations && locations.length > 0) {
-          const validLocations = locations.filter(loc => loc.lat && loc.lng);
+      const validLocations = (locations || [])
+        .filter((loc) => hasValidCoord(loc?.lat, loc?.lng))
+        .map((loc) => ({ ...loc, lat: Number(loc.lat), lng: Number(loc.lng) }));
 
-          if (validLocations.length > 0) {
-            // Add markers for each valid location
-            validLocations.forEach((location, index) => {
-              const marker = window.L.marker([location.lat, location.lng]).addTo(mapInstance);
-
-              // Create popup content
-              const popupContent = `
-                <div style="padding: 8px;">
-                  <strong>${selectedStaffData?.name || 'Unknown'}</strong><br/>
-                  <small>Time: ${dayjs(location.timestamp).format('HH:mm:ss')}</small><br/>
-                  <small>Accuracy: ${location.accuracy || 'N/A'}m</small>
-                </div>
-              `;
-              marker.bindPopup(popupContent);
-
-              // Add number to marker
-              if (validLocations.length > 1) {
-                const icon = window.L.divIcon({
-                  html: `<div style="background: #1890ff; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px;">${index + 1}</div>`,
-                  iconSize: [24, 24],
-                  className: 'custom-div-icon'
-                });
-                marker.setIcon(icon);
-              }
-            });
-
-            // Draw path between points if multiple valid locations
-            if (validLocations.length > 1) {
-              const latlngs = validLocations.map(loc => [loc.lat, loc.lng]);
-              const polyline = window.L.polyline(latlngs, {
-                color: '#1890ff',
-                weight: 3,
-                opacity: 0.7,
-                dashArray: '10, 10'
-              }).addTo(mapInstance);
-
-              // Fit map to show all points
-              mapInstance.fitBounds(polyline.getBounds(), { padding: [50, 50] });
-            } else {
-              // Center on single location
-              mapInstance.setView([validLocations[0].lat, validLocations[0].lng], 15);
-            }
-          }
-        }
+      if (validLocations.length === 0) {
+        mapInstance.setCenter({ lat: 28.6139, lng: 77.2090 });
+        mapInstance.setZoom(13);
+        return;
       }
-    }, [mapLoaded, mapInstance, locations, selectedStaffData]);
+
+      validLocations.forEach((location, index) => {
+        const isFirst = index === 0;
+        const isLast = index === validLocations.length - 1;
+        const markerColor = isFirst ? '#13c2c2' : (isLast ? '#f5222d' : '#1890ff');
+        const marker = new window.google.maps.Marker({
+          position: { lat: location.lat, lng: location.lng },
+          map: mapInstance,
+          label: validLocations.length > 1 ? { text: String(index + 1), color: '#fff', fontWeight: '700' } : undefined,
+          icon: {
+            path: window.google.maps.SymbolPath.CIRCLE,
+            fillColor: markerColor,
+            fillOpacity: 1,
+            strokeColor: '#fff',
+            strokeWeight: 2,
+            scale: 10,
+          },
+        });
+        marker.addListener('click', () => {
+          if (!infoWindowRef.current) return;
+          infoWindowRef.current.setContent(
+            `<div style="padding: 8px;">
+              <strong>${selectedStaffData?.name || 'Unknown'}</strong><br/>
+              <small>Time: ${dayjs(location.timestamp).format('HH:mm:ss')}</small><br/>
+              <small>Accuracy: ${location.accuracy || 'N/A'}m</small>
+            </div>`
+          );
+          infoWindowRef.current.open({ anchor: marker, map: mapInstance });
+        });
+        markerIndexRef.current.set(`${location.timestamp}|${location.lat}|${location.lng}`, marker);
+        markersRef.current.push(marker);
+      });
+
+      const punchInLoc = findNearestLocation(selectedDayRecord?.punchInTime, validLocations);
+      const punchOutLoc = findNearestLocation(selectedDayRecord?.punchOutTime, validLocations);
+      if (punchInLoc) {
+        const inMarker = new window.google.maps.Marker({
+          position: { lat: punchInLoc.lat, lng: punchInLoc.lng },
+          map: mapInstance,
+          label: { text: 'IN', color: '#fff', fontWeight: '700' },
+          icon: {
+            path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+            fillColor: '#52c41a',
+            fillOpacity: 1,
+            strokeColor: '#fff',
+            strokeWeight: 2,
+            scale: 6,
+          },
+        });
+        markersRef.current.push(inMarker);
+      }
+      if (punchOutLoc) {
+        const outMarker = new window.google.maps.Marker({
+          position: { lat: punchOutLoc.lat, lng: punchOutLoc.lng },
+          map: mapInstance,
+          label: { text: 'OUT', color: '#fff', fontWeight: '700' },
+          icon: {
+            path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+            fillColor: '#ff4d4f',
+            fillOpacity: 1,
+            strokeColor: '#fff',
+            strokeWeight: 2,
+            scale: 6,
+          },
+        });
+        markersRef.current.push(outMarker);
+      }
+
+      if (validLocations.length > 1) {
+        pathRef.current = new window.google.maps.Polyline({
+          path: validLocations.map((loc) => ({ lat: loc.lat, lng: loc.lng })),
+          geodesic: true,
+          strokeColor: '#1677ff',
+          strokeOpacity: 0.85,
+          strokeWeight: 4,
+          map: mapInstance,
+        });
+      }
+
+      const bounds = new window.google.maps.LatLngBounds();
+      validLocations.forEach((loc) => bounds.extend({ lat: loc.lat, lng: loc.lng }));
+      mapInstance.fitBounds(bounds, 50);
+    }, [mapLoaded, mapInstance, locations, selectedStaffData, selectedDayRecord]);
+
+    useEffect(() => {
+      if (!mapLoaded || !mapInstance || !focusedLocation) return;
+      if (!hasValidCoord(focusedLocation.lat, focusedLocation.lng)) return;
+      const lat = Number(focusedLocation.lat);
+      const lng = Number(focusedLocation.lng);
+      mapInstance.panTo({ lat, lng });
+      mapInstance.setZoom(17);
+      const markerKey = `${focusedLocation.timestamp}|${lat}|${lng}`;
+      const marker = markerIndexRef.current.get(markerKey);
+      if (marker && infoWindowRef.current) {
+        infoWindowRef.current.setContent(
+          `<div style="padding: 8px;">
+            <strong>${selectedStaffData?.name || 'Unknown'}</strong><br/>
+            <small>Time: ${dayjs(focusedLocation.timestamp).format('HH:mm:ss')}</small><br/>
+            <small>Accuracy: ${focusedLocation.accuracy || 'N/A'}m</small>
+          </div>`
+        );
+        infoWindowRef.current.open({ anchor: marker, map: mapInstance });
+      }
+    }, [mapLoaded, mapInstance, focusedLocation]);
 
     // Check if we have valid locations
-    const hasValidLocations = locations && locations.some(loc => loc.lat && loc.lng);
+    const validLocationCount = (locations || []).filter((loc) => hasValidCoord(loc?.lat, loc?.lng)).length;
+    const hasValidLocations = validLocationCount > 0;
 
     // Show loading state while map is loading
     if (!mapLoaded) {
@@ -419,7 +666,7 @@ const Geolocation = () => {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* Map Container */}
-        <div id="map" style={{ height: '100%', minHeight: 350, borderRadius: 8 }} />
+        <div ref={mapContainerRef} style={{ height: '100%', minHeight: 350, borderRadius: 8 }} />
 
         {/* Status Message */}
         <div style={{
@@ -437,10 +684,15 @@ const Geolocation = () => {
           }}>
             <EnvironmentOutlined style={{ marginRight: 8 }} />
             {hasValidLocations ?
-              `Tracking active - ${locations.filter(loc => loc.lat && loc.lng).length} location${locations.filter(loc => loc.lat && loc.lng).length > 1 ? 's' : ''} recorded` :
+              `Tracking active - ${validLocationCount} location${validLocationCount > 1 ? 's' : ''} recorded` :
               'Location Not Available'
             }
           </div>
+          {hasValidLocations && insights ? (
+            <div style={{ marginTop: 6, fontSize: 12, color: '#3f8600' }}>
+              Last seen: {insights.lastSeen ? insights.lastSeen.format('HH:mm:ss') : '-'} | Avg accuracy: {insights.avgAccuracy ? `${insights.avgAccuracy.toFixed(1)}m` : '-'} | Distance: {insights.distanceKm.toFixed(2)} km
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -482,7 +734,7 @@ const Geolocation = () => {
           </Button>
         </Header>
 
-        <Content style={{ margin: '16px' }}>
+        <Content style={{ margin: '16px', background: 'linear-gradient(180deg, #f6f9ff 0%, #f3f5f9 100%)' }}>
           {subscriptionInfo && !(!!subscriptionInfo.geolocationEnabled || !!subscriptionInfo.plan?.geolocationEnabled) ? (
             <Card style={{ textAlign: 'center', padding: '50px' }}>
               <Empty
@@ -498,14 +750,23 @@ const Geolocation = () => {
             </Card>
           ) : (
             <>
-              <Card style={{ marginTop: 16 }}>
+              <Card
+                style={{
+                  marginTop: 8,
+                  borderRadius: 16,
+                  border: '1px solid #e6ecff',
+                  boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
+                  background: '#ffffff',
+                }}
+                bodyStyle={{ padding: 20 }}
+              >
                 <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
                   <Col span={8}>
-                    <label style={{ display: 'block', marginBottom: 8 }}>Select Date:</label>
+                    <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#475569' }}>Select Date</label>
                     <DatePicker
                       value={selectedDate}
                       onChange={setSelectedDate}
-                      style={{ width: '100%' }}
+                      style={{ width: '100%', borderRadius: 10 }}
                     />
                   </Col>
                   <Col span={8}>
@@ -515,14 +776,14 @@ const Geolocation = () => {
                       icon={<ReloadOutlined />}
                       onClick={fetchLocationData}
                       loading={loading}
-                      style={{ width: '100%' }}
+                      style={{ width: '100%', borderRadius: 10, height: 42, fontWeight: 600 }}
                     >
                       Refresh
                     </Button>
                   </Col>
                   <Col span={8}>
-                    <label style={{ display: 'block', marginBottom: 8 }}>Live Tracking:</label>
-                    <Space>
+                    <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#475569' }}>Live Tracking</label>
+                    <Space style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 10, minHeight: 42 }}>
                       <Switch
                         checked={autoRefresh}
                         onChange={setAutoRefresh}
@@ -531,7 +792,7 @@ const Geolocation = () => {
                       />
                       {autoRefresh && (
                         <Tag color="red" style={{ animation: 'pulse 1.5s infinite' }}>
-                          ● LIVE
+                          â— LIVE
                         </Tag>
                       )}
                       {lastUpdated && (
@@ -543,86 +804,148 @@ const Geolocation = () => {
                   </Col>
                 </Row>
 
+                {selectedStaff ? (
+                  <Row gutter={12} style={{ marginBottom: 12 }}>
+                    <Col flex="1">
+                      <Card size="small" style={{ borderRadius: 14, border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
+                        <Statistic title="Total Pings" value={trackingInsights.totalPings} prefix={<EnvironmentOutlined />} />
+                      </Card>
+                    </Col>
+                    <Col flex="1">
+                      <Card size="small" style={{ borderRadius: 14, border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
+                        <Statistic title="Valid GPS" value={trackingInsights.validPings} />
+                      </Card>
+                    </Col>
+                    <Col flex="1">
+                      <Card size="small" style={{ borderRadius: 14, border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
+                        <Statistic title="Distance" value={trackingInsights.distanceKm.toFixed(2)} suffix="km" />
+                      </Card>
+                    </Col>
+                    <Col flex="1">
+                      <Card size="small" style={{ borderRadius: 14, border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
+                        <Statistic title="Tracking Span" value={trackingInsights.span} />
+                      </Card>
+                    </Col>
+                    <Col flex="1">
+                      <Card size="small" style={{ borderRadius: 14, border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
+                        <Statistic title="Halts" value={trackingInsights.haltCount} suffix={trackingInsights.haltTotalMs ? `(${formatDuration(trackingInsights.haltTotalMs)})` : ''} />
+                      </Card>
+                    </Col>
+                  </Row>
+                ) : null}
+
                 <Row gutter={16} style={{ marginTop: 16 }}>
                   {/* Left Column - Staff List Table */}
-                  <Col span={12}>
+                  {!isMapFullWidth ? (
+                    <Col span={12}>
+                      <Card
+                        title={
+                          <Title level={5} style={{ marginBottom: 0 }}>
+                            <UserOutlined /> Organization Staff
+                          </Title>
+                        }
+                        style={{
+                          height: '600px',
+                          borderRadius: 16,
+                          border: '1px solid #e2e8f0',
+                          boxShadow: '0 8px 20px rgba(15, 23, 42, 0.05)',
+                        }}
+                        bodyStyle={{ padding: '16px', height: 'calc(100% - 57px)', overflow: 'auto' }}
+                      >
+                        <Table
+                          dataSource={staffList}
+                          columns={[
+                            {
+                              title: 'Name',
+                              dataIndex: 'name',
+                              key: 'name',
+                              render: (text, record) => (
+                                <Space>
+                                  <Avatar size="small" icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
+                                  <span style={{ fontWeight: 'bold' }}>{text}</span>
+                                </Space>
+                              ),
+                            },
+                            {
+                              title: 'Phone',
+                              dataIndex: 'phone',
+                              key: 'phone',
+                            },
+                            {
+                              title: 'Action',
+                              key: 'action',
+                              render: (_, record) => (
+                                <Space>
+                                  <Button
+                                    type="primary"
+                                    size="small"
+                                    icon={<EnvironmentOutlined />}
+                                    onClick={() => setSelectedStaff(record.id)}
+                                    disabled={selectedStaff === record.id}
+                                  >
+                                    {selectedStaff === record.id ? 'Selected' : 'View Map'}
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    icon={<HistoryOutlined />}
+                                    onClick={() => handleViewTimeline(record)}
+                                  >
+                                    Timeline
+                                  </Button>
+                                </Space>
+                              ),
+                            },
+                          ]}
+                          rowKey="id"
+                          pagination={{
+                            pageSize: 8,
+                            size: 'small',
+                          }}
+                          size="small"
+                        />
+                      </Card>
+                    </Col>
+                  ) : null}
+
+                  {/* Right Column - Map */}
+                  <Col span={isMapFullWidth ? 24 : 12}>
                     <Card
                       title={
                         <Title level={5} style={{ marginBottom: 0 }}>
-                          <UserOutlined /> Organization Staff
+                          <EnvironmentOutlined /> Location Tracking Map
                         </Title>
                       }
-                      style={{ height: '600px' }}
-                      bodyStyle={{ padding: '16px', height: 'calc(100% - 57px)', overflow: 'auto' }}
-                    >
-                      <Table
-                        dataSource={staffList}
-                        columns={[
-                          {
-                            title: 'Name',
-                            dataIndex: 'name',
-                            key: 'name',
-                            render: (text, record) => (
-                              <Space>
-                                <Avatar size="small" icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
-                                <span style={{ fontWeight: 'bold' }}>{text}</span>
-                              </Space>
-                            ),
-                          },
-                          {
-                            title: 'Phone',
-                            dataIndex: 'phone',
-                            key: 'phone',
-                          },
-                          {
-                            title: 'Action',
-                            key: 'action',
-                            render: (_, record) => (
-                              <Button
-                                type="primary"
-                                size="small"
-                                icon={<EnvironmentOutlined />}
-                                onClick={() => setSelectedStaff(record.id)}
-                                disabled={selectedStaff === record.id}
-                              >
-                                {selectedStaff === record.id ? 'Selected' : 'View Map'}
-                              </Button>
-                            ),
-                          },
-                        ]}
-                        rowKey="id"
-                        pagination={{
-                          pageSize: 8,
-                          size: 'small',
-                        }}
-                        size="small"
-                      />
-                    </Card>
-                  </Col>
-
-                  {/* Right Column - Map */}
-                  <Col span={12}>
-                    <Card
-                      title={
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>
-                            <EnvironmentOutlined style={{ marginRight: 8 }} />
-                            Location Tracking Map
-                          </span>
+                      extra={(
+                        <Space>
                           {selectedStaff && (
                             <span style={{ fontSize: '14px', fontWeight: 'normal' }}>
-                              {staffList.find(s => s.id === selectedStaff)?.name || 'Unknown'} - {selectedDate.format('YYYY-MM-DD')}
+                              {selectedStaffData?.name || 'Unknown'} - {selectedDate.format('YYYY-MM-DD')}
                             </span>
                           )}
-                        </div>
-                      }
-                      style={{ height: '600px' }}
+                          <Button
+                            size="small"
+                            icon={isMapFullWidth ? <CompressOutlined /> : <ExpandOutlined />}
+                            onClick={() => setIsMapFullWidth((prev) => !prev)}
+                          >
+                            {isMapFullWidth ? 'Normal View' : 'Full Width'}
+                          </Button>
+                        </Space>
+                      )}
+                      style={{
+                        height: isMapFullWidth ? '700px' : '600px',
+                        borderRadius: 16,
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.05)',
+                      }}
                       bodyStyle={{ padding: 0, height: 'calc(100% - 57px)', overflow: 'hidden' }}
                     >
                       {selectedStaff ? (
                         <SimpleMap
-                          locations={locationData.length > 0 ? locationData[0]?.locations || [] : []}
-                          selectedStaffData={staffList.find(s => s.id === selectedStaff) || {}}
+                          locations={selectedLocations}
+                          selectedStaffData={selectedStaffData || {}}
+                          selectedDayRecord={selectedDayRecord}
+                          insights={trackingInsights}
+                          focusedLocation={focusedLocation}
                         />
                       ) : (
                         <div style={{
@@ -638,6 +961,68 @@ const Geolocation = () => {
                         </div>
                       )}
                     </Card>
+
+                    {selectedStaff ? (
+                      <Card
+                        title="Recent Location Timeline"
+                        size="small"
+                        style={{
+                          marginTop: 12,
+                          borderRadius: 16,
+                          border: '1px solid #e2e8f0',
+                          boxShadow: '0 8px 20px rgba(15, 23, 42, 0.05)',
+                        }}
+                        extra={(
+                          <Button size="small" icon={<HistoryOutlined />} onClick={() => handleViewTimeline(selectedStaffData || { id: selectedStaff, name: selectedStaffData?.name || 'Staff' })}>
+                            View Full
+                          </Button>
+                        )}
+                      >
+                        {trackingInsights.haltCount > 0 ? (
+                          <div style={{ marginBottom: 10, padding: '8px 10px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 6 }}>
+                            <Text strong style={{ color: '#ad6800' }}>
+                              Halt detected: {trackingInsights.haltCount} ({formatDuration(trackingInsights.haltTotalMs)})
+                            </Text>
+                            <div style={{ marginTop: 4 }}>
+                              {trackingInsights.halts.slice(-2).map((h, idx) => (
+                                <Text key={`${h.startTs}-${idx}`} type="secondary" style={{ display: 'block', fontSize: 12 }}>
+                                  {dayjs(h.startTs).format('hh:mm A')} - {dayjs(h.endTs).format('hh:mm A')} ({formatDuration(h.durationMs)}) | {formatLocationLabel(h.address, h.lat, h.lng)}
+                                </Text>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                        {trackingInsights.recent.length === 0 ? (
+                          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No locations for selected date" />
+                        ) : (
+                          <List
+                            size="small"
+                            dataSource={trackingInsights.recent}
+                            renderItem={(item) => (
+                              <List.Item>
+                                <Button
+                                  type="text"
+                                  onClick={() => setFocusedLocation({ ...item, _focusNonce: Date.now() })}
+                                  style={{ width: '100%', height: 'auto', textAlign: 'left', padding: 0 }}
+                                >
+                                  <Space direction="vertical" size={0} style={{ width: '100%' }}>
+                                    <Text strong>
+                                      {dayjs(item.timestamp).format('hh:mm A')} - {formatLocationLabel(item.address, item.lat, item.lng)}
+                                    </Text>
+                                    <Space split={<span style={{ color: '#bfbfbf' }}>|</span>}>
+                                      <Text type="secondary">{item.accuracy ? `${item.accuracy}m` : 'N/A'}</Text>
+                                      <Text type="secondary" style={{ fontSize: 12 }}>
+                                        {formatCoord(item.lat)}, {formatCoord(item.lng)}
+                                      </Text>
+                                    </Space>
+                                  </Space>
+                                </Button>
+                              </List.Item>
+                            )}
+                          />
+                        )}
+                      </Card>
+                    ) : null}
                   </Col>
                 </Row>
               </Card>
@@ -666,3 +1051,4 @@ const Geolocation = () => {
 };
 
 export default Geolocation;
+

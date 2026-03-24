@@ -30,6 +30,7 @@ export default function SuperadminClients() {
   const [geoStaffLimitForm] = Form.useForm();
   const [selectedClientForGeoLimit, setSelectedClientForGeoLimit] = useState(null);
   const [geoStaffCounts, setGeoStaffCounts] = useState({});
+  const [searchText, setSearchText] = useState('');
   const formInitials = editing ? {
     name: editing.name || '',
     phone: editing.phone || '',
@@ -40,6 +41,11 @@ export default function SuperadminClients() {
     channelPartnerId: editing.channelPartnerId || '',
     roleDescription: editing.roleDescription || '',
     employeeCount: editing.employeeCount,
+    contactPersonName: editing.contactPersonName || '',
+    address: editing.address || '',
+    birthDate: editing.birthDate ? dayjs(editing.birthDate) : null,
+    anniversaryDate: editing.anniversaryDate ? dayjs(editing.anniversaryDate) : null,
+    gstNumber: editing.gstNumber || '',
   } : {};
 
   const load = async () => {
@@ -112,6 +118,7 @@ export default function SuperadminClients() {
     const maxGeolocationStaff = sub.maxGeolocationStaff !== null ? sub.maxGeolocationStaff : (plan.maxGeolocationStaff || 0);
     const salesEnabled = sub.salesEnabled !== null ? sub.salesEnabled : (plan.salesEnabled || false);
     const geolocationEnabled = sub.geolocationEnabled !== null ? sub.geolocationEnabled : (plan.geolocationEnabled || false);
+    const expenseEnabled = sub.expenseEnabled !== null ? sub.expenseEnabled : (plan.expenseEnabled || false);
 
     console.log('Opening limit modal for client:', client.name);
 
@@ -120,7 +127,8 @@ export default function SuperadminClients() {
       staffLimit: staffLimit > 0 ? staffLimit : '',
       maxGeolocationStaff,
       salesEnabled,
-      geolocationEnabled
+      geolocationEnabled,
+      expenseEnabled
     });
     setStaffLimitOpen(true);
   };
@@ -145,7 +153,8 @@ export default function SuperadminClients() {
         staffLimit: values.staffLimit ? Number(values.staffLimit) : undefined,
         maxGeolocationStaff: values.maxGeolocationStaff !== undefined ? Number(values.maxGeolocationStaff) : undefined,
         salesEnabled: !!values.salesEnabled,
-        geolocationEnabled: !!values.geolocationEnabled
+        geolocationEnabled: !!values.geolocationEnabled,
+        expenseEnabled: !!values.expenseEnabled
       };
 
       const res = await api.post(`/superadmin/clients/${selectedClientForLimit.id}/subscription`, payload);
@@ -221,11 +230,17 @@ export default function SuperadminClients() {
   const onSubmit = async () => {
     try {
       const values = await form.validateFields();
+      const payload = {
+        ...values,
+        birthDate: values.birthDate ? values.birthDate.format('YYYY-MM-DD') : null,
+        anniversaryDate: values.anniversaryDate ? values.anniversaryDate.format('YYYY-MM-DD') : null
+      };
+
       if (editing) {
-        await api.put(`/superadmin/clients/${editing.id}`, values);
+        await api.put(`/superadmin/clients/${editing.id}`, payload);
         message.success('Client updated');
       } else {
-        await api.post('/superadmin/clients', values);
+        await api.post('/superadmin/clients', payload);
         message.success('Client created');
       }
       setOpen(false);
@@ -261,7 +276,8 @@ export default function SuperadminClients() {
       staffLimit: sub.staffLimit || resolvedPlan.staffLimit || '',
       maxGeolocationStaff: sub.maxGeolocationStaff !== null ? sub.maxGeolocationStaff : (resolvedPlan.maxGeolocationStaff || 0),
       salesEnabled: sub.salesEnabled !== null ? !!sub.salesEnabled : (!!resolvedPlan.salesEnabled || false),
-      geolocationEnabled: sub.geolocationEnabled !== null ? !!sub.geolocationEnabled : (!!resolvedPlan.geolocationEnabled || false)
+      geolocationEnabled: sub.geolocationEnabled !== null ? !!sub.geolocationEnabled : (!!resolvedPlan.geolocationEnabled || false),
+      expenseEnabled: sub.expenseEnabled !== null ? !!sub.expenseEnabled : (!!resolvedPlan.expenseEnabled || false)
     });
     setAssignOpen(true);
   };
@@ -275,7 +291,8 @@ export default function SuperadminClients() {
         staffLimit: plan.staffLimit || '',
         maxGeolocationStaff: plan.maxGeolocationStaff || 0,
         salesEnabled: !!plan.salesEnabled,
-        geolocationEnabled: !!plan.geolocationEnabled
+        geolocationEnabled: !!plan.geolocationEnabled,
+        expenseEnabled: !!plan.expenseEnabled
       });
     }
   };
@@ -300,6 +317,7 @@ export default function SuperadminClients() {
         ...(values.maxGeolocationStaff !== undefined && values.maxGeolocationStaff !== null && values.maxGeolocationStaff !== '' ? { maxGeolocationStaff: Number(values.maxGeolocationStaff) } : {}),
         salesEnabled: !!values.salesEnabled,
         geolocationEnabled: !!values.geolocationEnabled,
+        expenseEnabled: !!values.expenseEnabled,
       };
       await api.post(`/superadmin/clients/${editing.id}/subscription`, payload);
       message.success('Subscription assigned');
@@ -327,7 +345,28 @@ export default function SuperadminClients() {
     }
   };
 
+  const handleToggleStatus = async (rec) => {
+    try {
+      setLoading(true);
+      const res = await api.post(`/superadmin/clients/${rec.id}/toggle-status`);
+      if (res.data.success) {
+        message.success(`Client ${res.data.status === 'SUSPENDED' ? 'Deactivated' : 'Activated'} successfully`);
+        load();
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to toggle status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const columns = [
+    {
+      title: 'ID',
+      dataIndex: 'id',
+      width: 60,
+      render: (id) => <span style={{ color: '#8c8c8c' }}>#{id}</span>
+    },
     {
       title: 'Name', dataIndex: 'name', render: (name, rec) => (
         <a onClick={() => handleImpersonate(rec)} style={{ color: '#1890ff', cursor: 'pointer', fontWeight: 500 }}>{name}</a>
@@ -358,6 +397,14 @@ export default function SuperadminClients() {
               <Button size="small" onClick={() => onEdit(rec)}>Edit</Button>
               <Button size="small" onClick={() => openPlanDetails(rec)}>View Plan</Button>
               <Button size="small" type="primary" onClick={() => openAssign(rec)}>Assign/Renew</Button>
+              <Button 
+                size="small" 
+                danger={rec.status !== 'SUSPENDED'}
+                style={rec.status === 'SUSPENDED' ? { backgroundColor: '#52c41a', color: 'white', borderColor: '#52c41a' } : {}}
+                onClick={() => handleToggleStatus(rec)}
+              >
+                {rec.status === 'SUSPENDED' ? 'Activate' : 'Deactivate'}
+              </Button>
             </Space>
             <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: '#666' }}>
               <div>
@@ -415,11 +462,29 @@ export default function SuperadminClients() {
         </Header>
 
         <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h2 style={{ margin: 0 }}>Clients</h2>
-            <Button type="primary" onClick={onCreate}>New Client</Button>
+            <Space>
+              <Input.Search
+                placeholder="Search by name or phone"
+                allowClear
+                onSearch={v => setSearchText(v)}
+                onChange={e => setSearchText(e.target.value)}
+                style={{ width: 300 }}
+              />
+              <Button type="primary" onClick={onCreate}>New Client</Button>
+            </Space>
           </div>
-          <Table rowKey="id" loading={loading} columns={columns} dataSource={rows} pagination={{ pageSize: 10 }} />
+          <Table
+            rowKey="id"
+            loading={loading}
+            columns={columns}
+            dataSource={rows.filter(r =>
+              (r.name || '').toLowerCase().includes(searchText.toLowerCase()) ||
+              (r.phone || '').includes(searchText)
+            )}
+            pagination={{ pageSize: 10 }}
+          />
         </Content>
       </Layout>
 
@@ -455,6 +520,13 @@ export default function SuperadminClients() {
                 { value: '100-500', label: '100-500' },
                 { value: 'More than 500', label: 'More than 500' },
               ]} /></Form.Item>
+              <Form.Item label="Contact Person Name" name="contactPersonName"><Input /></Form.Item>
+              <Form.Item label="Address" name="address"><Input.TextArea rows={2} /></Form.Item>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <Form.Item label="Birth Date" name="birthDate"><DatePicker style={{ width: '100%' }} /></Form.Item>
+                <Form.Item label="Anniversary Date" name="anniversaryDate"><DatePicker style={{ width: '100%' }} /></Form.Item>
+              </div>
+              <Form.Item label="GST Number" name="gstNumber"><Input /></Form.Item>
             </Form>
           ) : null
         ) : (
@@ -478,6 +550,13 @@ export default function SuperadminClients() {
               { value: '100-500', label: '100-500' },
               { value: 'More than 500', label: 'More than 500' },
             ]} /></Form.Item>
+            <Form.Item label="Contact Person Name" name="contactPersonName"><Input /></Form.Item>
+            <Form.Item label="Address" name="address"><Input.TextArea rows={2} /></Form.Item>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <Form.Item label="Birth Date" name="birthDate"><DatePicker style={{ width: '100%' }} /></Form.Item>
+              <Form.Item label="Anniversary Date" name="anniversaryDate"><DatePicker style={{ width: '100%' }} /></Form.Item>
+            </div>
+            <Form.Item label="GST Number" name="gstNumber"><Input /></Form.Item>
           </Form>
         )}
       </Modal>
@@ -521,6 +600,10 @@ export default function SuperadminClients() {
 
               <Form.Item name="geolocationEnabled" valuePropName="checked">
                 <Checkbox>Enable Geolocation</Checkbox>
+              </Form.Item>
+
+              <Form.Item name="expenseEnabled" valuePropName="checked">
+                <Checkbox>Enable Expense Module</Checkbox>
               </Form.Item>
             </>
           )}
@@ -635,6 +718,10 @@ export default function SuperadminClients() {
 
           <Form.Item name="geolocationEnabled" valuePropName="checked">
             <Checkbox>Enable Geolocation</Checkbox>
+          </Form.Item>
+
+          <Form.Item name="expenseEnabled" valuePropName="checked">
+            <Checkbox>Enable Expense Module</Checkbox>
           </Form.Item>
 
           <Form.Item

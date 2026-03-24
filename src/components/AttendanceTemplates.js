@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Card, Row, Col, Button, Input, Select, Typography, Space, Tag, Modal, Form, Radio, Switch, message, Dropdown } from 'antd';
+import { Layout, Card, Row, Col, Button, Input, Select, Typography, Space, Tag, Modal, Form, Radio, Switch, message, Dropdown, Table, Popconfirm } from 'antd';
 import { ArrowLeftOutlined, PlusOutlined, MoreOutlined } from '@ant-design/icons';
 import Sidebar from './Sidebar';
 import api from '../api';
@@ -7,7 +7,7 @@ import api from '../api';
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 
-const TemplateCard = ({ name, status, createdBy, assigned, onMenu }) => {
+const TemplateCard = ({ name, status, createdBy, assigned, onMenu, onAssignClick }) => {
   const items = [
     { key: 'edit', label: 'Edit' },
     { key: 'assign', label: 'Assign Staff' },
@@ -25,7 +25,12 @@ const TemplateCard = ({ name, status, createdBy, assigned, onMenu }) => {
           </Space>
         </div>
         <Text type="secondary" style={{ fontSize: 12 }}>Created by: {createdBy}</Text>
-        <Text type="secondary" style={{ fontSize: 12 }}>Assigned Staff: {assigned}</Text>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>Assigned Staff:</Text>
+          <Tag color="cyan" style={{ cursor: 'pointer', margin: 0 }} onClick={onAssignClick}>
+             {assigned || 0}
+          </Tag>
+        </div>
       </Space>
     </Card>
   );
@@ -41,6 +46,11 @@ export default function AttendanceTemplates() {
   const [editingTpl, setEditingTpl] = useState(null);
   const [staffOptions, setStaffOptions] = useState([]);
   const [assignedStaffIds, setAssignedStaffIds] = useState([]);
+
+  const [assignedListOpen, setAssignedListOpen] = useState(false);
+  const [assignedListTpl, setAssignedListTpl] = useState(null);
+  const [assignedListRows, setAssignedListRows] = useState([]);
+  const [assignedListLoading, setAssignedListLoading] = useState(false);
 
   const loadTemplates = async () => {
     try {
@@ -146,6 +156,32 @@ export default function AttendanceTemplates() {
     }
   };
 
+  const openAssignedList = async (tpl, keepOpen = false) => {
+    try {
+      setAssignedListTpl(tpl);
+      if (!keepOpen) setAssignedListOpen(true);
+      setAssignedListLoading(true);
+      const res = await api.get(`/admin/settings/attendance-templates/${tpl.id}/assignments`);
+      setAssignedListRows(res?.data?.assignments || []);
+    } catch (_) {
+      setAssignedListRows([]);
+      message.error('Failed to load assigned staff');
+    } finally {
+      setAssignedListLoading(false);
+    }
+  };
+
+  const unassignStaff = async (assignmentId) => {
+    try {
+      await api.delete(`/admin/settings/attendance-templates/assign/${assignmentId}`);
+      message.success('Staff unassigned');
+      if (assignedListTpl?.id) await openAssignedList(assignedListTpl, true);
+      await loadTemplates();
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to unassign staff');
+    }
+  };
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar />
@@ -172,8 +208,9 @@ export default function AttendanceTemplates() {
                     name={t.name || 'Template'}
                     status={t.status || 'Active'}
                     createdBy={t.createdBy || 'Admin'}
-                    assigned={(t.assignedCount ? `${t.assignedCount} Staffs` : '')}
+                    assigned={t.assignedCount || 0}
                     onMenu={(key) => key === 'edit' ? openEdit(t) : openAssign(t)}
+                    onAssignClick={() => openAssignedList(t)}
                   />
                 </Col>
               ))}
@@ -238,6 +275,39 @@ export default function AttendanceTemplates() {
             onChange={setAssignedStaffIds}
             style={{ width: '100%' }}
             placeholder="Select staff to assign"
+          />
+        </Modal>
+
+        {/* Assigned Staff List Modal */}
+        <Modal
+          title={`Assigned Staff${assignedListTpl ? ` - ${assignedListTpl.name}` : ''}`}
+          open={assignedListOpen}
+          onCancel={() => setAssignedListOpen(false)}
+          footer={null}
+          width={1000}
+        >
+          <Table
+            rowKey="id"
+            loading={assignedListLoading}
+            dataSource={assignedListRows}
+            size="small"
+            pagination={{ pageSize: 8 }}
+            columns={[
+              { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
+              { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
+              { title: 'Phone', render: (_, r) => r.user?.phone || '-' },
+              { title: 'Department', render: (_, r) => r.user?.profile?.department || '-' },
+              { title: 'Designation', render: (_, r) => r.user?.profile?.designation || '-' },
+              {
+                title: 'Action',
+                key: 'action',
+                render: (_, r) => (
+                  <Popconfirm title="Unassign this staff?" onConfirm={() => unassignStaff(r.id)}>
+                    <Button danger size="small">Unassign</Button>
+                  </Popconfirm>
+                )
+              },
+            ]}
           />
         </Modal>
       </Layout>

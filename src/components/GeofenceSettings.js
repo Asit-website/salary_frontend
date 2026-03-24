@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Layout, Card, Button, Modal, Form, Input, Space, Table, Switch, InputNumber, message, Popconfirm, Typography, Select, DatePicker, Dropdown } from 'antd';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Layout, Card, Button, Modal, Form, Input, Space, Table, Switch, InputNumber, message, Popconfirm, Typography, Select, DatePicker, Dropdown, Tag } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ArrowLeftOutlined, MoreOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
@@ -46,7 +46,7 @@ const MapPreview = ({ site, onChange }) => {
     mapRef.current = map; markerRef.current = marker; circleRef.current = circle;
   };
 
-  useEffect(() => { init(); return () => {}; }, []);
+  useEffect(() => { init(); return () => { }; }, []);
   useEffect(() => {
     if (!mapRef.current || !window.google?.maps) return;
     const c = { lat: Number(site.latitude) || 28.6139, lng: Number(site.longitude) || 77.2090 };
@@ -99,7 +99,7 @@ const SitesEditor = ({ value = [], onChange }) => {
         }>
           <Space direction="vertical" style={{ width: '100%' }}>
             <Input placeholder="Site name" value={r.name} onChange={(e) => update(rows.map(x => x.key === r.key ? { ...x, name: e.target.value } : x))} />
-            <Space align="start" style={{ width: '100%' }}>
+            <div style={{ display: 'flex', gap: 8, width: '100%' }}>
               <Input id={`addr-${r.key}`} placeholder="Address (required)" style={{ flex: 1 }} value={r.address} onChange={(e) => update(rows.map(x => x.key === r.key ? { ...x, address: e.target.value } : x))} />
               <Button onClick={async () => {
                 try {
@@ -116,7 +116,7 @@ const SitesEditor = ({ value = [], onChange }) => {
                   });
                 } catch (_) { message.error('Geocoding failed'); }
               }}>Locate</Button>
-            </Space>
+            </div>
             <Space wrap>
               <InputNumber placeholder="Latitude" style={{ width: 160 }} value={r.latitude} onChange={(v) => update(rows.map(x => x.key === r.key ? { ...x, latitude: v } : x))} />
               <InputNumber placeholder="Longitude" style={{ width: 160 }} value={r.longitude} onChange={(v) => update(rows.map(x => x.key === r.key ? { ...x, longitude: v } : x))} />
@@ -131,7 +131,7 @@ const SitesEditor = ({ value = [], onChange }) => {
       ))}
       <Button icon={<PlusOutlined />} onClick={() => update([...
         rows,
-        { key: Date.now(), name: '', address: '', latitude: null, longitude: null, radiusMeters: 100, active: true },
+      { key: Date.now(), name: '', address: '', latitude: null, longitude: null, radiusMeters: 100, active: true },
       ])}>Add Site</Button>
     </Space>
   );
@@ -140,11 +140,17 @@ const SitesEditor = ({ value = [], onChange }) => {
 export default function GeofenceSettings() {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
+  const [assignedCounts, setAssignedCounts] = useState({});
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignTpl, setAssignTpl] = useState(null);
   const [staffOptions, setStaffOptions] = useState([]);
+  const [assignedListOpen, setAssignedListOpen] = useState(false);
+  const [assignedListTpl, setAssignedListTpl] = useState(null);
+  const [assignedListRows, setAssignedListRows] = useState([]);
+  const [assignedListLoading, setAssignedListLoading] = useState(false);
+  const [assignedRows, setAssignedRows] = useState([]);
   const [assignForm] = Form.useForm();
   const [form] = Form.useForm();
   const navigate = useNavigate();
@@ -153,7 +159,9 @@ export default function GeofenceSettings() {
     try {
       setLoading(true);
       const res = await api.get('/admin/geofence/templates');
-      setItems(res?.data?.data || []);
+      const list = res?.data?.data || [];
+      setItems(list);
+      await loadAssignedCounts(list);
     } catch (e) {
       message.error('Failed to load geofence templates');
     } finally { setLoading(false); }
@@ -232,7 +240,35 @@ export default function GeofenceSettings() {
     setAssignTpl(row);
     setAssignOpen(true);
     assignForm.resetFields();
-    await loadStaff();
+    await Promise.all([loadStaff(), loadTemplateAssignments(row.id)]);
+  };
+
+  const loadTemplateAssignments = async (templateId) => {
+    try {
+      const res = await api.get(`/admin/geofence/templates/${templateId}/assignments`);
+      setAssignedRows(res?.data?.assignments || []);
+    } catch (_) {
+      setAssignedRows([]);
+      message.error('Failed to load assigned staff');
+    }
+  };
+
+  const loadAssignedCounts = async (templates) => {
+    try {
+      const rows = Array.isArray(templates) ? templates : [];
+      const pairs = await Promise.all(rows.map(async (tpl) => {
+        try {
+          const res = await api.get(`/admin/geofence/templates/${tpl.id}/assignments`);
+          const count = Array.isArray(res?.data?.assignments) ? res.data.assignments.length : 0;
+          return [tpl.id, count];
+        } catch (_) {
+          return [tpl.id, 0];
+        }
+      }));
+      setAssignedCounts(Object.fromEntries(pairs));
+    } catch (_) {
+      setAssignedCounts({});
+    }
   };
 
   const doAssign = async () => {
@@ -240,13 +276,53 @@ export default function GeofenceSettings() {
       const v = await assignForm.validateFields();
       const ids = v.userIds || [];
       if (!ids.length) { message.warning('Select at least one staff'); return; }
+      const alreadyAssignedUserIds = new Set(
+        (assignedRows || [])
+          .filter((r) => r?.active !== false)
+          .map((r) => r?.user?.id)
+          .filter(Boolean)
+      );
+      const duplicateIds = ids.filter((id) => alreadyAssignedUserIds.has(id));
+      if (duplicateIds.length) {
+        message.warning('Some selected staff are already assigned to this template');
+        return;
+      }
       const eff = v.effectiveFrom ? v.effectiveFrom.format('YYYY-MM-DD') : null;
       await Promise.all(ids.map((id) => api.post('/admin/geofence/assign', { userId: id, geofenceTemplateId: assignTpl.id, effectiveFrom: eff })));
       message.success('Assigned successfully');
-      setAssignOpen(false);
+      assignForm.resetFields(['userIds']);
+      await loadTemplateAssignments(assignTpl.id);
+      await load();
     } catch (e) {
       if (e?.errorFields) return;
       message.error(e?.response?.data?.message || 'Assignment failed');
+    }
+  };
+
+  const unassignStaff = async (assignmentId) => {
+    try {
+      await api.delete(`/admin/geofence/assign/${assignmentId}`);
+      message.success('Staff unassigned');
+      if (assignTpl?.id) await loadTemplateAssignments(assignTpl.id);
+      if (assignedListTpl?.id) await openAssignedList(assignedListTpl, true);
+      await load();
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to unassign staff');
+    }
+  };
+
+  const openAssignedList = async (row, keepOpen = false) => {
+    try {
+      setAssignedListTpl(row);
+      if (!keepOpen) setAssignedListOpen(true);
+      setAssignedListLoading(true);
+      const res = await api.get(`/admin/geofence/templates/${row.id}/assignments`);
+      setAssignedListRows(res?.data?.assignments || []);
+    } catch (_) {
+      setAssignedListRows([]);
+      message.error('Failed to load assigned staff');
+    } finally {
+      setAssignedListLoading(false);
     }
   };
 
@@ -254,28 +330,45 @@ export default function GeofenceSettings() {
     { title: 'Name', dataIndex: 'name' },
     { title: 'Active', dataIndex: 'active', render: (v) => v !== false ? 'Yes' : 'No' },
     { title: 'Sites', dataIndex: 'sites', render: (sites) => Array.isArray(sites) ? sites.length : 0 },
-    { title: 'Actions', key: 'a', render: (_, row) => {
-      const menuItems = [
-        { key: 'edit', label: 'Edit', icon: <EditOutlined />, onClick: () => openEdit(row) },
-        { key: 'assign', label: 'Assign Staff', onClick: () => openAssign(row) },
-        { key: 'delete', label: (
-          <Popconfirm title="Delete template?" onConfirm={() => remove(row)}>
-            <span style={{ color: '#ff4d4f' }}>Delete</span>
-          </Popconfirm>
-        ) },
-      ];
-      return (
-        <Dropdown
-          menu={{
-            items: menuItems.map(it => ({ key: it.key, label: it.label, icon: it.icon, onClick: it.onClick }))
-          }}
-          trigger={["click"]}
+    {
+      title: 'Assigned Staff',
+      key: 'assignedStaff',
+      render: (_, row) => (
+        <Tag
+          color="blue"
+          onClick={() => openAssignedList(row)}
+          style={{ cursor: 'pointer', userSelect: 'none', marginInlineEnd: 0 }}
         >
-          <Button icon={<MoreOutlined />} />
-        </Dropdown>
-      );
-    } },
-  ]), []);
+          {assignedCounts[row.id] || 0}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Actions', key: 'a', render: (_, row) => {
+        const menuItems = [
+          { key: 'edit', label: 'Edit', icon: <EditOutlined />, onClick: () => openEdit(row) },
+          { key: 'assign', label: 'Assign Staff', onClick: () => openAssign(row) },
+          {
+            key: 'delete', label: (
+              <Popconfirm title="Delete template?" onConfirm={() => remove(row)}>
+                <span style={{ color: '#ff4d4f' }}>Delete</span>
+              </Popconfirm>
+            )
+          },
+        ];
+        return (
+          <Dropdown
+            menu={{
+              items: menuItems.map(it => ({ key: it.key, label: it.label, icon: it.icon, onClick: it.onClick }))
+            }}
+            trigger={["click"]}
+          >
+            <Button icon={<MoreOutlined />} />
+          </Dropdown>
+        );
+      }
+    },
+  ]), [assignedCounts]);
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -313,7 +406,14 @@ export default function GeofenceSettings() {
         </Form>
       </Modal>
 
-      <Modal open={assignOpen} title={`Assign Staff${assignTpl ? ` - ${assignTpl.name}` : ''}`} onCancel={() => setAssignOpen(false)} onOk={doAssign} okText="Assign">
+      <Modal
+        open={assignOpen}
+        title={`Assign Staff${assignTpl ? ` - ${assignTpl.name}` : ''}`}
+        onCancel={() => setAssignOpen(false)}
+        onOk={doAssign}
+        okText="Assign"
+        width={1080}
+      >
         <Form form={assignForm} layout="vertical">
           <Form.Item name="userIds" label="Select Staff" rules={[{ required: true, message: 'Select staff' }]}>
             <Select mode="multiple" placeholder="Search and select staff" options={staffOptions} showSearch optionFilterProp="label" />
@@ -322,6 +422,39 @@ export default function GeofenceSettings() {
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        open={assignedListOpen}
+        title={`Assigned Staff${assignedListTpl ? ` - ${assignedListTpl.name}` : ''}`}
+        onCancel={() => setAssignedListOpen(false)}
+        footer={null}
+        width={1080}
+      >
+        <Table
+          rowKey={(r) => r.id}
+          loading={assignedListLoading}
+          dataSource={assignedListRows}
+          size="small"
+          pagination={{ pageSize: 8 }}
+          columns={[
+            { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
+            { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
+            { title: 'Phone', render: (_, r) => r.user?.phone || '-' },
+            { title: 'Dept', render: (_, r) => r.user?.profile?.department || '-' },
+            { title: 'Designation', render: (_, r) => r.user?.profile?.designation || '-' },
+            { title: 'Effective From', dataIndex: 'effectiveFrom', render: (v) => v || '-' },
+            {
+              title: 'Action',
+              key: 'action',
+              render: (_, r) => (
+                <Popconfirm title="Unassign this staff?" onConfirm={() => unassignStaff(r.id)}>
+                  <Button danger size="small">Unassign</Button>
+                </Popconfirm>
+              )
+            },
+          ]}
+        />
       </Modal>
     </Layout>
   );

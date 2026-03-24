@@ -15,7 +15,8 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   FileTextOutlined,
-  UploadOutlined
+  UploadOutlined,
+  CloseCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
@@ -41,6 +42,10 @@ const StaffManagement = () => {
   const [filteredStaff, setFilteredStaff] = useState([]);
   const [salaryTemplates, setSalaryTemplates] = useState([]);
   const [letterTemplates, setLetterTemplates] = useState([]);
+  const [updatingStaffId, setUpdatingStaffId] = useState(null);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [attachmentPreviews, setAttachmentPreviews] = useState([]);
   const [issueModalVisible, setIssueModalVisible] = useState(false);
   const [issuingLetter, setIssuingLetter] = useState(false);
   const [issuingForStaff, setIssuingForStaff] = useState(null);
@@ -49,12 +54,14 @@ const StaffManagement = () => {
   const [exporting, setExporting] = useState(false);
   const [importResults, setImportResults] = useState(null);
   const [issueForm] = Form.useForm();
+  const [departments, setDepartments] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchStaff();
     fetchSalaryTemplates();
     fetchLetterTemplates();
+    fetchDepartments();
   }, []);
 
   const fetchLetterTemplates = async () => {
@@ -155,6 +162,21 @@ const StaffManagement = () => {
       console.error('Failed to fetch salary templates:', error);
     }
   };
+  
+  const fetchDepartments = async () => {
+    try {
+      const resp = await api.get('/admin/business-functions');
+      const list = resp?.data?.data || [];
+      const deptFn = list.find((f) => String(f.name || '').toLowerCase() === 'department');
+      const values = Array.isArray(deptFn?.values) ? deptFn.values : [];
+      const items = values
+        .filter((v) => v && v.value)
+        .map((v) => ({ id: v.id, name: v.value }));
+      setDepartments(items);
+    } catch (_) {
+      setDepartments([]);
+    }
+  };
 
   // Calculate stats
   const totalEmployees = filteredStaff.length;
@@ -203,6 +225,11 @@ const StaffManagement = () => {
       key: 'import',
       label: 'Import Staff',
       icon: <UploadOutlined />,
+    },
+    {
+      key: 'export',
+      label: 'Export Staff',
+      icon: <DownloadOutlined />,
     }
   ];
 
@@ -214,6 +241,8 @@ const StaffManagement = () => {
     } else if (key === 'import') {
       setImportModalVisible(true);
       setImportResults(null);
+    } else if (key === 'export') {
+      handleExport();
     }
   };
 
@@ -224,6 +253,60 @@ const StaffManagement = () => {
   const handleEditStaff = (staffMember) => {
     // Navigate to AddRegularStaff page with prefilled data
     navigate('/add-regular-staff', { state: { staff: staffMember } });
+  };
+
+  const handleToggleStaffStatus = async (record, checked) => {
+    setUpdatingStaffId(record.id);
+    try {
+      const resp = await api.put(`/admin/staff/${record.id}`, { active: checked });
+      if (resp.data.success) {
+        message.success(`Staff ${checked ? 'activated' : 'deactivated'} successfully`);
+        fetchStaff();
+      }
+    } catch (error) {
+      console.error('Failed to toggle staff status:', error);
+      message.error('Failed to update status');
+    } finally {
+      setUpdatingStaffId(null);
+    }
+  };
+
+  const handleDepartmentChange = async (record, value) => {
+    setUpdatingStaffId(record.id);
+    try {
+      const resp = await api.put(`/admin/staff/${record.id}`, { department: value });
+      if (resp.data.success) {
+        message.success('Department updated successfully');
+        fetchStaff();
+      }
+    } catch (error) {
+      console.error('Failed to update department:', error);
+      message.error('Failed to update department');
+    } finally {
+      setUpdatingStaffId(null);
+    }
+  };
+
+  const handleUpdateAllStaff = async () => {
+    Modal.confirm({
+      title: 'Update All Staff Data',
+      content: 'This will synchronize salary data and profiles for all staff members. Proceed?',
+      onOk: async () => {
+        try {
+          setBulkUpdating(true);
+          const resp = await api.put('/admin/staff/bulk-refresh');
+          if (resp.data.success) {
+            message.success(resp.data.message || 'All staff data updated successfully');
+            fetchStaff();
+          }
+        } catch (error) {
+          console.error('Failed to update all staff:', error);
+          message.error('Failed to update all staff data');
+        } finally {
+          setBulkUpdating(false);
+        }
+      }
+    });
   };
 
   const handleDeleteStaff = async (staffId) => {
@@ -362,10 +445,20 @@ const StaffManagement = () => {
       title: 'Department',
       dataIndex: 'department',
       key: 'department',
-      render: (department) => (
-        <Tag color="purple" style={{ fontSize: '12px' }}>
-          {department || 'General'}
-        </Tag>
+      render: (department, record) => (
+        <Select
+          value={department || 'General'}
+          style={{ width: 120 }}
+          bordered={true}
+          onChange={(val) => handleDepartmentChange(record, val)}
+          disabled={updatingStaffId === record.id}
+          size="small"
+        >
+          {departments.map(d => (
+            <Option key={d.id} value={d.name}>{d.name}</Option>
+          ))}
+          {departments.length === 0 && <Option value="General">General</Option>}
+        </Select>
       ),
     },
     {
@@ -382,13 +475,18 @@ const StaffManagement = () => {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => (
-        <Tag
-          color={status === 'active' ? 'green' : 'red'}
-          style={{ fontSize: '12px' }}
-        >
-          {status}
-        </Tag>
+      render: (status, record) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Switch
+            size="small"
+            checked={status === 'active'}
+            onChange={(checked) => handleToggleStaffStatus(record, checked)}
+            loading={updatingStaffId === record.id}
+          />
+          <Text style={{ fontSize: '12px', color: status === 'active' ? '#52c41a' : '#bfbfbf', fontWeight: '500' }}>
+            {status === 'active' ? 'Active' : 'Inactive'}
+          </Text>
+        </div>
       ),
     },
     {
@@ -417,18 +515,10 @@ const StaffManagement = () => {
                 onClick: () => {
                   setIssuingForStaff(record);
                   setIssueModalVisible(true);
+                  setAttachments([]);
+                  setAttachmentPreviews([]);
                   issueForm.resetFields();
                 }
-              },
-              {
-                type: 'divider',
-              },
-              {
-                key: 'delete',
-                icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
-                label: 'Delete',
-                onClick: () => handleDeleteStaff(record.id),
-                danger: true
               }
             ]
           }}
@@ -490,13 +580,23 @@ const StaffManagement = () => {
             <Form form={issueForm} layout="vertical" onFinish={async (values) => {
               setIssuingLetter(true);
               try {
-                const resp = await api.post('/admin/letters/issue', {
-                  staffUserId: issuingForStaff.id,
-                  templateId: values.templateId,
+                const formData = new FormData();
+                formData.append('staffUserId', issuingForStaff.id);
+                formData.append('templateId', values.templateId);
+                
+                if (attachments && attachments.length > 0) {
+                    attachments.forEach(file => formData.append('attachments', file));
+                }
+
+                const resp = await api.post('/admin/letters/issue', formData, {
+                  headers: { 'Content-Type': 'multipart/form-data' }
                 });
+
                 if (resp.data.success) {
                   message.success('Letter issued successfully');
                   setIssueModalVisible(false);
+                  setAttachments([]);
+                  setAttachmentPreviews([]);
                   navigate('/settings/letters');
                 } else {
                   message.error(resp.data.message || 'Failed to issue letter');
@@ -514,86 +614,77 @@ const StaffManagement = () => {
                   ))}
                 </Select>
               </Form.Item>
-              <Text type="secondary">The letter will be generated based on the selected template with staff details automatically filled in.</Text>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>The letter will be generated based on the selected template with staff details automatically filled in.</Text>
+              
+              <div style={{ marginTop: 20 }}>
+                <Text strong style={{ display: 'block', marginBottom: 8 }}>Additional Attachments (Optional)</Text>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                  <Button
+                    icon={<UploadOutlined />}
+                    onClick={() => document.getElementById('staff-letter-attachment-input-modal').click()}
+                  >
+                    Select Files
+                  </Button>
+                  <input
+                    id="staff-letter-attachment-input-modal"
+                    type="file"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files);
+                      if (files.length > 0) {
+                        const total = attachments.length + files.length;
+                        if (total > 5) {
+                          message.warning('You can only upload up to 5 attachments');
+                          return;
+                        }
+
+                        setAttachments([...attachments, ...files]);
+                        
+                        files.forEach(file => {
+                          if (file.type.startsWith('image/')) {
+                            const reader = new FileReader();
+                            reader.onload = (re) => {
+                              setAttachmentPreviews(prev => [...prev, { name: file.name, preview: re.target.result }]);
+                            };
+                            reader.readAsDataURL(file);
+                          } else {
+                            setAttachmentPreviews(prev => [...prev, { name: file.name, preview: 'file' }]);
+                          }
+                        });
+                      }
+                    }}
+                  />
+                </div>
+                
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {attachments.map((file, idx) => {
+                    const previewObj = attachmentPreviews.find(p => p.name === file.name);
+                    return (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', background: '#f5f5f5', borderRadius: 4 }}>
+                        {previewObj?.preview === 'file' ? (
+                          <FileTextOutlined style={{ fontSize: 20, color: '#125EC9' }} />
+                        ) : (
+                          <img src={previewObj?.preview} alt="preview" style={{ width: 30, height: 30, objectFit: 'cover', borderRadius: 2 }} />
+                        )}
+                        <Text ellipsis style={{ flex: 1 }}>{file.name}</Text>
+                        <CloseCircleOutlined
+                          style={{ color: '#ff4d4f', cursor: 'pointer' }}
+                          onClick={() => {
+                            const newAttachments = attachments.filter((_, i) => i !== idx);
+                            const newPreviews = attachmentPreviews.filter(p => p.name !== file.name);
+                            setAttachments(newAttachments);
+                            setAttachmentPreviews(newPreviews);
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </Form>
           </Modal>
-          {/* Search Filter at Top */}
-          <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
-            <Col xs={24}>
-              <Card
-                style={{
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-                  borderRadius: '4px',
-                  border: '1px solid #e8e8e8'
-                }}
-                bodyStyle={{ padding: '16px' }}
-              >
-                <Row gutter={[16, 16]}>
-                  <Col xs={24} md={8}>
-                    <Search
-                      placeholder="Search by name, email, staff ID, phone..."
-                      allowClear
-                      enterButton={<SearchOutlined />}
-                      size="large"
-                      onSearch={handleSearch}
-                      onChange={(e) => handleSearch(e.target.value)}
-                      style={{ width: '100%' }}
-                    />
-                  </Col>
-                  <Col xs={24} md={4}>
-                    <Select
-                      placeholder="Filter by Role"
-                      allowClear
-                      size="large"
-                      style={{ width: '100%' }}
-                      value={filterRole || undefined}
-                      onChange={setFilterRole}
-                    >
-                      <Option value="admin">Admin</Option>
-                      <Option value="staff">Staff</Option>
-                    </Select>
-                  </Col>
-                  <Col xs={24} md={4}>
-                    <Select
-                      placeholder="Filter by Status"
-                      allowClear
-                      size="large"
-                      style={{ width: '100%' }}
-                      value={filterStatus || undefined}
-                      onChange={setFilterStatus}
-                    >
-                      <Option value="active">Active</Option>
-                      <Option value="inactive">Inactive</Option>
-                    </Select>
-                  </Col>
-                  <Col xs={24} md={4}>
-                    <Select
-                      placeholder="Filter by Department"
-                      allowClear
-                      size="large"
-                      style={{ width: '100%' }}
-                      value={filterDepartment || undefined}
-                      onChange={setFilterDepartment}
-                    >
-                      {uniqueDepartments.map(dept => (
-                        <Option key={dept} value={dept}>{dept}</Option>
-                      ))}
-                    </Select>
-                  </Col>
-                  <Col xs={24} md={4}>
-                    <Button
-                      icon={<FilterOutlined />}
-                      size="large"
-                      onClick={handleFilterReset}
-                      style={{ width: '100%' }}
-                    >
-                      Reset Filters
-                    </Button>
-                  </Col>
-                </Row>
-              </Card>
-            </Col>
-          </Row>
+
 
           {/* Top Stats Cards */}
           <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
@@ -804,16 +895,25 @@ const StaffManagement = () => {
             }}
             title={
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Title level={4} style={{ margin: 0, color: '#262626' }}>Staff Management</Title>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <Title level={4} style={{ margin: 0, color: '#262626' }}>Staff Management</Title>
+                  <Search
+                    placeholder="Search staff..."
+                    allowClear
+                    onSearch={handleSearch}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    style={{ width: 250 }}
+                  />
+                </div>
                 <Space>
                   <Button
-                    icon={<DownloadOutlined />}
-                    type="text"
-                    style={{ color: '#1890ff' }}
-                    onClick={handleExport}
-                    loading={exporting}
+                    type="primary"
+                    style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                    icon={<PlusOutlined />}
+                    onClick={handleUpdateAllStaff}
+                    loading={bulkUpdating}
                   >
-                    Export
+                    Update All Staff
                   </Button>
                   <Dropdown
                     menu={{
@@ -918,13 +1018,10 @@ const StaffManagement = () => {
                     rules={[{ required: true, message: 'Please select department' }]}
                   >
                     <Select placeholder="Select department">
-                      <Option value="IT">IT</Option>
-                      <Option value="HR">HR</Option>
-                      <Option value="Sales">Sales</Option>
-                      <Option value="Marketing">Marketing</Option>
-                      <Option value="Finance">Finance</Option>
-                      <Option value="Operations">Operations</Option>
-                      <Option value="General">General</Option>
+                      {departments.map(d => (
+                        <Option key={d.id} value={d.name}>{d.name}</Option>
+                      ))}
+                      {departments.length === 0 && <Option value="General">General</Option>}
                     </Select>
                   </Form.Item>
                 </Col>

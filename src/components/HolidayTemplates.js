@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Layout, Card, Row, Col, Button, Input, Typography, Space, Tag, Modal, Form, Select, DatePicker, message } from 'antd';
 import { ArrowLeftOutlined, PlusOutlined, MoreOutlined } from '@ant-design/icons';
+import { Table, Popconfirm } from 'antd';
 import dayjs from 'dayjs';
 import Sidebar from './Sidebar';
 import api from '../api';
@@ -24,12 +25,17 @@ const TemplateCard = ({ tpl, onEdit, onAssign }) => (
         <Text strong>{tpl.name}</Text>
         <Space>
           <Tag color={tpl.active ? 'green' : 'red'}>{tpl.active ? 'Active' : 'Inactive'}</Tag>
-          <Button size="small" onClick={() => onAssign?.(tpl)}>Assign</Button>
+          <Button size="small" onClick={() => onAssign?.openAssign?.(tpl)}>Assign</Button>
           <Button size="small" icon={<MoreOutlined />} onClick={() => onEdit?.(tpl)} />
         </Space>
       </div>
       <Text type="secondary" style={{ fontSize: 12 }}>Holidays: {(tpl.holidays || []).length}</Text>
-      <Text type="secondary" style={{ fontSize: 12 }}>Assigned Staff: {tpl.assignedCount || 0}</Text>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>Assigned Staff:</Text>
+        <Tag color="blue" style={{ cursor: 'pointer', margin: 0 }} onClick={() => onAssign?.openAssignedList?.(tpl)}>
+          {tpl.assignedCount || 0}
+        </Tag>
+      </div>
     </Space>
   </Card>
 );
@@ -46,6 +52,11 @@ export default function HolidayTemplates(){
   const [selectedStaffIds, setSelectedStaffIds] = useState([]);
   const [effectiveFrom, setEffectiveFrom] = useState(null);
   const [effectiveTo, setEffectiveTo] = useState(null);
+
+  const [assignedListOpen, setAssignedListOpen] = useState(false);
+  const [assignedListTpl, setAssignedListTpl] = useState(null);
+  const [assignedListRows, setAssignedListRows] = useState([]);
+  const [assignedListLoading, setAssignedListLoading] = useState(false);
 
   const load = async () => {
     try {
@@ -145,6 +156,32 @@ export default function HolidayTemplates(){
     }
   };
 
+  const openAssignedList = async (tpl, keepOpen = false) => {
+    try {
+      setAssignedListTpl(tpl);
+      if (!keepOpen) setAssignedListOpen(true);
+      setAssignedListLoading(true);
+      const res = await api.get(`/admin/holidays/templates/${tpl.id}/assignments`);
+      setAssignedListRows(res?.data?.assignments || []);
+    } catch (_) {
+      setAssignedListRows([]);
+      message.error('Failed to load assigned staff');
+    } finally {
+      setAssignedListLoading(false);
+    }
+  };
+
+  const unassignStaff = async (assignmentId) => {
+    try {
+      await api.delete(`/admin/holidays/assign/${assignmentId}`);
+      message.success('Staff unassigned');
+      if (assignedListTpl?.id) await openAssignedList(assignedListTpl, true);
+      await load();
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to unassign staff');
+    }
+  };
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar />
@@ -165,7 +202,7 @@ export default function HolidayTemplates(){
           <Row gutter={[16, 16]}>
             {(list || []).map((t) => (
               <Col key={t.id} xs={24} sm={12} lg={8}>
-                <TemplateCard tpl={t} onEdit={openEdit} onAssign={openAssign} />
+                <TemplateCard tpl={t} onEdit={openEdit} onAssign={{ openAssign, openAssignedList }} />
               </Col>
             ))}
           </Row>
@@ -238,6 +275,40 @@ export default function HolidayTemplates(){
               <Col span={12}><DatePicker value={effectiveTo} onChange={setEffectiveTo} style={{ width:'100%' }} placeholder="Effective to (optional)" /></Col>
             </Row>
           </Space>
+        </Modal>
+
+        {/* Assigned Staff List Modal */}
+        <Modal
+          title={`Assigned Staff${assignedListTpl ? ` - ${assignedListTpl.name}` : ''}`}
+          open={assignedListOpen}
+          onCancel={() => setAssignedListOpen(false)}
+          footer={null}
+          width={1000}
+        >
+          <Table
+            rowKey="id"
+            loading={assignedListLoading}
+            dataSource={assignedListRows}
+            size="small"
+            pagination={{ pageSize: 8 }}
+            columns={[
+              { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
+              { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
+              { title: 'Phone', render: (_, r) => r.user?.phone || '-' },
+              { title: 'Department', render: (_, r) => r.user?.profile?.department || '-' },
+              { title: 'Designation', render: (_, r) => r.user?.profile?.designation || '-' },
+              { title: 'Effective From', dataIndex: 'effectiveFrom', render: (v) => v || '-' },
+              {
+                title: 'Action',
+                key: 'action',
+                render: (_, r) => (
+                  <Popconfirm title="Unassign this staff?" onConfirm={() => unassignStaff(r.id)}>
+                    <Button danger size="small">Unassign</Button>
+                  </Popconfirm>
+                )
+              },
+            ]}
+          />
         </Modal>
       </Layout>
     </Layout>

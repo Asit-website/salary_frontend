@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Form, Input, Select, Button, message, Space, Typography, Row, Col, Switch, Steps, DatePicker, InputNumber } from 'antd';
+import { Layout, Card, Form, Input, Select, Button, message, Space, Typography, Row, Col, Switch, Steps, DatePicker, InputNumber, Upload } from 'antd';
 import dayjs from 'dayjs';
 import {
   UserOutlined,
   HomeOutlined,
   TeamOutlined,
-  ArrowLeftOutlined
+  ArrowLeftOutlined,
+  LoadingOutlined,
+  PlusOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api from '../api';
+import api, { API_BASE_URL } from '../api';
 import Sidebar from './Sidebar';
 
 const { Header, Content } = Layout;
@@ -18,6 +21,8 @@ const { Step } = Steps;
 
 const AddRegularStaff = () => {
   const [loading, setLoading] = useState(false);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState('');
   const [form] = Form.useForm();
   const [currentStep, setCurrentStep] = useState(0);
   const [salaryTemplates, setSalaryTemplates] = useState([]);
@@ -36,6 +41,7 @@ const AddRegularStaff = () => {
   const location = useLocation();
   const editingStaff = location.state?.staff || null;
   const isEditing = !!editingStaff;
+  const requiredRule = (message) => (isEditing ? [] : [{ required: true, message }]);
 
   useEffect(() => {
     if (lastAddedEarningId) {
@@ -56,9 +62,7 @@ const AddRegularStaff = () => {
   }, [lastAddedDeductionId]);
 
   const phoneWatch = Form.useWatch('phone', form);
-  const emailWatch = Form.useWatch('email', form);
   const salaryTemplateWatch = Form.useWatch('salaryTemplate', form);
-  const designationWatch = Form.useWatch('designation', form);
   const basicSalaryWatch = Form.useWatch('basic_salary', form);
   const daWatch = Form.useWatch('da', form);
   const hraWatch = Form.useWatch('hra', form);
@@ -88,14 +92,14 @@ const AddRegularStaff = () => {
       if (max === null) {
         if (t >= min) return Number(s?.amount || 0);
       } else if (Number.isFinite(max)) {
-        if (t >= min && t < max) return Number(s?.amount || 0);
+        if (t >= min && t <= max) return Number(s?.amount || 0);
       }
     }
     return 0;
   };
 
   const step0HasErrors = () => {
-    const errs = form.getFieldsError(['phone', 'email', 'salaryTemplate', 'designation']);
+    const errs = form.getFieldsError(['phone', 'email', 'salaryTemplate']);
     return errs.some(e => (e.errors || []).length > 0);
   };
 
@@ -125,9 +129,48 @@ const AddRegularStaff = () => {
   };
 
   const isStep0Complete = () => {
-    const filled = !!(phoneWatch && emailWatch && salaryTemplateWatch && designationWatch);
+    if (isEditing) return true;
+    const filled = !!(phoneWatch && salaryTemplateWatch);
     if (!filled) return false;
     return !step0HasErrors();
+  };
+
+  const isSalaryFieldVisible = (fieldKey) => {
+    const toKV = (objOrArr) => {
+      if (!objOrArr) return {};
+      let src = objOrArr;
+      if (typeof src === 'string') {
+        try { src = JSON.parse(src); } catch (_) { return {}; }
+      }
+      if (Array.isArray(src)) {
+        const out = {};
+        src.flatMap((x) => (Array.isArray(x) ? x : [x])).forEach((it) => {
+          const key = (it.key || it.name || '').toString();
+          const val = Number(it.valueNumber ?? it.value_number ?? it.value ?? 0);
+          if (key) out[key] = val;
+        });
+        return out;
+      }
+      return src && typeof src === 'object' ? src : {};
+    };
+
+    const earningsTpl = selectedTemplate ? toKV(selectedTemplate.earnings) : null;
+    const deductionsTpl = selectedTemplate ? toKV(selectedTemplate.deductions) : null;
+    const tplEmpty = (!earningsTpl || Object.keys(earningsTpl).length === 0) && (!deductionsTpl || Object.keys(deductionsTpl).length === 0);
+    const showAll = !selectedTemplate || tplEmpty;
+    if (showAll) return true;
+    return !!(earningsTpl && Object.prototype.hasOwnProperty.call(earningsTpl, fieldKey));
+  };
+
+  const isStep1Complete = () => {
+    if (isEditing) return true;
+    const isFilled = (v) => v !== undefined && v !== null && String(v).trim() !== '';
+    const requiredChecks = [];
+    if (isSalaryFieldVisible('BASIC SALARY')) requiredChecks.push(isFilled(basicSalaryWatch));
+    if (isSalaryFieldVisible('HRA')) requiredChecks.push(isFilled(hraWatch));
+    if (isSalaryFieldVisible('DA')) requiredChecks.push(isFilled(daWatch));
+    if (requiredChecks.length === 0) return true;
+    return requiredChecks.every(Boolean);
   };
 
   // Fetch salary templates, attendance templates, and shift templates on component mount
@@ -137,7 +180,21 @@ const AddRegularStaff = () => {
     fetchShiftTemplates();
     fetchDepartments();
 
+    // Fetch education/experience if available
     if (isEditing) {
+      if (editingStaff.profile?.education) {
+        // education expect Array of {degree, institution, year}
+      }
+      if (editingStaff.profile?.experience) {
+        // experience expect Array of {company, designation, duration}
+      }
+    }
+
+    if (isEditing) {
+      const pUrl = editingStaff.photoUrl || editingStaff.profile?.photoUrl;
+      if (pUrl) {
+        setPhotoUrl(pUrl);
+      }
       console.log('Editing staff:', editingStaff);
 
       // Parse salaryValues if it's a string
@@ -170,6 +227,19 @@ const AddRegularStaff = () => {
 
       const ob = editingStaff.openingBalance || 0;
 
+      const parseJSON = (val) => {
+        if (!val) return [];
+        if (typeof val === 'string') {
+          try {
+            const p = JSON.parse(val);
+            return Array.isArray(p) ? p : [];
+          } catch (e) {
+            return [];
+          }
+        }
+        return Array.isArray(val) ? val : [];
+      };
+
       form.setFieldsValue({
         staffName: editingStaff.name,
         phone: editingStaff.phone,
@@ -181,7 +251,7 @@ const AddRegularStaff = () => {
         dateOfJoining: editingStaff.dateOfJoining ? dayjs(editingStaff.dateOfJoining) : null,
         staffType: editingStaff.staffType,
         salaryTemplate: editingStaff.salaryTemplateId,
-        shiftSelection: editingStaff.shiftSelection,
+        shiftSelection: editingStaff.shiftSelection ? Number(editingStaff.shiftSelection) : undefined,
         openingBalanceAmount: Math.abs(ob),
         openingBalanceType: ob < 0 ? 'pending' : 'advance',
         salaryDetailAccess: !!editingStaff.salaryDetailAccess,
@@ -199,6 +269,8 @@ const AddRegularStaff = () => {
         income_tax: db.income_tax ?? editingStaff.tdsDeduction,
         loan_deduction: db.loan_deduction ?? editingStaff.otherDeductions,
         other_deductions: db.other_deductions ?? editingStaff.otherDeductions,
+        education: parseJSON(editingStaff.education || editingStaff.profile?.education),
+        experience: parseJSON(editingStaff.experience || editingStaff.profile?.experience),
       });
 
       if (editingStaff.salaryTemplateId) {
@@ -206,6 +278,55 @@ const AddRegularStaff = () => {
       }
     }
   }, [isEditing, editingStaff]);
+
+  const beforePhotoUpload = (file) => {
+    const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
+    if (!isJpgOrPng) {
+      message.error('You can only upload JPG/PNG file!');
+    }
+    const isLt2M = file.size / 1024 / 1024 < 2;
+    if (!isLt2M) {
+      message.error('Image must smaller than 2MB!');
+    }
+    return isJpgOrPng && isLt2M;
+  };
+
+  const handlePhotoUpload = async (info) => {
+    const { file } = info;
+    if (file.status === 'uploading') {
+      setPhotoLoading(true);
+      return;
+    }
+
+    // Custom upload logic
+    try {
+      setPhotoLoading(true);
+      const formData = new FormData();
+      formData.append('photo', file.originFileObj || file);
+
+      const response = await api.post('/admin/upload-profile-photo', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data.success) {
+        setPhotoUrl(response.data.photoUrl);
+        message.success('Photo uploaded successfully');
+      }
+    } catch (error) {
+      console.error('Photo upload error:', error);
+      message.error('Failed to upload photo');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const getFullImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    return `${API_BASE_URL}${url}`;
+  };
 
   const fetchSalaryTemplates = async () => {
     try {
@@ -404,6 +525,10 @@ const AddRegularStaff = () => {
       title: 'Salary Details',
       content: 'salary',
     },
+    {
+      title: 'Education & Experience',
+      content: 'education_experience',
+    },
   ];
 
   const next = () => {
@@ -424,19 +549,13 @@ const AddRegularStaff = () => {
       const emailVal = (allValues.email || '').toString().trim();
       const salaryTemplateVal = allValues.salaryTemplate;
 
-      if (!phoneVal) {
+      if (!isEditing && !phoneVal) {
         setLoading(false);
         message.error('Phone is required');
         setCurrentStep(0);
         return;
       }
-      if (!emailVal) {
-        setLoading(false);
-        message.error('Email is required');
-        setCurrentStep(0);
-        return;
-      }
-      if (!salaryTemplateVal) {
+      if (!isEditing && !salaryTemplateVal) {
         setLoading(false);
         message.error('Salary template is required');
         setCurrentStep(0);
@@ -599,7 +718,7 @@ const AddRegularStaff = () => {
         phone: phoneVal,
         name: allValues.staffName,
         email: emailVal,
-        password: allValues.password || '123456', // Default password if not provided
+        password: isEditing ? (allValues.password || undefined) : (allValues.password || '123456'), // Default password for new staff only
 
         // Additional Form Fields
         department: allValues.department,
@@ -613,13 +732,18 @@ const AddRegularStaff = () => {
         openingBalanceType: obType,
         salaryDetailAccess: !!allValues.salaryDetailAccess,
         allowCurrentCycleSalaryAccess: !!allValues.allowCurrentCycleSalaryAccess,
-        active: allValues.active !== false, // Default to true if not specified
+        active: allValues.active !== undefined
+          ? allValues.active !== false
+          : (isEditing ? (editingStaff?.active !== false) : true),
 
         // Salary Template
         salaryTemplateId: salaryTemplateVal,
 
         // Salary Values (structured for backend)
-        salaryValues
+        salaryValues,
+        photoUrl,
+        education: allValues.education || [],
+        experience: allValues.experience || []
       };
 
       const response = isEditing
@@ -746,6 +870,29 @@ const AddRegularStaff = () => {
                   }}
                 >
                   <Row gutter={[16, 16]}>
+                    <Col span={24} style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+                      <Upload
+                        name="avatar"
+                        listType="picture-card"
+                        className="avatar-uploader"
+                        showUploadList={false}
+                        beforeUpload={beforePhotoUpload}
+                        customRequest={handlePhotoUpload}
+                      >
+                        {photoUrl ? (
+                          <img
+                            src={getFullImageUrl(photoUrl)}
+                            alt="avatar"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }}
+                          />
+                        ) : (
+                          <div>
+                            {photoLoading ? <LoadingOutlined /> : <PlusOutlined />}
+                            <div style={{ marginTop: 8 }}>Upload Photo</div>
+                          </div>
+                        )}
+                      </Upload>
+                    </Col>
                     <Col span={12}>
                       <Form.Item
                         name="staffName"
@@ -758,7 +905,7 @@ const AddRegularStaff = () => {
                       <Form.Item
                         name="phone"
                         label="Phone Number"
-                        rules={[{ required: true, message: 'Please enter phone number' }]}
+                        rules={requiredRule('Please enter phone number')}
                       >
                         <Input placeholder="Enter phone number" style={{ height: '40px' }} />
                       </Form.Item>
@@ -791,17 +938,9 @@ const AddRegularStaff = () => {
                         label="Department"
                       >
                         <Select placeholder="Select department" style={{ height: '40px' }}>
-                          {departments.length > 0 ? (
-                            departments.map((d) => (
-                              <Option key={d.id || d.name} value={d.name}>{d.name}</Option>
-                            ))
-                          ) : (
-                            [
-                              'IT', 'HR', 'Sales', 'Marketing', 'Finance', 'Operations', 'General'
-                            ].map((n) => (
-                              <Option key={n} value={n}>{n}</Option>
-                            ))
-                          )}
+                          {departments.length > 0 && departments.map((d) => (
+                            <Option key={d.id || d.name} value={d.name}>{d.name}</Option>
+                          ))}
                         </Select>
                       </Form.Item>
                     </Col>
@@ -855,7 +994,7 @@ const AddRegularStaff = () => {
                       <Form.Item
                         name="salaryTemplate"
                         label="Salary Template"
-                        rules={[{ required: true, message: 'Please select salary template' }]}
+                        rules={requiredRule('Please select salary template')}
                       >
                         <Select
                           placeholder="Select salary template"
@@ -945,7 +1084,6 @@ const AddRegularStaff = () => {
                         name="email"
                         label="Email Address"
                         rules={[
-                          { required: true, message: 'Please enter email' },
                           { type: 'email', message: 'Please enter valid email' }
                         ]}
                       >
@@ -956,7 +1094,6 @@ const AddRegularStaff = () => {
                       <Form.Item
                         name="designation"
                         label="Designation"
-                        rules={[{ required: true, message: 'Please enter designation' }]}
                       >
                         <Input placeholder="Enter designation" style={{ height: '40px' }} />
                       </Form.Item>
@@ -994,7 +1131,7 @@ const AddRegularStaff = () => {
                         <Form.Item
                           name="basic_salary"
                           label="Basic Salary"
-                          rules={[{ required: true, message: 'Please enter basic salary' }]}
+                          rules={requiredRule('Please enter basic salary')}
                         >
                           <Input type="number" placeholder="Enter basic salary" style={{ height: '40px' }} />
                         </Form.Item>
@@ -1005,7 +1142,7 @@ const AddRegularStaff = () => {
                         <Form.Item
                           name="hra"
                           label="HRA"
-                          rules={[{ required: true, message: 'Please enter HRA' }]}
+                          rules={requiredRule('Please enter HRA')}
                         >
                           <Input type="number" placeholder="Enter HRA amount" style={{ height: '40px' }} />
                         </Form.Item>
@@ -1016,7 +1153,7 @@ const AddRegularStaff = () => {
                         <Form.Item
                           name="da"
                           label="DA"
-                          rules={[{ required: true, message: 'Please enter DA' }]}
+                          rules={requiredRule('Please enter DA')}
                         >
                           <Input type="number" placeholder="Enter DA amount" style={{ height: '40px' }} />
                         </Form.Item>
@@ -1274,99 +1411,109 @@ const AddRegularStaff = () => {
         );
       case 2:
         return (
-          <Row gutter={24}>
-            <Col span={12}>
-              <Form.Item
-                name="basic_salary"
-                label="Basic Salary"
-                rules={[{ required: true, message: 'Please enter basic salary' }]}
-              >
-                <Input type="number" placeholder="Enter basic salary" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="hra"
-                label="HRA"
-                rules={[{ required: true, message: 'Please enter HRA' }]}
-              >
-                <Input type="number" placeholder="Enter HRA amount" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="da"
-                label="DA"
-                rules={[{ required: true, message: 'Please enter DA' }]}
-              >
-                <Input type="number" placeholder="Enter DA amount" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="special_allowance"
-                label="Special Allowance"
-              >
-                <Input type="number" placeholder="Enter special allowance" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="conveyance_allowance"
-                label="Conveyance Allowance"
-              >
-                <Input type="number" placeholder="Enter conveyance allowance" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="medical_allowance"
-                label="Medical Allowance"
-              >
-                <Input type="number" placeholder="Enter medical allowance" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="telephone_allowance"
-                label="Telephone Allowance"
-              >
-                <Input type="number" placeholder="Enter telephone allowance" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="other_allowances"
-                label="Other Allowances"
-              >
-                <Input type="number" placeholder="Enter other allowances" />
-              </Form.Item>
-            </Col>
-          </Row>
-        );
-      case 3:
-        return (
-          <Row gutter={24}>
-            <Col span={12}>
-              <Form.Item
-                name="password"
-                label="Password"
-                rules={[{ required: !isEditing, message: 'Please enter password' }]}
-              >
-                <Input.Password placeholder={isEditing ? "Leave blank to keep current password" : "Enter password"} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="active"
-                label="Status"
-                valuePropName="checked"
-                initialValue={true}
-              >
-                <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
-              </Form.Item>
-            </Col>
-          </Row>
+          <>
+            <Card title="Education Details" style={{ marginBottom: 24 }}>
+              <Form.List name="education">
+                {(fields, { add, remove }) => (
+                  <>
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Row gutter={16} key={key} align="middle">
+                        <Col span={8}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'degree']}
+                            label="Degree"
+                            rules={requiredRule('Missing degree')}
+                          >
+                            <Input placeholder="MCA, B.Tech, etc." />
+                          </Form.Item>
+                        </Col>
+                        <Col span={7}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'institution']}
+                            label="Institution"
+                            rules={requiredRule('Missing institution')}
+                          >
+                            <Input placeholder="University Name" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={7}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'year']}
+                            label="Year"
+                            rules={requiredRule('Missing year')}
+                          >
+                            <Input placeholder="2020" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={2}>
+                          <Button danger type="link" onClick={() => remove(name)} icon={<DeleteOutlined />} />
+                        </Col>
+                      </Row>
+                    ))}
+                    <Form.Item>
+                      <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                        Add Education
+                      </Button>
+                    </Form.Item>
+                  </>
+                )}
+              </Form.List>
+            </Card>
+
+            <Card title="Experience Details">
+              <Form.List name="experience">
+                {(fields, { add, remove }) => (
+                  <>
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Row gutter={16} key={key} align="middle">
+                        <Col span={8}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'company']}
+                            label="Company"
+                            rules={requiredRule('Missing company')}
+                          >
+                            <Input placeholder="Company Name" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={7}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'designation']}
+                            label="Designation"
+                            rules={requiredRule('Missing designation')}
+                          >
+                            <Input placeholder="Software Engineer" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={7}>
+                          <Form.Item
+                            {...restField}
+                            name={[name, 'duration']}
+                            label="Duration"
+                            rules={requiredRule('Missing duration')}
+                          >
+                            <Input placeholder="2 Years" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={2}>
+                          <Button danger type="link" onClick={() => remove(name)} icon={<DeleteOutlined />} />
+                        </Col>
+                      </Row>
+                    ))}
+                    <Form.Item>
+                      <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                        Add Experience
+                      </Button>
+                    </Form.Item>
+                  </>
+                )}
+              </Form.List>
+            </Card>
+          </>
         );
       default:
         return null;
@@ -1420,7 +1567,11 @@ const AddRegularStaff = () => {
                   </Button>
                 )}
                 {currentStep < steps.length - 1 && (
-                  <Button type="primary" onClick={next} disabled={!isStep0Complete()}>
+                  <Button
+                    type="primary"
+                    onClick={next}
+                    disabled={(currentStep === 0 && !isStep0Complete()) || (currentStep === 1 && !isStep1Complete())}
+                  >
                     Next
                   </Button>
                 )}

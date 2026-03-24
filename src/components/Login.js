@@ -90,13 +90,16 @@ const Login = () => {
         localStorage.setItem('user', JSON.stringify(res.data.user));
         message.success('Login successful');
         const role = res.data?.user?.role || 'admin';
-        const dest = role === 'superadmin' ? '/superadmin/clients' : '/dashboard';
+        let dest = '/dashboard';
+        if (role === 'superadmin') dest = '/superadmin/clients';
+        else if (role === 'channel_partner') dest = '/partner/clients';
+        
         setTimeout(() => navigate(dest), 800);
       } else {
-        message.error('Your subscription is expired');
+        message.error('Login failed: Your account is not activated. Please contact support Team.');
       }
     } catch (e) {
-      message.error('Your suscription is expired');
+      message.error('Login failed: Your account is not activated. Please contact support Team.');
     } finally {
       setVerifying(false);
     }

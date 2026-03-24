@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Card, Row, Col, Button, Input, Typography, Space, Tag, Modal, Form, Select, DatePicker, message } from 'antd';
+import { Layout, Card, Row, Col, Button, Input, Typography, Space, Tag, Modal, Form, Select, DatePicker, message, Table, Popconfirm } from 'antd';
 import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import Sidebar from './Sidebar';
@@ -26,34 +26,94 @@ const WEEK_COLS = [
   { label: '5th', value: 5 },
 ];
 
+function normalizeWeeksInput(input) {
+  const arr = Array.isArray(input) ? input : (input == null ? [] : [input]);
+  const normalized = arr
+    .map((w) => (typeof w === 'string' ? w.trim().toLowerCase() : w))
+    .filter((w) => w !== '' && w !== null && w !== undefined);
+  const nums = [...new Set(normalized.map((w) => Number(w)).filter((n) => Number.isInteger(n) && n >= 1 && n <= 5))];
+  const hasAll = normalized.includes('all') || normalized.includes(0) || normalized.includes('0');
+  if (hasAll && nums.length === 0) return 'all';
+  if (hasAll && nums.length > 0) return nums;
+  return nums;
+}
+
+function parseConfigArray(raw) {
+  let cfg = raw;
+  let guard = 0;
+  while (typeof cfg === 'string' && guard < 3) {
+    try {
+      const p = JSON.parse(cfg);
+      if (p === cfg) break;
+      cfg = p;
+      guard += 1;
+    } catch { break; }
+  }
+  return Array.isArray(cfg) ? cfg : [];
+}
+
 function TemplateCard({ tpl, onEdit, onAssign }) {
   const summary = () => {
-    const cfg = Array.isArray(tpl.config) ? tpl.config : [];
-    const parts = cfg.map(c => {
-      const d = DAYS.find(x => x.value === Number(c.day))?.label || c.day;
-      const w = c.weeks === 'all' ? 'All weeks' : Array.isArray(c.weeks) ? c.weeks.join(',') : '';
+    const cfg = parseConfigArray(tpl.config);
+
+    const parts = cfg.map((c) => {
+      const d =
+        DAYS.find((x) => x.value === Number(c.day))?.label || c.day;
+
+      const w =
+        c.weeks === "all"
+          ? "All weeks"
+          : Array.isArray(c.weeks)
+            ? c.weeks.join(",")
+            : "";
+
       return `${d}: ${w}`;
     });
-    return parts.join(' • ');
+
+    return parts.join(" • ");
   };
+
   return (
     <Card bordered hoverable>
-      <Space direction="vertical" size={4} style={{ width: '100%' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <Space direction="vertical" size={4} style={{ width: "100%" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <Text strong>{tpl.name}</Text>
+
           <Space>
-            <Tag color={tpl.active ? 'green' : 'red'}>{tpl.active ? 'Active' : 'Inactive'}</Tag>
-            <Button size="small" onClick={() => onAssign?.(tpl)}>Assign</Button>
-            <Button size="small" onClick={() => onEdit?.(tpl)}>Edit</Button>
+            <Tag color={tpl.active ? "green" : "red"}>
+              {tpl.active ? "Active" : "Inactive"}
+            </Tag>
+
+            <Button size="small" onClick={() => onAssign?.openAssign?.(tpl)}>
+              Assign
+            </Button>
+
+            <Button size="small" onClick={() => onEdit?.(tpl)}>
+              Edit
+            </Button>
           </Space>
         </div>
-        <Text type="secondary" style={{ fontSize: 12 }}>{summary()}</Text>
-        <Text type="secondary" style={{ fontSize: 12 }}>Assigned Staff: {tpl.assignedCount || 0}</Text>
+
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {summary()}
+        </Text>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>Assigned Staff:</Text>
+          <Tag color="blue" style={{ cursor: 'pointer', margin: 0 }} onClick={() => onAssign?.openAssignedList?.(tpl)}>
+            {tpl.assignedCount || 0}
+          </Tag>
+        </div>
       </Space>
     </Card>
   );
 }
-
 export default function WeeklyOffTemplates() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -68,15 +128,19 @@ export default function WeeklyOffTemplates() {
   const [effectiveTo, setEffectiveTo] = useState(null);
   const [q, setQ] = useState('');
 
+  const [assignedListOpen, setAssignedListOpen] = useState(false);
+  const [assignedListTpl, setAssignedListTpl] = useState(null);
+  const [assignedListRows, setAssignedListRows] = useState([]);
+  const [assignedListLoading, setAssignedListLoading] = useState(false);
+
   const load = async () => {
     try {
       setLoading(true);
       const res = await api.get('/admin/weekly-off/templates');
       const rows = Array.isArray(res.data?.templates) ? res.data.templates : [];
-      // Normalize config to an array to avoid runtime errors
       setList(rows.map(t => ({
         ...t,
-        config: Array.isArray(t?.config) ? t.config : [],
+        config: parseConfigArray(t?.config),
       })));
     } catch (e) {
       message.error('Failed to load weekly off templates');
@@ -90,16 +154,33 @@ export default function WeeklyOffTemplates() {
 
   const openCreate = () => {
     setEditing(null);
-    form.resetFields();
-    form.setFieldsValue({ name: '', active: true, config: [] });
     setOpen(true);
+    try {
+      form.resetFields();
+      form.setFieldsValue({
+        name: '',
+        active: true,
+        config: [],
+      });
+    } catch (_) {}
   };
 
   const openEdit = (tpl) => {
     setEditing(tpl);
-    form.resetFields();
-    form.setFieldsValue({ name: tpl.name, active: tpl.active !== false, config: (tpl.config || []).map(c => ({ day: Number(c.day), weeks: c.weeks === 'all' ? 'all' : (Array.isArray(c.weeks) ? c.weeks : []) })) });
     setOpen(true);
+    try {
+      const mappedCfg = parseConfigArray(tpl?.config).map(c => ({
+        day: Number(c.day),
+        weeks: normalizeWeeksInput(c.weeks) === 'all' ? ['all'] : normalizeWeeksInput(c.weeks),
+      }));
+      const values = {
+        name: tpl?.name || '',
+        active: tpl?.active !== false,
+        config: mappedCfg.length > 0 ? mappedCfg : [{ day: 0, weeks: ['all'] }],
+      };
+      form.resetFields();
+      form.setFieldsValue(values);
+    } catch (_) {}
   };
 
   const save = async () => {
@@ -108,7 +189,10 @@ export default function WeeklyOffTemplates() {
       const payload = {
         name: v.name,
         active: v.active !== false,
-        config: (v.config || []).map(c => ({ day: Number(c.day), weeks: c.weeks === 'all' ? 'all' : (Array.isArray(c.weeks) ? c.weeks.map(Number) : []) })),
+        config: (v.config || []).map(c => {
+          const weeks = normalizeWeeksInput(c.weeks);
+          return { day: Number(c.day), weeks };
+        }),
       };
       if (editing) {
         await api.put(`/admin/weekly-off/templates/${editing.id}`, payload);
@@ -159,13 +243,39 @@ export default function WeeklyOffTemplates() {
     }
   };
 
+  const openAssignedList = async (tpl, keepOpen = false) => {
+    try {
+      setAssignedListTpl(tpl);
+      if (!keepOpen) setAssignedListOpen(true);
+      setAssignedListLoading(true);
+      const res = await api.get(`/admin/weekly-off/templates/${tpl.id}/assignments`);
+      setAssignedListRows(res?.data?.assignments || []);
+    } catch (_) {
+      setAssignedListRows([]);
+      message.error('Failed to load assigned staff');
+    } finally {
+      setAssignedListLoading(false);
+    }
+  };
+
+  const unassignStaff = async (assignmentId) => {
+    try {
+      await api.delete(`/admin/weekly-off/assign/${assignmentId}`);
+      message.success('Staff unassigned');
+      if (assignedListTpl?.id) await openAssignedList(assignedListTpl, true);
+      await load();
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to unassign staff');
+    }
+  };
+
   const filtered = (list || []).filter(t => !q || String(t.name).toLowerCase().includes(String(q).toLowerCase()));
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar />
       <Layout style={{ marginLeft: 200, background: '#f5f7fb' }}>
-        <Header style={{ background:'#fff', borderBottom: '1px solid #eee', padding: '12px 24px', display:'flex', alignItems:'center', gap:8 }}>
+        <Header style={{ background: '#fff', borderBottom: '1px solid #eee', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => window.history.back()} />
           <Title level={4} style={{ margin: 0, flex: 1 }}>Weekly Off Templates</Title>
           <Space>
@@ -181,24 +291,39 @@ export default function WeeklyOffTemplates() {
           <Row gutter={[16, 16]}>
             {(filtered || []).map((t) => (
               <Col key={t.id} xs={24} sm={12} lg={8}>
-                <TemplateCard tpl={t} onEdit={openEdit} onAssign={openAssign} />
+                <TemplateCard tpl={t} onEdit={openEdit} onAssign={{ openAssign, openAssignedList }} />
               </Col>
             ))}
           </Row>
         </Content>
 
         {/* Create/Edit Modal */}
-        <Modal title={editing ? 'Edit Weekly Off Template' : 'Create Weekly Off Template'} open={open} onCancel={() => { setOpen(false); setEditing(null); }} onOk={save} okText="Save" width={720}>
-          <Form layout="vertical" form={form}>
+        <Modal key={editing?.id || 'create'} title={editing ? 'Edit Weekly Off Template' : 'Create Weekly Off Template'} open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={save} okText="Save" width={720}>
+          <Form 
+            key={editing?.id ? `edit-${editing.id}` : 'create'}
+            layout="vertical" 
+            form={form}
+            initialValues={{
+              name: editing?.name || '',
+              active: editing?.active !== false ? true : false,
+              config: editing ? (() => {
+                const mapped = parseConfigArray(editing?.config).map(c => ({
+                  day: Number(c.day),
+                  weeks: normalizeWeeksInput(c.weeks) === 'all' ? ['all'] : normalizeWeeksInput(c.weeks),
+                }));
+                return mapped.length > 0 ? mapped : [{ day: 0, weeks: ['all'] }];
+              })() : [],
+            }}
+          >
             <Row gutter={12}>
               <Col span={12}>
-                <Form.Item name="name" label="Template Name" rules={[{ required: true }]}> 
+                <Form.Item name="name" label="Template Name" rules={[{ required: true }]}>
                   <Input placeholder="Weekly Off" />
                 </Form.Item>
               </Col>
               <Col span={12}>
-                <Form.Item name="active" label="Status" initialValue={true}> 
-                  <Select options={[{ value:true, label:'Active' }, { value:false, label:'Inactive' }]} />
+                <Form.Item name="active" label="Status" initialValue={true}>
+                  <Select options={[{ value: true, label: 'Active' }, { value: false, label: 'Inactive' }]} />
                 </Form.Item>
               </Col>
             </Row>
@@ -219,13 +344,13 @@ export default function WeeklyOffTemplates() {
                             <Select mode="multiple" options={WEEK_COLS} placeholder="All or select weeks" />
                           </Form.Item>
                         </Col>
-                        <Col span={4} style={{ display:'flex', alignItems:'end' }}>
+                        <Col span={4} style={{ display: 'flex', alignItems: 'end' }}>
                           <Button icon={<DeleteOutlined />} danger onClick={() => remove(name)}>Remove</Button>
                         </Col>
                       </Row>
                     </Card>
                   ))}
-                  <Button type="dashed" block onClick={() => add({ day: 0, weeks: 'all' })}>+ Add Weekly Off Rule</Button>
+                  <Button type="dashed" block onClick={() => add({ day: 0, weeks: ['all'] })}>+ Add Weekly Off Rule</Button>
                 </>
               )}
             </Form.List>
@@ -233,8 +358,8 @@ export default function WeeklyOffTemplates() {
         </Modal>
 
         {/* Assign Modal */}
-        <Modal title={assigningTpl ? `Assign Staff • ${assigningTpl.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
-          <Space direction="vertical" style={{ width:'100%' }} size={12}>
+        <Modal title={assigningTpl ? `Assign Staff â€¢ ${assigningTpl.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
+          <Space direction="vertical" style={{ width: '100%' }} size={12}>
             <Select
               mode="multiple"
               options={staffOptions}
@@ -244,10 +369,44 @@ export default function WeeklyOffTemplates() {
               placeholder="Select staff to assign"
             />
             <Row gutter={8}>
-              <Col span={12}><DatePicker value={effectiveFrom} onChange={setEffectiveFrom} style={{ width:'100%' }} placeholder="Effective from" /></Col>
-              <Col span={12}><DatePicker value={effectiveTo} onChange={setEffectiveTo} style={{ width:'100%' }} placeholder="Effective to (optional)" /></Col>
+              <Col span={12}><DatePicker value={effectiveFrom} onChange={setEffectiveFrom} style={{ width: '100%' }} placeholder="Effective from" /></Col>
+              <Col span={12}><DatePicker value={effectiveTo} onChange={setEffectiveTo} style={{ width: '100%' }} placeholder="Effective to (optional)" /></Col>
             </Row>
           </Space>
+        </Modal>
+
+        {/* Assigned Staff List Modal */}
+        <Modal
+          title={`Assigned Staff${assignedListTpl ? ` - ${assignedListTpl.name}` : ''}`}
+          open={assignedListOpen}
+          onCancel={() => setAssignedListOpen(false)}
+          footer={null}
+          width={1000}
+        >
+          <Table
+            rowKey="id"
+            loading={assignedListLoading}
+            dataSource={assignedListRows}
+            size="small"
+            pagination={{ pageSize: 8 }}
+            columns={[
+              { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
+              { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
+              { title: 'Phone', render: (_, r) => r.user?.phone || '-' },
+              { title: 'Department', render: (_, r) => r.user?.profile?.department || '-' },
+              { title: 'Designation', render: (_, r) => r.user?.profile?.designation || '-' },
+              { title: 'Effective From', dataIndex: 'effectiveFrom', render: (v) => v || '-' },
+              {
+                title: 'Action',
+                key: 'action',
+                render: (_, r) => (
+                  <Popconfirm title="Unassign this staff?" onConfirm={() => unassignStaff(r.id)}>
+                    <Button danger size="small">Unassign</Button>
+                  </Popconfirm>
+                )
+              },
+            ]}
+          />
         </Modal>
       </Layout>
     </Layout>

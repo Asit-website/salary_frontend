@@ -4,6 +4,7 @@ import {
   UserOutlined,
   CalendarOutlined,
   DollarOutlined,
+  ShoppingCartOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
@@ -61,13 +62,13 @@ const calculateLeaveBalance = async (staffWithAssignments, balances) => {
       );
 
       // Find balances for this staff member
-      const staffBalances = balances.filter(balance =>
-        balance.userId === staffMember.id
+      const staffBalances = (balances || []).filter(balance =>
+        String(balance.userId) === String(staffMember.id)
       );
 
-      // Calculate used leaves from balances
+      // Calculate used leaves from balances (including encashed)
       const usedLeaves = staffBalances.reduce((sum, balance) =>
-        sum + (parseFloat(balance.used) || 0), 0
+        sum + (parseFloat(balance.used) || 0) + (parseFloat(balance.encashed) || 0), 0
       );
 
       // Calculate remaining leaves
@@ -109,7 +110,11 @@ const Dashboard = () => {
     absentToday: 0,
     lateArrivals: 0,
     lateArrivalPercentage: 0,
-    leaveToday: 0
+    leaveToday: 0,
+    inactiveEmployees: 0,
+    totalLoans: 0,
+    totalExpenses: 0,
+    totalOrdersToday: 0
   });
   const [attendanceData, setAttendanceData] = useState([]);
   const [salaryData, setSalaryData] = useState([]);
@@ -119,6 +124,7 @@ const Dashboard = () => {
   const [loans, setLoans] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [leaveBalance, setLeaveBalance] = useState([]);
+  const [expenses, setExpenses] = useState([]);
 
   const navigate = useNavigate();
 
@@ -129,6 +135,9 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      let fetchedLoans = [];
+      let fetchedExpenses = [];
+      let fetchedTodayApprovedExpenseAmount = 0;
 
       // Fetch dashboard stats (now includes leaveToday)
       const statsResponse = await api.get('/admin/dashboard');
@@ -162,6 +171,12 @@ const Dashboard = () => {
         ]);
         const visits = Array.isArray(visitsResp?.data?.visits) ? visitsResp.data.visits : [];
         const orders = Array.isArray(ordersResp?.data?.orders) ? ordersResp.data.orders : [];
+        const todayKey = dayjs().format('YYYY-MM-DD');
+        const totalOrdersToday = orders.filter((o) => {
+          const orderTs = o.orderDate || o.createdAt;
+          return orderTs && dayjs(orderTs).format('YYYY-MM-DD') === todayKey;
+        }).length;
+        setStats(prev => ({ ...prev, totalOrdersToday }));
 
         const visitItems = visits.slice(0, 20).map(v => ({
           ts: v.visitDate || v.createdAt,
@@ -186,6 +201,7 @@ const Dashboard = () => {
         setRecentActivities(combined);
       } catch (_) {
         setRecentActivities([]);
+        setStats(prev => ({ ...prev, totalOrdersToday: 0 }));
       }
 
       // Fetch upcoming holidays for Upcoming Events
@@ -199,8 +215,8 @@ const Dashboard = () => {
           const tResp = await api.get('/admin/holidays/templates');
           const templates = Array.isArray(tResp?.data?.templates) ? tResp.data.templates : [];
           const today = new Date();
-          const in90 = new Date();
-          in90.setDate(in90.getDate() + 90);
+          const in365 = new Date();
+          in365.setDate(in365.getDate() + 365);
           const tKey = (d) => {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -208,7 +224,7 @@ const Dashboard = () => {
             return `${y}-${m}-${dd}`;
           };
           const startKey = tKey(today);
-          const endKey = tKey(in90);
+          const endKey = tKey(in365);
           const list = [];
           for (const tpl of templates) {
             const hs = Array.isArray(tpl.holidays) ? tpl.holidays : [];
@@ -229,9 +245,11 @@ const Dashboard = () => {
       try {
         const loansResponse = await api.get('/admin/loans');
         if (loansResponse.data.success || loansResponse.data.data) {
-          setLoans(loansResponse.data.data || []);
+          fetchedLoans = loansResponse.data.data || [];
+          setLoans(fetchedLoans);
         }
       } catch (_) {
+        fetchedLoans = [];
         setLoans([]);
       }
 
@@ -243,6 +261,33 @@ const Dashboard = () => {
         }
       } catch (_) {
         setLeaves([]);
+      }
+
+      // Fetch expenses data
+      try {
+        const todayKey = dayjs().format('YYYY-MM-DD');
+        const expensesResponse = await api.get('/admin/expenses', {
+          params: { page: 1, limit: 1000 }
+        });
+        if (expensesResponse.data.success || expensesResponse.data.data) {
+          fetchedExpenses = expensesResponse.data.data || [];
+          fetchedTodayApprovedExpenseAmount = fetchedExpenses.reduce((sum, expense) => {
+            const status = String(expense?.status || '').toLowerCase();
+            const isApproved = status === 'approved' || status === 'settled';
+            if (!isApproved) return sum;
+
+            const approvedOn = expense?.approvedAt || expense?.settledAt || expense?.updatedAt || expense?.createdAt;
+            if (!approvedOn || dayjs(approvedOn).format('YYYY-MM-DD') !== todayKey) return sum;
+
+            const amount = Number(expense?.approvedAmount ?? expense?.amount ?? 0);
+            return sum + (Number.isFinite(amount) ? amount : 0);
+          }, 0);
+          setExpenses(fetchedExpenses);
+        }
+      } catch (_) {
+        fetchedExpenses = [];
+        fetchedTodayApprovedExpenseAmount = 0;
+        setExpenses([]);
       }
 
       // Fetch leave balance data for Leave Balance Overview
@@ -272,6 +317,35 @@ const Dashboard = () => {
           { employeeName: 'Kavita Nair', totalLeaves: 24, usedLeaves: 7, remainingLeaves: 17 }
         ];
         setLeaveBalance(sampleBalance);
+      }
+
+      // Fetch staff list to calculate inactive employees
+      try {
+        const staffResp = await api.get('/admin/staff');
+        const staffList = staffResp.data?.data || staffResp.data?.staff || [];
+        const inactiveCount = Array.isArray(staffList)
+          ? staffList.filter(s => (s.active === false || s.active === 0 || s.active === '0')).length
+          : 0;
+
+        // Calculate total loans and expenses
+        const totalLoansCount = Array.isArray(fetchedLoans) ? fetchedLoans.length : 0;
+        const totalExpensesAmount = Number(fetchedTodayApprovedExpenseAmount || 0);
+
+        setStats(prev => ({
+          ...prev,
+          inactiveEmployees: inactiveCount,
+          totalLoans: totalLoansCount,
+          totalExpenses: totalExpensesAmount
+        }));
+      } catch (e) {
+        const totalLoansCount = Array.isArray(fetchedLoans) ? fetchedLoans.length : 0;
+        const totalExpensesAmount = Number(fetchedTodayApprovedExpenseAmount || 0);
+        setStats(prev => ({
+          ...prev,
+          inactiveEmployees: 0,
+          totalLoans: totalLoansCount,
+          totalExpenses: totalExpensesAmount
+        }));
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -464,7 +538,7 @@ const Dashboard = () => {
                 </div>
               </Card>
             </Col>
-            <Col xs={24} sm={12} md={6}>
+            {/* <Col xs={24} sm={12} md={6}>
               <Card
                 style={{
                   background: '#fff',
@@ -509,7 +583,7 @@ const Dashboard = () => {
                   </div>
                 </div>
               </Card>
-            </Col>
+            </Col> */}
             <Col xs={24} sm={12} md={6}>
               <Card
                 style={{
@@ -550,6 +624,146 @@ const Dashboard = () => {
                       width: '30%',
                       height: '100%',
                       background: '#722ed1',
+                      borderRadius: '2px'
+                    }}></div>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e8e8e8',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+                  borderRadius: '4px'
+                }}
+                bodyStyle={{ padding: '16px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>Inactive Employees</div>
+                    <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>{stats.inactiveEmployees}</div>
+                  </div>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: '#fff2f0',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <UserOutlined style={{ color: '#ff4d4f', fontSize: '18px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#ff4d4f', fontSize: '11px', fontWeight: '500' }}>Inactive</div>
+                  <div style={{
+                    width: '50px',
+                    height: '3px',
+                    background: '#f0f0f0',
+                    borderRadius: '2px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '0%',
+                      height: '100%',
+                      background: '#ff4d4f',
+                      borderRadius: '2px'
+                    }}></div>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e8e8e8',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+                  borderRadius: '4px'
+                }}
+                bodyStyle={{ padding: '16px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>Total Orders Today</div>
+                    <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>{stats.totalOrdersToday || 0}</div>
+                  </div>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: '#e6f7ff',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <ShoppingCartOutlined style={{ color: '#1890ff', fontSize: '18px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#1890ff', fontSize: '11px', fontWeight: '500' }}>Today's orders count</div>
+                  <div style={{
+                    width: '50px',
+                    height: '3px',
+                    background: '#f0f0f0',
+                    borderRadius: '2px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#1890ff',
+                      borderRadius: '2px'
+                    }}></div>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e8e8e8',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+                  borderRadius: '4px'
+                }}
+                bodyStyle={{ padding: '16px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>Today Approved Expense</div>
+                    <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>
+                      ₹{Number(stats.totalExpenses || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: '#fff7e6',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <span style={{ color: '#fa8c16', fontSize: '18px', fontWeight: '700', lineHeight: 1 }}>₹</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#fa8c16', fontSize: '11px', fontWeight: '500' }}>Today's approved amount</div>
+                  <div style={{
+                    width: '50px',
+                    height: '3px',
+                    background: '#f0f0f0',
+                    borderRadius: '2px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#fa8c16',
                       borderRadius: '2px'
                     }}></div>
                   </div>
@@ -959,7 +1173,7 @@ const Dashboard = () => {
                     padding: '40px',
                     color: '#8c8c8c'
                   }}>
-                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>💰</div>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>₹</div>
                     <div style={{ fontSize: '16px', marginBottom: '8px' }}>No loans found</div>
                     <div style={{ fontSize: '12px' }}>Start by creating your first loan</div>
                   </div>
@@ -1029,7 +1243,7 @@ const Dashboard = () => {
                             fontSize: '16px',
                             fontWeight: 'bold'
                           }}>
-                            {leave.staffMember?.profile?.name?.charAt(0).toUpperCase() || 'S'}
+                            {leave.user?.profile?.name?.charAt(0).toUpperCase() || 'S'}
                           </div>
                           <div>
                             <div style={{
@@ -1038,7 +1252,7 @@ const Dashboard = () => {
                               color: '#262626',
                               marginBottom: '2px'
                             }}>
-                              {leave.staffMember?.profile?.name || 'Unknown Staff'}
+                              {leave.user?.profile?.name || 'Unknown Staff'}
                             </div>
                             <div style={{
                               fontSize: '12px',

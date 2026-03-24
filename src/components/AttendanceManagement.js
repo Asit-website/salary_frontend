@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Table, Button, DatePicker, Select, message, Space, Typography, Tag, Menu, Input, Modal, Form, Radio, TimePicker, Input as AntInput } from 'antd';
+import { Layout, Card, Table, Button, DatePicker, Select, message, Space, Typography, Tag, Menu, Input, Modal, Form, Radio, TimePicker, Input as AntInput, Image, Row, Col } from 'antd';
 import './AttendanceManagement.css';
 import {
   CalendarOutlined,
@@ -11,17 +11,45 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   CoffeeOutlined,
-  FilterOutlined
+  FilterOutlined,
+  EnvironmentOutlined,
+  PhoneOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
 import dayjs from 'dayjs';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
+
+dayjs.extend(customParseFormat);
 
 const { Header, Content } = Layout;
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 const { Option } = Select;
+
+const parseTimeValue = (value) => {
+  if (!value) return null;
+  const v = String(value).trim();
+  if (!v || v === '-' || v.toLowerCase() === 'invalid date') return null;
+
+  let d = dayjs(v, 'HH:mm:ss', true);
+  if (d.isValid()) return d;
+  d = dayjs(v, 'HH:mm', true);
+  if (d.isValid()) return d;
+  d = dayjs(v);
+  if (d.isValid()) return d;
+  return null;
+};
+
+const formatWorkingHours = (checkInRaw, checkOutRaw) => {
+  const checkIn = parseTimeValue(checkInRaw);
+  const checkOut = parseTimeValue(checkOutRaw);
+  if (!checkIn || !checkOut) return '-';
+  const minutes = checkOut.diff(checkIn, 'minute');
+  if (!Number.isFinite(minutes) || minutes < 0) return '-';
+  return `${(minutes / 60).toFixed(2)}h`;
+};
 
 const AttendanceManagement = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -40,10 +68,17 @@ const AttendanceManagement = () => {
   const [bulkMarkOpen, setBulkMarkOpen] = useState(false);
   const [markForm] = Form.useForm();
   const [bulkMarkForm] = Form.useForm();
+  const [bulkRows, setBulkRows] = useState([]);   // per-staff rows: [{userId, name, status, checkIn, checkOut}]
+  const [bulkDate, setBulkDate] = useState(dayjs());
   const [effectiveTemplate, setEffectiveTemplate] = useState(null);
+  const [effectiveShift, setEffectiveShift] = useState(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteForm] = Form.useForm();
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [locationData, setLocationData] = useState(null);
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
+  const [logsData, setLogsData] = useState(null);
 
   const navigate = useNavigate();
 
@@ -53,6 +88,7 @@ const AttendanceManagement = () => {
     fetchAttendance();
   }, []);
 
+
   useEffect(() => {
     fetchStaff();
     fetchAttendance();
@@ -60,21 +96,30 @@ const AttendanceManagement = () => {
 
   // Load effective template when a specific staff is selected
   useEffect(() => {
-    const loadTpl = async () => {
-      if (selectedStaff === 'all') { setEffectiveTemplate(null); return; }
+    const loadTplAndShift = async () => {
+      if (!selectedStaff || selectedStaff === 'all') {
+        setEffectiveTemplate(null);
+        setEffectiveShift(null);
+        return;
+      }
       try {
-        const res = await api.get(`/admin/settings/attendance-templates/effective/${selectedStaff}`);
-        setEffectiveTemplate(res.data?.template || null);
+        const [tplRes, shiftRes] = await Promise.all([
+          api.get(`/admin/settings/attendance-templates/effective/${selectedStaff}`),
+          api.get(`/admin/shifts/effective/${selectedStaff}`)
+        ]);
+        setEffectiveTemplate(tplRes.data?.template || null);
+        setEffectiveShift(shiftRes.data?.shift || null);
       } catch (_) {
         setEffectiveTemplate(null);
+        setEffectiveShift(null);
       }
     };
-    loadTpl();
+    loadTplAndShift();
   }, [selectedStaff]);
 
   const fetchStaff = async () => {
     try {
-      const response = await api.get('/admin/staff');
+      const response = await api.get('/admin/staff?module=attendance');
       if (response.data.success) {
         // Backend returns { success, staff: [...], data: [...] }
         const arr = Array.isArray(response.data.staff) ? response.data.staff : (Array.isArray(response.data.data) ? response.data.data : []);
@@ -106,14 +151,24 @@ const AttendanceManagement = () => {
     }
   };
 
-  const openMarkModal = () => {
+  const openMarkModal = (staffRow = null) => {
     markForm.resetFields();
+
+    // If called from a table row context, use that staff; otherwise use the sidebar filter
+    const staffId = staffRow?.userId ?? staffRow?.id ?? (selectedStaff !== 'all' ? selectedStaff : undefined);
+
+    // Auto-fill from existing attendance record if available
+    const existingRecord = staffId
+      ? attendance.find(a => (a.userId === staffId || a.userId === Number(staffId)) && a.date === selectedDate.format('YYYY-MM-DD'))
+      : null;
+
     markForm.setFieldsValue({
-      staffId: selectedStaff !== 'all' ? selectedStaff : undefined,
+      staffId,
       date: selectedDate,
-      status: 'present',
-      checkIn: dayjs('09:30', 'HH:mm'),
-      checkOut: dayjs('18:00', 'HH:mm'),
+      status: existingRecord?.status || 'present',
+      checkIn: parseTimeValue(existingRecord?.checkIn) || parseTimeValue('09:30'),
+      checkOut: parseTimeValue(existingRecord?.checkOut) || parseTimeValue('18:00'),
+      overtimeMinutes: null,
     });
     setMarkOpen(true);
   };
@@ -127,44 +182,84 @@ const AttendanceManagement = () => {
         status: values.status,
         checkIn: values.checkIn ? values.checkIn.format('HH:mm:ss') : null,
         checkOut: values.checkOut ? values.checkOut.format('HH:mm:ss') : null,
+        overtimeMinutes: values.status === 'overtime' && Number.isFinite(Number(values.overtimeMinutes)) ? Number(values.overtimeMinutes) : undefined,
       };
       await api.post('/admin/attendance', payload);
       message.success('Attendance saved');
       setMarkOpen(false);
       fetchAttendance();
     } catch (err) {
-      if (err?.errorFields) return; // validation error
+      if (err?.errorFields) return;
       message.error(err?.response?.data?.message || 'Failed to save attendance');
     }
   };
 
   const openBulkMarkModal = () => {
-    bulkMarkForm.resetFields();
-    bulkMarkForm.setFieldsValue({
-      date: selectedDate,
-      status: 'present',
-      checkIn: dayjs('09:30', 'HH:mm'),
-      checkOut: dayjs('18:00', 'HH:mm'),
-    });
+    setBulkRows([]);
+    setBulkDate(selectedDate);
     setBulkMarkOpen(true);
   };
 
-  const submitBulkMark = async () => {
+  // When a staff is selected in the bulk dropdown, add a row with prefilled data
+  const handleBulkStaffSelect = async (uid) => {
+    const staffInfo = staffList.find(s => s.id === uid || s.id === Number(uid));
+    const rec = attendance.find(
+      a => (a.userId === uid || a.userId === Number(uid)) && a.date === bulkDate.format('YYYY-MM-DD')
+    );
+
+    let hasAutoOT = false;
     try {
-      const values = await bulkMarkForm.validateFields();
-      const payload = {
-        date: values.date?.format('YYYY-MM-DD'),
-        status: values.status,
-        checkIn: values.checkIn ? values.checkIn.format('HH:mm:ss') : null,
-        checkOut: values.checkOut ? values.checkOut.format('HH:mm:ss') : null,
-        staffIds: values.staffIds || [],
-      };
-      await api.post('/admin/attendance/bulk', payload);
-      message.success(`Bulk attendance saved for ${payload.staffIds.length} staff members`);
+      const sRes = await api.get(`/admin/shifts/effective/${uid}`);
+      if (sRes.data?.shift && Number(sRes.data.shift.overtimeStartMinutes) > 0) {
+        hasAutoOT = true;
+      }
+    } catch (_) { }
+
+    setBulkRows(prev => [
+      ...prev,
+      {
+        userId: uid,
+        name: staffInfo ? `${staffInfo.name} (${staffInfo.staffId || 'N/A'})` : `Staff ${uid}`,
+        status: rec?.status || 'present',
+        checkIn: parseTimeValue(rec?.checkIn) || parseTimeValue('09:30'),
+        checkOut: parseTimeValue(rec?.checkOut) || parseTimeValue('18:00'),
+        hasAutoOT,
+      }
+    ]);
+  };
+
+  // When a staff is deselected from bulk dropdown, remove their row
+  const handleBulkStaffDeselect = (uid) => {
+    setBulkRows(prev => prev.filter(r => r.userId !== uid && r.userId !== Number(uid)));
+  };
+
+  // Update a specific field in a specific staff's row
+  const updateBulkRow = (userId, field, value) => {
+    setBulkRows(prev => prev.map(r =>
+      (r.userId === userId || r.userId === Number(userId)) ? { ...r, [field]: value } : r
+    ));
+  };
+
+  const submitBulkMark = async () => {
+    if (bulkRows.length === 0) { message.warning('Please select at least one staff'); return; }
+    try {
+      const dateStr = bulkDate.format('YYYY-MM-DD');
+      // Send individual attendance for each staff row
+      await Promise.all(bulkRows.map(row =>
+        api.post('/admin/attendance', {
+          staffId: row.userId,
+          date: dateStr,
+          status: row.status,
+          checkIn: row.checkIn ? row.checkIn.format('HH:mm:ss') : null,
+          checkOut: row.checkOut ? row.checkOut.format('HH:mm:ss') : null,
+          overtimeMinutes: row.status === 'overtime' && Number.isFinite(Number(row.overtimeMinutes)) ? Number(row.overtimeMinutes) : undefined,
+        })
+      ));
+      message.success(`Bulk attendance saved for ${bulkRows.length} staff members`);
       setBulkMarkOpen(false);
+      setBulkRows([]);
       fetchAttendance();
     } catch (err) {
-      if (err?.errorFields) return; // validation error
       message.error(err?.response?.data?.message || 'Failed to save bulk attendance');
     }
   };
@@ -289,6 +384,7 @@ const AttendanceManagement = () => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'present': return 'green';
+      case 'overtime': return 'green';
       case 'absent': return 'red';
       case 'half_day': return 'orange';
       case 'leave': return 'blue';
@@ -307,9 +403,9 @@ const AttendanceManagement = () => {
     const matchesDate = dateFilter ? row.date === dateFilter.format('YYYY-MM-DD') : true;
     return matchesSearch && matchesDept && matchesDate;
   });
-  const presentCount = baseForCounts.filter(a => a.status === 'present').length;
-  const absentCount = baseForCounts.filter(a => a.status === 'absent').length;
-  const leaveCount = baseForCounts.filter(a => a.status === 'leave').length;
+  const presentCount = baseForCounts.filter(a => ['present', 'overtime', 'half_day'].includes(a.status?.toLowerCase())).length;
+  const absentCount = baseForCounts.filter(a => a.status?.toLowerCase() === 'absent').length;
+  const leaveCount = baseForCounts.filter(a => a.status?.toLowerCase() === 'leave').length;
 
   const filtered = attendance.filter(row => {
     const q = search.trim().toLowerCase();
@@ -334,14 +430,27 @@ const AttendanceManagement = () => {
         return (
           <div>
             <div>{name} ({staffId})</div>
-            <Button
-              type="link"
-              size="small"
-              onClick={() => openNoteModal(record)}
-              style={{ padding: 0, height: 'auto', fontSize: '12px' }}
-            >
-              + Add Note
-            </Button>
+            <Space size={8}>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => openNoteModal(record)}
+                style={{ padding: 0, height: 'auto', fontSize: '12px' }}
+              >
+                {record.note ? 'Edit Note' : '+ Add Note'}
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => {
+                  setLogsData(record);
+                  setLogsModalOpen(true);
+                }}
+                style={{ padding: 0, height: 'auto', fontSize: '12px' }}
+              >
+                View Logs
+              </Button>
+            </Space>
           </div>
         );
       },
@@ -372,11 +481,11 @@ const AttendanceManagement = () => {
     },
     {
       title: 'Break',
-      dataIndex: 'breakMinutes',
-      key: 'breakMinutes',
-      render: (minutes) => {
-        if (minutes && minutes > 0) {
-          return `${minutes} min`;
+      dataIndex: 'breakTotalSeconds',
+      key: 'breakTotalSeconds',
+      render: (seconds) => {
+        if (seconds && seconds > 0) {
+          return `${(seconds / 3600).toFixed(2)}h`;
         }
         return '-';
       },
@@ -385,23 +494,53 @@ const AttendanceManagement = () => {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => (
-        <Tag color={getStatusColor(status)}>
-          {status?.replace('_', ' ').toUpperCase() || 'ABSENT'}
-        </Tag>
+      render: (status, record) => (
+        <Space direction="vertical" size={2}>
+          <Tag color={getStatusColor(status)}>
+            {status?.replace('_', ' ').toUpperCase() || 'ABSENT'}
+          </Tag>
+          {status === 'overtime' && record.overtimeMinutes > 0 && (
+            <Text type="secondary" style={{ fontSize: '11px' }}>
+              ({record.overtimeMinutes} min OT)
+            </Text>
+          )}
+          {record.isLate && record.latePenaltyText && (
+            <Tag color="error" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
+              Late: {record.latePenaltyText}
+            </Tag>
+          )}
+        </Space>
       ),
     },
     {
       title: 'Working Hours',
       key: 'workingHours',
       render: (_, record) => {
-        if (record.checkIn && record.checkOut) {
-          const checkIn = dayjs(record.checkIn, 'HH:mm:ss');
-          const checkOut = dayjs(record.checkOut, 'HH:mm:ss');
-          const hours = checkOut.diff(checkIn, 'hour', true);
-          return `${hours.toFixed(2)}h`;
-        }
-        return '-';
+        return formatWorkingHours(record.checkIn, record.checkOut);
+      },
+    },
+    {
+      title: 'Location',
+      key: 'location',
+      render: (_, record) => {
+        const hasLocation = record.latitude || record.punchOutLatitude;
+        if (!hasLocation) return '-';
+
+        return (
+          <Button
+            type="text"
+            icon={<EnvironmentOutlined style={{ color: '#125EC9', fontSize: '18px' }} />}
+            onClick={() => {
+              const perms = record.user?.permissions || [];
+              if (perms.includes('geolocation_access')) {
+                setLocationData(record);
+                setLocationModalOpen(true);
+              } else {
+                message.warning('Staff does not have geolocation access');
+              }
+            }}
+          />
+        );
       },
     },
   ];
@@ -535,6 +674,7 @@ const AttendanceManagement = () => {
                 >
                   <Option value="all">Status</Option>
                   <Option value="present">Present</Option>
+                  <Option value="overtime">Overtime</Option>
                   <Option value="absent">Absent</Option>
                   <Option value="half_day">Half Day</Option>
                   <Option value="leave">Leave</Option>
@@ -575,7 +715,31 @@ const AttendanceManagement = () => {
           >
             <Form form={markForm} layout="vertical">
               <Form.Item name="staffId" label="Select Staff Member" rules={[{ required: true, message: 'Please select staff' }]} >
-                <Select placeholder="Select staff">
+                <Select
+                  placeholder="Select staff"
+                  onSelect={(uid) => {
+                    const rec = attendance.find(
+                      a => (a.userId === uid || a.userId === Number(uid)) && a.date === selectedDate.format('YYYY-MM-DD')
+                    );
+                    if (rec) {
+                      markForm.setFieldsValue({
+                        status: rec.status || 'present',
+                        checkIn: parseTimeValue(rec.checkIn) || parseTimeValue('09:30'),
+                        checkOut: parseTimeValue(rec.checkOut) || parseTimeValue('18:00'),
+                      });
+                    } else {
+                      markForm.setFieldsValue({
+                        status: 'present',
+                        checkIn: parseTimeValue('09:30'),
+                        checkOut: parseTimeValue('18:00'),
+                      });
+                    }
+                    // Fetch shift for this specific user to check OT rules
+                    api.get(`/admin/shifts/effective/${uid}`).then(res => {
+                      setEffectiveShift(res.data?.shift || null);
+                    }).catch(() => setEffectiveShift(null));
+                  }}
+                >
                   {Array.isArray(staffList) && staffList.map(s => (
                     <Option key={s.id} value={s.id}>{s.name} ({s.staffId || 'N/A'})</Option>
                   ))}
@@ -587,64 +751,148 @@ const AttendanceManagement = () => {
               <Form.Item name="status" label="Status" rules={[{ required: true }]}>
                 <Radio.Group>
                   <Radio value="present">Present</Radio>
+                  <Radio value="overtime">Overtime</Radio>
                   <Radio value="absent">Absent</Radio>
                   <Radio value="half_day">Half Day</Radio>
                   <Radio value="leave">Leave</Radio>
                 </Radio.Group>
               </Form.Item>
+              <Form.Item noStyle shouldUpdate={(prev, cur) => prev.status !== cur.status}>
+                {({ getFieldValue }) => {
+                  const status = getFieldValue('status');
+                  const hasAutoOT = effectiveShift && Number(effectiveShift.overtimeStartMinutes) > 0;
+                  if (status === 'overtime' && !hasAutoOT) {
+                    return (
+                      <Form.Item
+                        name="overtimeMinutes"
+                        label="Overtime Minutes"
+                        rules={[{ required: false }]}
+                      >
+                        <AntInput type="number" min={0} placeholder="Enter OT minutes if needed" />
+                      </Form.Item>
+                    );
+                  }
+                  return null;
+                }}
+              </Form.Item>
               <Form.Item name="checkIn" label="Check-in Time">
-                <TimePicker style={{ width: '100%' }} format="hh:mm A" use12Hours />
+                <TimePicker style={{ width: '100%' }} format="HH:mm" needConfirm={false} />
               </Form.Item>
               <Form.Item name="checkOut" label="Check-out Time">
-                <TimePicker style={{ width: '100%' }} format="hh:mm A" use12Hours />
+                <TimePicker style={{ width: '100%' }} format="HH:mm" needConfirm={false} />
               </Form.Item>
             </Form>
           </Modal>
           <Modal
             title="Bulk Mark Attendance"
             open={bulkMarkOpen}
-            onCancel={() => setBulkMarkOpen(false)}
+            onCancel={() => { setBulkMarkOpen(false); setBulkRows([]); }}
             onOk={submitBulkMark}
             okText="Save Bulk Attendance"
-            width={600}
+            width={900}
           >
-            <Form form={bulkMarkForm} layout="vertical">
-              <Form.Item name="staffIds" label="Select Staff Members" rules={[{ required: true, message: 'Please select staff members' }]}>
-                <Select
-                  mode="multiple"
-                  placeholder="Select multiple staff members"
-                  style={{ width: '100%' }}
-                >
-                  {Array.isArray(staffList) && staffList.map(s => (
-                    <Option key={s.id} value={s.id}>{s.name} ({s.staffId || 'N/A'})</Option>
+            {/* Date picker */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontWeight: 500 }}>Date: </label>
+              <DatePicker
+                value={bulkDate}
+                onChange={(d) => setBulkDate(d)}
+                format="DD MMM YYYY"
+                style={{ marginLeft: 8 }}
+              />
+            </div>
+
+            {/* Staff selector */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontWeight: 500 }}>Select Staff Members:</label>
+              <Select
+                mode="multiple"
+                placeholder="Select staff to add rows below"
+                style={{ width: '100%', marginTop: 6 }}
+                value={bulkRows.map(r => r.userId)}
+                onSelect={handleBulkStaffSelect}
+                onDeselect={handleBulkStaffDeselect}
+              >
+                {Array.isArray(staffList) && staffList.map(s => (
+                  <Option key={s.id} value={s.id}>{s.name} ({s.staffId || 'N/A'})</Option>
+                ))}
+              </Select>
+            </div>
+
+            {/* Per-staff editable table */}
+            {bulkRows.length > 0 && (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Staff</th>
+                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Status</th>
+                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Check-in</th>
+                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Check-out</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bulkRows.map(row => (
+                    <tr key={row.userId} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                      <td style={{ padding: '8px 6px', fontWeight: 500 }}>{row.name}</td>
+                      <td style={{ padding: '8px 6px' }}>
+                        <Select
+                          size="small"
+                          value={row.status}
+                          onChange={v => updateBulkRow(row.userId, 'status', v)}
+                          style={{ width: 110 }}
+                        >
+                          <Option value="present">Present</Option>
+                          <Option value="overtime">Overtime</Option>
+                          <Option value="absent">Absent</Option>
+                          <Option value="half_day">Half Day</Option>
+                          <Option value="leave">Leave</Option>
+                        </Select>
+                        {row.status === 'overtime' && !row.hasAutoOT ? (
+                          <AntInput
+                            type="number"
+                            min={0}
+                            placeholder="OT minutes"
+                            value={row.overtimeMinutes ?? ''}
+                            onChange={(e) => updateBulkRow(row.userId, 'overtimeMinutes', e.target.value)}
+                            style={{ width: 120, marginTop: 6 }}
+                          />
+                        ) : null}
+                      </td>
+                      <td style={{ padding: '8px 6px' }}>
+                        <TimePicker
+                          size="small"
+                          value={row.checkIn}
+                          format="HH:mm"
+                          needConfirm={false}
+                          onChange={v => updateBulkRow(row.userId, 'checkIn', v)}
+                          style={{ width: 120 }}
+                        />
+                      </td>
+                      <td style={{ padding: '8px 6px' }}>
+                        <TimePicker
+                          size="small"
+                          value={row.checkOut}
+                          format="HH:mm"
+                          needConfirm={false}
+                          onChange={v => updateBulkRow(row.userId, 'checkOut', v)}
+                          style={{ width: 120 }}
+                        />
+                      </td>
+                    </tr>
                   ))}
-                </Select>
-              </Form.Item>
-              <Form.Item name="date" label="Date" rules={[{ required: true, message: 'Please select date' }]}>
-                <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
-              </Form.Item>
-              <Form.Item name="status" label="Status" rules={[{ required: true }]}>
-                <Radio.Group>
-                  <Radio value="present">Present</Radio>
-                  <Radio value="absent">Absent</Radio>
-                  <Radio value="half_day">Half Day</Radio>
-                  <Radio value="leave">Leave</Radio>
-                </Radio.Group>
-              </Form.Item>
-              <Form.Item name="checkIn" label="Check-in Time">
-                <TimePicker style={{ width: '100%' }} format="hh:mm A" use12Hours />
-              </Form.Item>
-              <Form.Item name="checkOut" label="Check-out Time">
-                <TimePicker style={{ width: '100%' }} format="hh:mm A" use12Hours />
-              </Form.Item>
-            </Form>
+                </tbody>
+              </table>
+            )}
+            {bulkRows.length === 0 && (
+              <div style={{ textAlign: 'center', color: '#999', padding: 24 }}>Select staff members above to add their rows</div>
+            )}
           </Modal>
           <Modal
-            title="Add Note"
+            title={selectedRecord?.note ? 'Edit Note' : 'Add Note'}
             open={noteOpen}
             onCancel={closeNoteModal}
             onOk={submitNote}
-            okText="Save Note"
+            okText={selectedRecord?.note ? 'Update Note' : 'Save Note'}
             width={500}
           >
             <Form form={noteForm} layout="vertical">
@@ -667,6 +915,137 @@ const AttendanceManagement = () => {
                 />
               </Form.Item>
             </Form>
+          </Modal>
+          <Modal
+            title="Location Details"
+            open={locationModalOpen}
+            onCancel={() => setLocationModalOpen(false)}
+            footer={[
+              <Button key="close" onClick={() => setLocationModalOpen(false)}>Close</Button>
+            ]}
+            width={700}
+          >
+            {locationData && (
+              <div style={{ padding: '10px 0' }}>
+                <div style={{ marginBottom: 20, paddingBottom: 15, borderBottom: '1px solid #f0f0f0' }}>
+                  <Title level={5}><UserOutlined style={{ color: '#125EC9' }} /> {locationData.user?.name || 'Staff'}</Title>
+                  <Space direction="vertical" size={2}>
+                    <Text type="secondary">ID: {locationData.staffProfile?.staffId || 'N/A'}</Text>
+                    {locationData.staffProfile?.phone && (
+                      <Text><PhoneOutlined /> {locationData.staffProfile.phone}</Text>
+                    )}
+                  </Space>
+                </div>
+
+                <div style={{ display: 'flex', gap: 20 }}>
+                  {/* Punch In */}
+                  <div style={{ flex: 1, padding: 12, background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8 }}>
+                    <Title level={5} style={{ color: '#52c41a' }}><CheckCircleOutlined /> Punch In</Title>
+                    <div style={{ marginBottom: 12 }}>
+                      <Text strong>Address:</Text>
+                      <div style={{ marginTop: 4, fontSize: '13px' }}>{locationData.address || 'No address recorded'}</div>
+                    </div>
+                    {Number.isFinite(Number(locationData.latitude)) && Number.isFinite(Number(locationData.longitude)) && (
+                      <div>
+                        <Text strong>Coordinates:</Text>
+                        <div style={{ marginTop: 4, color: '#125EC9', fontSize: '13px' }}>
+                          <a
+                            href={`https://www.google.com/maps?q=${locationData.latitude},${locationData.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {Number(locationData.latitude).toFixed(6)}, {Number(locationData.longitude).toFixed(6)}
+                            <ExportOutlined style={{ marginLeft: 4 }} />
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Punch Out */}
+                  <div style={{ flex: 1, padding: 12, background: '#fff7e6', border: '1px solid #ffd591', borderRadius: 8 }}>
+                    <Title level={5} style={{ color: '#fa8c16' }}><LogoutOutlined /> Punch Out</Title>
+                    <div style={{ marginBottom: 12 }}>
+                      <Text strong>Address:</Text>
+                      <div style={{ marginTop: 4, fontSize: '13px' }}>{locationData.punchOutAddress || 'No address recorded'}</div>
+                    </div>
+                    {Number.isFinite(Number(locationData.punchOutLatitude)) && Number.isFinite(Number(locationData.punchOutLongitude)) && (
+                      <div>
+                        <Text strong>Coordinates:</Text>
+                        <div style={{ marginTop: 4, color: '#125EC9', fontSize: '13px' }}>
+                          <a
+                            href={`https://www.google.com/maps?q=${locationData.punchOutLatitude},${locationData.punchOutLongitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {Number(locationData.punchOutLatitude).toFixed(6)}, {Number(locationData.punchOutLongitude).toFixed(6)}
+                            <ExportOutlined style={{ marginLeft: 4 }} />
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                </div>
+              </div>
+            </div>
+          )}
+          </Modal>
+          <Modal
+            title={`Attendance Logs - ${logsData?.user?.name || 'Staff'}`}
+            open={logsModalOpen}
+            onCancel={() => setLogsModalOpen(false)}
+            footer={[
+              <Button key="close" onClick={() => setLogsModalOpen(false)}>Close</Button>
+            ]}
+            width={700}
+          >
+            {logsData && (
+              <div style={{ padding: '10px 0' }}>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Card size="small" title="Punch In Photo" borderless>
+                      <div style={{ textAlign: 'center' }}>
+                        {logsData.punchInPhotoUrl ? (
+                          <Image
+                            src={logsData.punchInPhotoUrl.startsWith('http') ? logsData.punchInPhotoUrl : `${api.defaults.baseURL}${logsData.punchInPhotoUrl}`}
+                            alt="Punch In"
+                            style={{ maxWidth: '100%', borderRadius: '4px' }}
+                          />
+                        ) : (
+                          <div style={{ padding: '20px', background: '#f5f5f5', borderRadius: '4px', color: '#8c8c8c' }}>
+                            No punch-in photo
+                          </div>
+                        )}
+                        <div style={{ marginTop: '10px' }}>
+                          <Text strong>Time: </Text>
+                          <Text>{logsData.checkIn || '-'}</Text>
+                        </div>
+                      </div>
+                    </Card>
+                  </Col>
+                  <Col span={12}>
+                    <Card size="small" title="Punch Out Photo" borderless>
+                      <div style={{ textAlign: 'center' }}>
+                        {logsData.punchOutPhotoUrl ? (
+                          <Image
+                            src={logsData.punchOutPhotoUrl.startsWith('http') ? logsData.punchOutPhotoUrl : `${api.defaults.baseURL}${logsData.punchOutPhotoUrl}`}
+                            alt="Punch Out"
+                            style={{ maxWidth: '100%', borderRadius: '4px' }}
+                          />
+                        ) : (
+                          <div style={{ padding: '20px', background: '#f5f5f5', borderRadius: '4px', color: '#8c8c8c' }}>
+                            No punch-out photo
+                          </div>
+                        )}
+                        <div style={{ marginTop: '10px' }}>
+                          <Text strong>Time: </Text>
+                          <Text>{logsData.checkOut || '-'}</Text>
+                        </div>
+                      </div>
+                    </Card>
+                  </Col>
+                </Row>
+              </div>
+            )}
           </Modal>
         </Content>
       </Layout>

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 // import { Layout, Typography, Tabs, Button, Card, Table, Space, message, Modal, Form, Input, Select, DatePicker, Dropdown, Tag } from 'antd';
-import { Layout, Typography, Tabs, Button, Card, Table, Space, message, Modal, Form, Input, Select, DatePicker, Dropdown, Tag, Switch, Menu } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined, MoreOutlined, LogoutOutlined } from '@ant-design/icons';
+import { Layout, Typography, Tabs, Button, Card, Table, Space, message, Modal, Form, Input, Select, DatePicker, Dropdown, Tag, Switch, Menu, InputNumber } from 'antd';
+import { ArrowLeftOutlined, PlusOutlined, MoreOutlined, LogoutOutlined, EnvironmentOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
@@ -10,6 +10,26 @@ import { PrinterOutlined } from '@ant-design/icons';
 
 const { Header, Content } = Layout;
 const { Title } = Typography;
+
+const GOOGLE_MAPS_API_KEY = 'AIzaSyBukqAGI9NioKWUOgzVs0vXrBOg9DnbwLo';
+let gmapsLoading = false;
+let gmapsReady = false;
+const ensureGoogleMaps = () => new Promise((resolve) => {
+  if (gmapsReady || window.google?.maps) { gmapsReady = true; return resolve(); }
+  if (gmapsLoading) {
+    const id = setInterval(() => {
+      if (window.google?.maps) { clearInterval(id); gmapsReady = true; resolve(); }
+    }, 50);
+    return;
+  }
+  gmapsLoading = true;
+  const s = document.createElement('script');
+  s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&libraries=places`;
+  s.async = true; s.defer = true;
+  s.onload = () => { gmapsReady = true; resolve(); };
+  document.body.appendChild(s);
+});
+
 
 export default function Sales() {
   const navigate = useNavigate();
@@ -29,6 +49,7 @@ export default function Sales() {
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignForm] = Form.useForm();
   const [staffOptions, setStaffOptions] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [editingAssignment, setEditingAssignment] = useState(null);
 
   // Targets
@@ -41,8 +62,29 @@ export default function Sales() {
 
   const [visits, setVisits] = useState([]);
   const [visitsLoading, setVisitsLoading] = useState(false);
+  const [visitStaffFilter, setVisitStaffFilter] = useState(null);
+  const [visitSearch, setVisitSearch] = useState('');
+  const [visitDeptFilter, setVisitDeptFilter] = useState(null);
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+
+  // Per-tab filter states
+  const [assignSearch, setAssignSearch] = useState('');
+  const [assignDeptFilter, setAssignDeptFilter] = useState(null);
+  const [assignStaffFilter, setAssignStaffFilter] = useState(null);
+  const [targetSearch, setTargetSearch] = useState('');
+  const [targetDeptFilter, setTargetDeptFilter] = useState(null);
+  const [targetStaffFilter, setTargetStaffFilter] = useState(null);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderDeptFilter, setOrderDeptFilter] = useState(null);
+  const [orderStaffFilter, setOrderStaffFilter] = useState(null);
+  const [approvalSearch, setApprovalSearch] = useState('');
+  const [approvalDeptFilter, setApprovalDeptFilter] = useState(null);
+  const [approvalStaffFilter, setApprovalStaffFilter] = useState(null);
+
+  // Incentive Approvals
+  const [approvals, setApprovals] = useState([]);
+  const [loadingApprovals, setLoadingApprovals] = useState(false);
 
   const [viewOrder, setViewOrder] = useState(null);
   const [viewOpen, setViewOpen] = useState(false);
@@ -149,9 +191,54 @@ export default function Sales() {
     return () => { mounted = false; };
   }, []);
 
+  // Load departments from business functions
+  useEffect(() => {
+    (async () => {
+      try {
+        const resp = await api.get('/admin/business-functions');
+        const list = resp?.data?.data || [];
+        const deptFn = list.find(f => String(f.name || '').toLowerCase() === 'department');
+        const vals = Array.isArray(deptFn?.values) ? deptFn.values : [];
+        setDepartments(vals.filter(v => v?.value).map(v => v.value));
+      } catch (_) {}
+    })();
+  }, []);
 
 
-  // Clients handlers
+  // Load incentive approvals
+  const loadApprovals = async () => {
+    try {
+      setLoadingApprovals(true);
+      const resp = await api.get('/admin/sales-incentives/approvals');
+      if (resp.data.success) setApprovals(resp.data.approvals);
+    } catch (e) {
+      message.error('Failed to load incentive approvals');
+    } finally {
+      setLoadingApprovals(false);
+    }
+  };
+
+  useEffect(() => { loadApprovals(); }, []);
+
+  const handleUpdateApprovalStatus = async (id, status) => {
+    try {
+      await api.put(`/admin/sales-incentives/approvals/${id}`, { status });
+      message.success(`Approval ${status}`);
+      loadApprovals();
+    } catch (e) {
+      message.error('Failed to update approval');
+    }
+  };
+
+  const handleUpdateIncentiveAmount = async (id, amount) => {
+    try {
+      await api.put(`/admin/sales-incentives/approvals/${id}`, { incentiveAmount: amount });
+      loadApprovals();
+    } catch (e) {
+      message.error('Failed to update incentive amount');
+    }
+  };
+
   const openNewClient = () => {
     setEditingClient(null);
     clientForm.resetFields();
@@ -245,6 +332,9 @@ export default function Sales() {
           status: row.status,
           assignedOn: row.assignedOn ? dayjs(row.assignedOn) : undefined,
           dueDate: row.dueDate ? dayjs(row.dueDate) : undefined,
+          clientAddress: row.clientAddress || '',
+          clientLat: row.clientLat,
+          clientLng: row.clientLng,
         });
       }
       const r = await api.get('/admin/staff');
@@ -267,6 +357,9 @@ export default function Sales() {
         status: v.status,
         assignedOn: v.assignedOn ? v.assignedOn.format('YYYY-MM-DD HH:mm:ss') : undefined,
         dueDate: v.dueDate ? v.dueDate.format('YYYY-MM-DD HH:mm:ss') : undefined,
+        clientAddress: v.clientAddress,
+        clientLat: v.clientLat,
+        clientLng: v.clientLng,
       };
       let resp;
       if (editingAssignment && editingAssignment.id) {
@@ -289,6 +382,31 @@ export default function Sales() {
       setAssignSaving(false);
       setAssignmentsLoading(false);
     }
+  };
+
+  const deleteAssignment = (row) => {
+    Modal.confirm({
+      title: 'Delete assignment?',
+      content: 'This action cannot be undone.',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const resp = await api.delete(`/admin/sales/assignments/${encodeURIComponent(String(row.id))}`);
+          if (resp?.data?.success) {
+            message.success('Assignment deleted');
+            setAssignmentsLoading(true);
+            const r2 = await api.get('/admin/sales/assignments');
+            setAssignments(Array.isArray(r2?.data?.assignments) ? r2.data.assignments : []);
+          } else {
+            message.error(resp?.data?.message || 'Failed to delete assignment');
+          }
+        } catch (e) {
+          message.error(e?.response?.data?.message || 'Failed to delete assignment');
+        } finally {
+          setAssignmentsLoading(false);
+        }
+      },
+    });
   };
 
   // Targets handlers
@@ -364,6 +482,37 @@ export default function Sales() {
     });
   };
 
+  // Google Places Autocomplete for Assignment Modal
+  const acAttached = React.useRef(false);
+  useEffect(() => {
+    if (!assignOpen) {
+      acAttached.current = false;
+      return;
+    }
+    const timer = setTimeout(async () => {
+      await ensureGoogleMaps();
+      const el = document.getElementById('assign-client-address');
+      if (el && window.google?.maps?.places && !acAttached.current) {
+        try {
+          const ac = new window.google.maps.places.Autocomplete(el, { fields: ['formatted_address', 'geometry'] });
+          ac.addListener('place_changed', () => {
+            const place = ac.getPlace();
+            const loc = place?.geometry?.location;
+            if (loc) {
+              assignForm.setFieldsValue({
+                clientAddress: place.formatted_address || el.value,
+                clientLat: loc.lat(),
+                clientLng: loc.lng(),
+              });
+            }
+          });
+          acAttached.current = true;
+        } catch (_) { }
+      }
+    }, 500); // Wait for modal animation
+    return () => clearTimeout(timer);
+  }, [assignOpen, assignForm]);
+
   const openViewOrder = async (row) => {
     try {
       // Fetch full order detail from backend admin endpoint
@@ -431,7 +580,7 @@ export default function Sales() {
   // Assignments table columns
   const assignmentColumns = [
     { title: 'Client', dataIndex: 'clientName' },
-    { title: 'Staff', dataIndex: 'staffName' },
+    { title: 'Staff', dataIndex: 'staffName', render: (_, r) => getRecordStaffName(r) || '-' },
     { title: 'Title', dataIndex: 'title' },
     { title: 'Status', dataIndex: 'status' },
     { title: 'Assigned On', dataIndex: 'assignedOn', render: (v) => v ? dayjs(v).format('DD MMMM YYYY hh:mm A') : '' },
@@ -441,7 +590,12 @@ export default function Sales() {
       key: 'a',
       render: (_, row) => (
         <Dropdown
-          menu={{ items: [{ key: 'edit', label: 'Edit', onClick: () => openAssign(row) }] }}
+          menu={{
+            items: [
+              { key: 'edit', label: 'Edit', onClick: () => openAssign(row) },
+              { key: 'delete', label: 'Delete', onClick: () => deleteAssignment(row) },
+            ]
+          }}
           trigger={['click']}
         >
           <Button icon={<MoreOutlined />} />
@@ -494,7 +648,27 @@ export default function Sales() {
     { title: 'Staff', dataIndex: 'staffName', render: (v, r) => v || staffById[(r.userId || r.user_id || r.staffUserId)] || '' },
     { title: 'Client', dataIndex: 'clientName' },
     { title: 'Type', dataIndex: 'visitType' },
-    { title: 'Location', dataIndex: 'location' },
+    {
+      title: 'Location',
+      dataIndex: 'location',
+      render: (_, r) => {
+        const addr = r.checkInAddress || r.location || '';
+        const lat = r.checkInLat;
+        const lng = r.checkInLng;
+        const alt = r.checkInAltitude;
+        const hasGeo = Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+        return (
+          <div>
+            <div>{addr || '-'}</div>
+            {hasGeo ? (
+              <div style={{ color: '#8c8c8c', fontSize: 12 }}>
+                {`Lat: ${lat}, Lng: ${lng}`}{alt ? `, Alt: ${alt}m` : ''}
+              </div>
+            ) : null}
+          </div>
+        );
+      }
+    },
     // { title: 'Verified', dataIndex: 'verified', render: (v) => v ? <Tag color="green">Yes</Tag> : <Tag>No</Tag> },
     {
       title: 'Verified', dataIndex: 'verified', render: (v, r) => (
@@ -533,11 +707,87 @@ export default function Sales() {
     }
   ];
 
+  const approvalColumns = [
+    {
+      title: 'Staff Member',
+      key: 'staff',
+      render: (_, record) => record.staff?.profile?.name || record.staff?.phone || 'Unknown'
+    },
+    { title: 'Rule', dataIndex: ['rule', 'name'], key: 'rule' },
+    { title: 'Achieved', dataIndex: 'achievedAmount', key: 'achieved', render: (v) => `Rs ${v}` },
+    {
+      title: 'Incentive',
+      key: 'incentive',
+      render: (_, record) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>Rs</span>
+          <InputNumber
+            size="small"
+            value={record.incentiveAmount}
+            style={{ width: 100 }}
+            onChange={(v) => handleUpdateIncentiveAmount(record.id, v)}
+            disabled={record.status !== 'pending'}
+          />
+        </div>
+      )
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (v) => {
+        const colors = { pending: 'orange', approved: 'green', rejected: 'red' };
+        return <Tag color={colors[v]}>{v?.toUpperCase()}</Tag>;
+      }
+    },
+    { title: 'Date', dataIndex: 'createdAt', key: 'date', render: (v) => new Date(v).toLocaleDateString() },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_, record) => (
+        record.status === 'pending' && (
+          <Space>
+            <Button
+              type="primary" size="small"
+              onClick={() => handleUpdateApprovalStatus(record.id, 'approved')}
+              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+            >Approve</Button>
+            <Button danger size="small" onClick={() => handleUpdateApprovalStatus(record.id, 'rejected')}>
+              Reject
+            </Button>
+          </Space>
+        )
+      )
+    }
+  ];
+
   const orderColumns = [
     { title: 'Order Date', dataIndex: 'orderDate', render: (v) => v ? dayjs(v).format('DD MMMM YYYY') : '' },
     { title: 'Staff', dataIndex: 'staffName', render: (v, r) => v || staffById[(r.userId || r.user_id || r.staffUserId)] || '' },
     { title: 'Client', dataIndex: 'clientName', render: (v) => v || '' },
     { title: 'Items', dataIndex: 'items' },
+    {
+      title: 'Location',
+      render: (_, r) => {
+        const addr = r.checkInAddress || '';
+        const lat = r.checkInLat;
+        const lng = r.checkInLng;
+        const alt = r.checkInAltitude;
+        const hasGeo = Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+        return (
+          <div>
+            <div>{addr || '-'}</div>
+            {hasGeo ? (
+              <div style={{ color: '#8c8c8c', fontSize: 12 }}>
+                {`Lat: ${lat}, Lng: ${lng}`}{alt ? `, Alt: ${alt}m` : ''}
+              </div>
+            ) : null}
+          </div>
+        );
+      }
+    },
+    { title: 'Net Amount', dataIndex: 'netAmount', render: (v) => v ? `₹${v}` : 0 },
+    { title: 'GST Amount', dataIndex: 'gstAmount', render: (v) => v ? `₹${v}` : 0 },
     { title: 'Total Amount', dataIndex: 'totalAmount', render: (v) => v ? `₹${v}` : 0 },
     {
       title: 'Actions',
@@ -555,9 +805,26 @@ export default function Sales() {
 
   const staffById = React.useMemo(() => {
     const m = {};
-    (staffOptions || []).forEach(o => { if (o && o.value != null) m[o.value] = o.label; });
+    (staffOptions || []).forEach(o => {
+      if (!o || o.value == null) return;
+      m[o.value] = o.label;
+      m[String(o.value)] = o.label;
+      const n = Number(o.value);
+      if (Number.isFinite(n)) m[n] = o.label;
+    });
     return m;
   }, [staffOptions]);
+
+  const getRecordStaffName = React.useCallback((r) => {
+    if (!r) return '';
+    const id = r.staffUserId ?? r.staff_user_id ?? r.userId ?? r.user_id ?? null;
+    const mapped = id == null ? '' : String(staffById[id] || staffById[String(id)] || '');
+    const direct = String(r.staffName || r.salesPerson || r?.staff?.profile?.name || '');
+    // Prefer mapped staff label from master staff list (usually real employee name).
+    if (mapped) return mapped;
+    if (direct) return direct;
+    return '';
+  }, [staffById]);
 
   const tabs = useMemo(() => ([
     {
@@ -572,55 +839,125 @@ export default function Sales() {
     {
       key: 'assignments',
       label: 'Assign Staff',
-      children: (
-        <Card title="Client Assignments" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => openAssign(null)}>Assign Staff</Button>}>
-          <Table rowKey={(r) => r.id} loading={assignmentsLoading} columns={assignmentColumns} dataSource={assignments} pagination={false} />
-        </Card>
-      )
+      children: (() => {
+        const deptOptions = departments.map(d => ({ label: d, value: d }));
+        const filtered = assignments.filter(a => {
+          const name = getRecordStaffName(a).toLowerCase();
+          return (!assignSearch || name.includes(assignSearch.toLowerCase()))
+            && (!assignStaffFilter || a.staffUserId === assignStaffFilter || a.staffUserId === Number(assignStaffFilter));
+        });
+        return (
+          <Card title="Client Assignments" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => openAssign(null)}>Assign Staff</Button>}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              <Input.Search placeholder="Search by employee" allowClear style={{ width: 220 }} value={assignSearch} onChange={e => setAssignSearch(e.target.value)} />
+              <Select placeholder="Filter by Department" allowClear style={{ width: 200 }} value={assignDeptFilter} onChange={v => setAssignDeptFilter(v ?? null)} options={deptOptions} />
+              <Select placeholder="Filter by Employee" allowClear showSearch style={{ width: 200 }} value={assignStaffFilter} onChange={v => setAssignStaffFilter(v ?? null)} options={staffOptions} filterOption={(inp, opt) => (opt?.label ?? '').toLowerCase().includes(inp.toLowerCase())} />
+            </div>
+            <Table rowKey={(r) => r.id} loading={assignmentsLoading} columns={assignmentColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
+          </Card>
+        );
+      })()
     },
     {
       key: 'targets',
       label: 'Targets',
-      children: (
-        <Card title="Sales Targets" extra={<Button type="primary" icon={<PlusOutlined />} onClick={openNewTarget}>New Target</Button>}>
-          <Table rowKey={(r) => r.id} loading={targetsLoading} columns={targetsColumns} dataSource={targets} pagination={false} />
-        </Card>
-      )
+      children: (() => {
+        const deptOptions = departments.map(d => ({ label: d, value: d }));
+        const filtered = targets.filter(t => {
+          const name = getRecordStaffName(t).toLowerCase();
+          return (!targetSearch || name.includes(targetSearch.toLowerCase()))
+            && (!targetStaffFilter || t.staffUserId === targetStaffFilter || t.staffUserId === Number(targetStaffFilter));
+        });
+        return (
+          <Card title="Sales Targets" extra={<Button type="primary" icon={<PlusOutlined />} onClick={openNewTarget}>New Target</Button>}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              <Input.Search placeholder="Search by employee" allowClear style={{ width: 220 }} value={targetSearch} onChange={e => setTargetSearch(e.target.value)} />
+              <Select placeholder="Filter by Department" allowClear style={{ width: 200 }} value={targetDeptFilter} onChange={v => setTargetDeptFilter(v ?? null)} options={deptOptions} />
+              <Select placeholder="Filter by Employee" allowClear showSearch style={{ width: 200 }} value={targetStaffFilter} onChange={v => setTargetStaffFilter(v ?? null)} options={staffOptions} filterOption={(inp, opt) => (opt?.label ?? '').toLowerCase().includes(inp.toLowerCase())} />
+            </div>
+            <Table rowKey={(r) => r.id} loading={targetsLoading} columns={targetsColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
+          </Card>
+        );
+      })()
     },
     {
       key: 'visits',
       label: 'Visits',
-      children: (
-        <Card title="Visits">
-          <Table
-            rowKey={(r) => r.id}
-            loading={visitsLoading}
-            columns={visitColumns}
-            dataSource={visits}
-            pagination={false}
-          />
-        </Card>
-      )
+      children: (() => {
+        // Use departments fetched from business-functions API
+        const deptOptions = departments.map(d => ({ label: d, value: d }));
+
+        const filteredVisits = visits.filter(v => {
+          const matchStaff   = visitStaffFilter ? (v.staffUserId === visitStaffFilter || v.staffUserId === Number(visitStaffFilter)) : true;
+          const matchSearch  = visitSearch ? getRecordStaffName(v).toLowerCase().includes(visitSearch.toLowerCase()) : true;
+          const matchDept    = visitDeptFilter ? (v.department || v.staffDepartment || '') === visitDeptFilter : true;
+          return matchStaff && matchSearch && matchDept;
+        });
+
+        return (
+          <Card title="Visits">
+            {/* Filter toolbar */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              <Input.Search
+                placeholder="Search by employee name"
+                allowClear
+                style={{ width: 220 }}
+                value={visitSearch}
+                onChange={e => setVisitSearch(e.target.value)}
+              />
+              <Select
+                placeholder="Filter by Department"
+                allowClear
+                style={{ width: 200 }}
+                value={visitDeptFilter}
+                onChange={v => setVisitDeptFilter(v ?? null)}
+                options={deptOptions.length ? deptOptions : staffOptions.map(s => ({ label: s.label, value: s.label }))}
+              />
+              <Select
+                placeholder="Filter by Employee"
+                allowClear
+                style={{ width: 200 }}
+                value={visitStaffFilter}
+                onChange={v => setVisitStaffFilter(v ?? null)}
+                options={staffOptions}
+                showSearch
+                filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              />
+            </div>
+            <Table
+              rowKey={(r) => r.id}
+              loading={visitsLoading}
+              columns={visitColumns}
+              dataSource={filteredVisits}
+              pagination={{ pageSize: 10, showSizeChanger: true }}
+            />
+          </Card>
+        );
+      })()
     },
     {
       key: 'orders',
       label: 'Orders',
-      children: (
-        <Card title="Orders">
-          <Table
-            rowKey={(r) => r.id}
-            loading={ordersLoading}
-            columns={orderColumns}
-            dataSource={orders}
-            pagination={false}
-          />
-        </Card>
-      )
+      children: (() => {
+        const deptOptions = departments.map(d => ({ label: d, value: d }));
+        const filtered = orders.filter(o => {
+          const name = getRecordStaffName(o).toLowerCase();
+          return (!orderSearch || name.includes(orderSearch.toLowerCase()))
+            && (!orderStaffFilter || o.userId === orderStaffFilter || o.userId === Number(orderStaffFilter) || o.staffUserId === orderStaffFilter || o.staffUserId === Number(orderStaffFilter));
+        });
+        return (
+          <Card title="Orders">
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              <Input.Search placeholder="Search by employee" allowClear style={{ width: 220 }} value={orderSearch} onChange={e => setOrderSearch(e.target.value)} />
+              <Select placeholder="Filter by Department" allowClear style={{ width: 200 }} value={orderDeptFilter} onChange={v => setOrderDeptFilter(v ?? null)} options={deptOptions} />
+              <Select placeholder="Filter by Employee" allowClear showSearch style={{ width: 200 }} value={orderStaffFilter} onChange={v => setOrderStaffFilter(v ?? null)} options={staffOptions} filterOption={(inp, opt) => (opt?.label ?? '').toLowerCase().includes(inp.toLowerCase())} />
+            </div>
+            <Table rowKey={(r) => r.id} loading={ordersLoading} columns={orderColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
+          </Card>
+        );
+      })()
     },
-    // ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading]);
-  ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading, visits, visitsLoading, orders, ordersLoading]);
-
-
+  ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading, visits, visitsLoading, orders, ordersLoading, approvals, loadingApprovals, departments, staffOptions, assignSearch, assignDeptFilter, assignStaffFilter, targetSearch, targetDeptFilter, targetStaffFilter, visitSearch, visitDeptFilter, visitStaffFilter, orderSearch, orderDeptFilter, orderStaffFilter, approvalSearch, approvalDeptFilter, approvalStaffFilter, getRecordStaffName]);
 
   return (
     <Layout style={{ minHeight: '100vh', marginLeft: 200 }}>
@@ -721,6 +1058,11 @@ export default function Sales() {
           <Form.Item name="dueDate" label="Due Date">
             <DatePicker style={{ width: '100%' }} showTime />
           </Form.Item>
+          <Form.Item name="clientAddress" label="Client Address">
+            <Input id="assign-client-address" prefix={<EnvironmentOutlined />} placeholder="Search client address..." />
+          </Form.Item>
+          <Form.Item name="clientLat" hidden><Input /></Form.Item>
+          <Form.Item name="clientLng" hidden><Input /></Form.Item>
         </Form>
       </Modal>
 
@@ -813,6 +1155,14 @@ export default function Sales() {
               <div style={{ marginBottom: 12 }}>
                 <b>Payment:</b> {viewOrder.paymentMethod || '-'} | <b>Remarks:</b> {viewOrder.remarks || '-'}
               </div>
+              <div style={{ marginBottom: 12 }}>
+                <b>Location:</b> {viewOrder.checkInAddress || '-'}
+                {(Number.isFinite(Number(viewOrder.checkInLat)) && Number.isFinite(Number(viewOrder.checkInLng))) ? (
+                  <div style={{ color: '#8c8c8c', fontSize: 12, marginTop: 4 }}>
+                    {`Lat: ${viewOrder.checkInLat}, Lng: ${viewOrder.checkInLng}`}{viewOrder.checkInAltitude ? `, Alt: ${viewOrder.checkInAltitude}m` : ''}
+                  </div>
+                ) : null}
+              </div>
               <Table
                 rowKey={(it) => it.id}
                 size="small"
@@ -876,9 +1226,15 @@ export default function Sales() {
               <div>
                 <strong>Client OTP:</strong> {selectedVisit.clientOtp || 'N/A'}
               </div>
-              {selectedVisit.checkInLat && selectedVisit.checkInLng && (
+              {(Number.isFinite(Number(selectedVisit.checkInLat)) && Number.isFinite(Number(selectedVisit.checkInLng))) && (
                 <div>
                   <strong>Check-in Location:</strong> Lat: {selectedVisit.checkInLat}, Lng: {selectedVisit.checkInLng}
+                  {selectedVisit.checkInAltitude ? `, Alt: ${selectedVisit.checkInAltitude}m` : ''}
+                </div>
+              )}
+              {selectedVisit.checkInAddress && (
+                <div>
+                  <strong>Check-in Address:</strong> {selectedVisit.checkInAddress}
                 </div>
               )}
               <div>

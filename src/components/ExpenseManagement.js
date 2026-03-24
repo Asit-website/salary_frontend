@@ -27,6 +27,16 @@ const { RangePicker } = DatePicker;
 const { Option } = Select;
 const { TextArea } = Input;
 
+const EXPENSE_TYPE_OPTIONS = [
+    { value: 'Travel', label: 'Travel' },
+    { value: 'Food', label: 'Food' },
+    { value: 'Office', label: 'Office Supplies' },
+    { value: 'Fuel', label: 'Fuel' },
+    { value: 'Accommodation', label: 'Accommodation' },
+    { value: 'Communication', label: 'Communication' },
+    { value: 'Other', label: 'Other' },
+];
+
 const ExpenseManagement = () => {
     const [collapsed, setCollapsed] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -56,6 +66,7 @@ const ExpenseManagement = () => {
     useEffect(() => {
         fetchStaff();
     }, []);
+
 
     useEffect(() => {
         fetchExpenses();
@@ -343,10 +354,9 @@ const ExpenseManagement = () => {
                                 <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#666' }}>Type</label>
                                 <Select value={filterType} onChange={setFilterType} style={{ width: '100%' }} placeholder="Type">
                                     <Option value="all">All Types</Option>
-                                    <Option value="Travel">Travel</Option>
-                                    <Option value="Food">Food</Option>
-                                    <Option value="Office">Office Supplies</Option>
-                                    <Option value="Other">Other</Option>
+                                    {EXPENSE_TYPE_OPTIONS.map((t) => (
+                                        <Option key={t.value} value={t.value}>{t.label}</Option>
+                                    ))}
                                 </Select>
                             </Col>
                             <Col span={6}>
@@ -414,13 +424,9 @@ const ExpenseManagement = () => {
                         <Col span={12}>
                             <Form.Item name="expenseType" label="Expense Type" rules={[{ required: true }]}>
                                 <Select placeholder="Select type">
-                                    <Option value="Travel">Travel</Option>
-                                    <Option value="Food">Food</Option>
-                                    <Option value="Office">Office Supplies</Option>
-                                    <Option value="Fuel">Fuel</Option>
-                                    <Option value="Accommodation">Accommodation</Option>
-                                    <Option value="Communication">Communication</Option>
-                                    <Option value="Other">Other</Option>
+                                    {EXPENSE_TYPE_OPTIONS.map((t) => (
+                                        <Option key={t.value} value={t.value}>{t.label}</Option>
+                                    ))}
                                 </Select>
                             </Form.Item>
                         </Col>

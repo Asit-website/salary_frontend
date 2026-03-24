@@ -44,6 +44,7 @@ export default function SuperadminPlans() {
       price: rec.price,
       salesEnabled: rec.salesEnabled,
       geolocationEnabled: rec.geolocationEnabled,
+      expenseEnabled: rec.expenseEnabled,
       maxGeolocationStaff: rec.maxGeolocationStaff,
       active: rec.active,
     });
@@ -75,6 +76,7 @@ export default function SuperadminPlans() {
     { title: 'Price', dataIndex: 'price', width: 100, render: (v) => `₹ ${Number(v || 0)}` },
     { title: 'Sales', dataIndex: 'salesEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
     { title: 'Geo', dataIndex: 'geolocationEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
+    { title: 'Exp', dataIndex: 'expenseEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
     // { title: 'Max Geo Staff', dataIndex: 'maxGeolocationStaff', width: 120, render: (v) => v || 0 },
     { title: 'Active', dataIndex: 'active', width: 90, render: (v) => v ? 'Yes' : 'No' },
     {
@@ -120,6 +122,7 @@ export default function SuperadminPlans() {
       <Modal
         title={editing ? 'Edit Plan' : 'Create Plan'}
         open={open}
+        width={760}
         onCancel={() => setOpen(false)}
         onOk={onSubmit}
         okText={editing ? 'Update' : 'Create'}
@@ -141,6 +144,9 @@ export default function SuperadminPlans() {
             <Switch />
           </Form.Item>
           <Form.Item label="Geolocation Enabled" name="geolocationEnabled" valuePropName="checked" initialValue={false}>
+            <Switch />
+          </Form.Item>
+          <Form.Item label="Expense Enabled" name="expenseEnabled" valuePropName="checked" initialValue={false}>
             <Switch />
           </Form.Item>
           {/* <Form.Item label="Max Geolocation Staff" name="maxGeolocationStaff" initialValue={0}>

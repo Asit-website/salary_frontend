@@ -4,14 +4,18 @@ import {
   DashboardOutlined,
   UserOutlined,
   CalendarOutlined,
-  DollarOutlined,
+  FileProtectOutlined,
+  ShoppingOutlined,
+  GoldOutlined,
+  SafetyOutlined,
   FileTextOutlined,
   SettingOutlined,
   BarChartOutlined,
-  EnvironmentOutlined,
-  InboxOutlined,
   BankOutlined,
-  WalletOutlined
+  WalletOutlined,
+  TrophyOutlined,
+  RobotOutlined,
+  DollarOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { API_BASE_URL } from '../api';
@@ -22,37 +26,75 @@ const { Sider } = Layout;
 const Sidebar = ({ collapsed }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [brand, setBrand] = useState('');
+  const DEFAULT_BRAND_TEXT = 'Your Company Name';
+  const SUPERADMIN_BRAND_TEXT = 'THINKTECH';
+  const [brand, setBrand] = useState(DEFAULT_BRAND_TEXT);
   const [orgLogo, setOrgLogo] = useState('');
   const [sidebarHeaderType, setSidebarHeaderType] = useState('name');
   const [subscriptionInfo, setSubscriptionInfo] = useState(null);
+  const [sidebarPermissionKeys, setSidebarPermissionKeys] = useState([]);
+  const normalizeBrand = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return DEFAULT_BRAND_TEXT;
+    return raw;
+  };
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      try {
-        const resp = await api.get('/admin/settings/brand');
-        const name = resp?.data?.brand?.displayName || '';
-        if (mounted) setBrand(String(name));
-      } catch (_) { }
-      try {
-        const r2 = await api.get('/admin/settings/business-info');
-        const url = r2?.data?.info?.logoUrl || '';
-        const hType = r2?.data?.info?.sidebarHeaderType || 'name';
+      if (userRole === 'channel_partner') {
         if (mounted) {
-          setOrgLogo(url ? (url.startsWith('/') ? `${API_BASE_URL}${url}` : url) : '');
-          setSidebarHeaderType(hType);
+          setBrand('Partner Portal');
+          setSidebarHeaderType('name');
         }
-      } catch (_) { }
+        return;
+      }
+      if (userRole === 'staff') {
+        // Staff cannot access /admin/settings/* endpoints.
+        try {
+          const staffBrandResp = await api.get('/admin/user-access/sidebar-brand');
+          const name = staffBrandResp?.data?.brand?.displayName || '';
+          const url = staffBrandResp?.data?.info?.logoUrl || '';
+          const hType = staffBrandResp?.data?.info?.sidebarHeaderType || 'name';
+          if (mounted) {
+            setBrand(normalizeBrand(name));
+            setOrgLogo(url ? (url.startsWith('/') ? `${API_BASE_URL}${url}` : url) : '');
+            setSidebarHeaderType(hType);
+          }
+        } catch (_) { }
+      } else {
+        try {
+          const resp = await api.get('/admin/settings/brand');
+          const name = resp?.data?.brand?.displayName || '';
+          if (mounted) setBrand(normalizeBrand(name));
+        } catch (_) { }
+        try {
+          const r2 = await api.get('/admin/settings/business-info');
+          const url = r2?.data?.info?.logoUrl || '';
+          const hType = r2?.data?.info?.sidebarHeaderType || 'name';
+          if (mounted) {
+            setOrgLogo(url ? (url.startsWith('/') ? `${API_BASE_URL}${url}` : url) : '');
+            setSidebarHeaderType(hType);
+          }
+        } catch (_) { }
+      }
       // Load subscription info to control menu items
       try {
         const subResp = await api.get('/subscription/subscription-info');
         if (mounted) setSubscriptionInfo(subResp.data?.subscriptionInfo);
       } catch (_) { }
+      // Load badge-based sidebar permissions for current user
+      try {
+        const permResp = await api.get('/admin/user-access/my-sidebar-permissions');
+        const keys = Array.isArray(permResp?.data?.permissionKeys) ? permResp.data.permissionKeys : [];
+        if (mounted) setSidebarPermissionKeys(keys);
+      } catch (_) {
+        if (mounted) setSidebarPermissionKeys([]);
+      }
     };
     load();
     const onBrand = (e) => {
-      if (e?.detail?.displayName) setBrand(String(e.detail.displayName));
+      if (e?.detail?.displayName !== undefined) setBrand(normalizeBrand(e.detail.displayName));
     };
     const onLogo = (e) => {
       const url = e?.detail?.logoUrl || '';
@@ -72,89 +114,212 @@ const Sidebar = ({ collapsed }) => {
     };
   }, []);
 
-  const userRole = (() => {
+  const userInfo = (() => {
     try {
       // Check sessionStorage first (for impersonated sessions), then localStorage
       const userStr = sessionStorage.getItem('impersonate_user') || localStorage.getItem('user');
-      return JSON.parse(userStr)?.role || 'admin';
-    } catch { return 'admin'; }
+      const user = JSON.parse(userStr);
+      return {
+        role: user?.role || 'admin',
+        channelPartnerId: user?.channelPartnerId || null
+      };
+    } catch { return { role: 'admin', channelPartnerId: null }; }
   })();
+  const userRole = userInfo.role;
+  const channelPartnerId = userInfo.channelPartnerId;
+  const headerBrand = userRole === 'superadmin' ? SUPERADMIN_BRAND_TEXT : normalizeBrand(brand);
 
-  // Filter admin items based on subscription
+  const hasSidebarModulePermission = (moduleKey) => {
+    if (userRole === 'admin' || userRole === 'superadmin') return true;
+    const map = {
+      dashboard: 'dashboard_tab',
+      staff: 'staff_management_tab',
+      attendance: 'attendance_tab',
+      payroll: 'payroll_tab',
+      loans: 'loans_tab',
+      sales: 'sales_tab',
+      reports: 'reports_tab',
+      assets: 'assets_tab',
+      expenses: 'expenses_tab',
+      geolocation: 'geolocation_tab',
+      letters: 'letters_tab',
+      settings: 'settings_tab',
+      performance: 'performance_tab',
+      task_management: 'task_management_tab',
+    };
+    const key = map[moduleKey];
+    return !!key && sidebarPermissionKeys.includes(key);
+  };
+
+  // Filter admin items based on subscription AND permissions
   const getAdminItems = () => {
     const items = [
       {
         key: '/dashboard',
         icon: <DashboardOutlined />,
         label: 'Dashboard',
+        module: 'dashboard'
       },
       {
         key: '/staff-management',
         icon: <UserOutlined />,
         label: 'Staff Management',
+        module: 'staff',
       },
       {
         key: '/attendance',
         icon: <CalendarOutlined />,
         label: 'Attendance',
+        module: 'attendance'
+      },
+      {
+        key: 'leave-group',
+        icon: <CalendarOutlined />,
+        label: 'Leave Management',
+        module: 'leave',
+        children: [
+          {
+            key: '/leave/requests',
+            label: 'Leave Requests',
+          },
+          {
+            key: '/leave/encashment',
+            label: 'Leave Encashment Claims',
+          },
+        ]
       },
       {
         key: 'payroll-group',
-        icon: <DollarOutlined />,
+        icon: <FileProtectOutlined />,
         label: 'Payroll',
+        module: 'payroll',
         children: [
           {
             key: '/payroll',
-            label: 'Payroll Generate',
+            label: 'Payroll List',
           },
           {
             key: '/employee-salary',
             label: 'Employee Salary',
           },
-        ],
+        ]
       },
       {
         key: '/loans',
         icon: <BankOutlined />,
         label: 'Loans',
+        module: 'loans'
+      },
+      {
+        key: '/advances',
+        icon: <DollarOutlined />,
+        label: 'Advances',
+        module: 'payroll'
       },
       {
         key: '/sales',
-        icon: <DollarOutlined />,
+        icon: <ShoppingOutlined />,
         label: 'Sales',
+        module: 'sales'
+      },
+      {
+        key: '/task-management',
+        icon: <FileProtectOutlined />,
+        label: 'Task Management',
+        module: 'task_management'
+      },
+      {
+        key: 'performance-group',
+        icon: <TrophyOutlined />,
+        label: 'Performance Management',
+        module: 'performance',
+        children: [
+          {
+            key: '/performance/appraisals',
+            label: 'Appraisal',
+          },
+          {
+            key: '/performance/ratings',
+            label: 'Rating System',
+          },
+        ]
       },
       {
         key: '/org-reports',
         icon: <BarChartOutlined />,
         label: 'Reports',
+        module: 'reports'
+      },
+      {
+        key: 'ai-reports-group',
+        icon: <BarChartOutlined />,
+        label: 'AI Reports',
+        module: 'reports',
+        children: [
+          {
+            key: '/ai-reports/attendance-productivity',
+            label: 'Attendance Productivity',
+          },
+          {
+            key: '/ai-reports/salary-forecast',
+            label: 'Salary Forecast',
+          },
+          {
+            key: '/ai-reports/risk-detection',
+            label: 'Risk Detection',
+          },
+        ]
+      },
+      {
+        key: '/ai-reports/assistant',
+        icon: <RobotOutlined />,
+        label: 'AI Assistant',
+        module: 'reports'
       },
       {
         key: '/assets-management',
-        icon: <InboxOutlined />,
+        icon: <GoldOutlined />,
         label: 'Assets',
+        module: 'assets'
       },
       {
         key: '/expense-management',
         icon: <WalletOutlined />,
         label: 'Expenses',
+        module: 'expenses'
       },
       {
         key: '/geolocation',
-        icon: <EnvironmentOutlined />,
+        icon: <SafetyOutlined />,
         label: 'Geolocation',
+        module: 'geolocation'
       },
       {
-        key: '/settings/letters',
-        icon: <FileTextOutlined />,
-        label: 'Letters',
+        key: '/roster',
+        icon: <CalendarOutlined />,
+        label: 'Roster',
+        module: 'staff',
       },
       {
         key: '/settings',
         icon: <SettingOutlined />,
         label: 'Settings',
+        module: 'settings'
       },
     ];
 
+    if (userRole === 'admin' && channelPartnerId) {
+        items.push({
+            key: '/partner/clients',
+            icon: <UserOutlined />,
+            label: 'My Clients',
+            module: 'partner_clients'
+        });
+    }
+
+    if (userRole === 'staff') {
+      return items.filter((item) => hasSidebarModulePermission(item.module));
+    }
     return items;
   };
 
@@ -163,6 +328,11 @@ const Sidebar = ({ collapsed }) => {
       key: '/superadmin/dashboard',
       icon: <DashboardOutlined />,
       label: 'Dashboard',
+    },
+    {
+      key: '/superadmin/channel-partners',
+      icon: <UserOutlined />,
+      label: 'Channel Partners',
     },
     {
       key: '/superadmin/clients',
@@ -174,6 +344,14 @@ const Sidebar = ({ collapsed }) => {
       icon: <SettingOutlined />,
       label: 'Plans',
     },
+  ];
+
+  const channelPartnerItems = [
+    {
+        key: '/partner/clients',
+        icon: <UserOutlined />,
+        label: 'My Clients',
+    }
   ];
 
   const handleMenuClick = (e) => {
@@ -195,6 +373,15 @@ const Sidebar = ({ collapsed }) => {
       }
     }
 
+    // Check for Expense access
+    if (e.key === '/expense-management') {
+      const isExpActive = !!subscriptionInfo?.expenseEnabled || !!subscriptionInfo?.plan?.expenseEnabled;
+      if (!isExpActive) {
+        message.warning('You do not have permission to access Expense module');
+        return;
+      }
+    }
+
     navigate(e.key);
   };
 
@@ -211,6 +398,22 @@ const Sidebar = ({ collapsed }) => {
     if (pathname.startsWith('/payroll') || pathname.startsWith('/employee-salary')) {
       return pathname.startsWith('/payroll') ? '/payroll' : '/employee-salary';
     }
+    if (pathname.startsWith('/performance/appraisals')) return '/performance/appraisals';
+    if (pathname.startsWith('/performance/ratings')) return '/performance/ratings';
+    if (pathname.startsWith('/leave/requests')) return '/leave/requests';
+    if (pathname.startsWith('/leave/encashment')) return '/leave/encashment';
+    if (pathname.startsWith('/ai-reports/assistant')) return '/ai-reports/assistant';
+    if (pathname.startsWith('/ai-reports/salary-forecast')) return '/ai-reports/salary-forecast';
+    if (pathname.startsWith('/ai-reports/attendance-productivity')) return '/ai-reports/attendance-productivity';
+    if (pathname.startsWith('/ai-reports/risk-detection')) return '/ai-reports/risk-detection';
+    if (pathname.startsWith('/ai-reports')) return '/ai-reports/salary-forecast';
+
+    // Handle report query params for sidebar selection
+    const search = location.search;
+    if (pathname === '/org-reports') {
+      if (search.includes('type=leave-balance')) return '/org-reports?type=leave-balance';
+      if (search.includes('type=applied-leave')) return '/org-reports?type=applied-leave';
+    }
 
     // Default to exact pathname match
     return pathname;
@@ -222,6 +425,19 @@ const Sidebar = ({ collapsed }) => {
     const keys = [];
     if (pathname.startsWith('/payroll') || pathname.startsWith('/employee-salary')) {
       keys.push('payroll-group');
+    }
+    if (pathname.startsWith('/performance/appraisals') || pathname.startsWith('/performance/ratings')) {
+      keys.push('performance-group');
+    }
+    if (pathname.startsWith('/leave/') || (pathname === '/org-reports' && (location.search.includes('leave') || location.search.includes('applied-leave')))) {
+      keys.push('leave-group');
+    }
+    if (
+      pathname.startsWith('/ai-reports/salary-forecast') ||
+      pathname.startsWith('/ai-reports/attendance-productivity') ||
+      pathname.startsWith('/ai-reports/risk-detection')
+    ) {
+      keys.push('ai-reports-group');
     }
     return keys;
   };
@@ -259,7 +475,7 @@ const Sidebar = ({ collapsed }) => {
           (sidebarHeaderType === 'logo' && orgLogo) ? (
             <img src={orgLogo} alt="Logo" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
           ) : (
-            brand ? (
+            headerBrand ? (
               <div style={{
                 width: '40px',
                 height: '40px',
@@ -272,7 +488,7 @@ const Sidebar = ({ collapsed }) => {
                 fontWeight: 'bold',
                 fontSize: '18px'
               }}>
-                {brand.substring(0, 2).toUpperCase()}
+                {headerBrand.substring(0, 2).toUpperCase()}
               </div>
             ) : null
           )
@@ -282,7 +498,7 @@ const Sidebar = ({ collapsed }) => {
               <img src={orgLogo} alt="Logo" style={{ maxWidth: '100%', maxHeight: '45px', objectFit: 'contain' }} />
             </div>
           ) : (
-            brand && (
+            headerBrand && (
               <div style={{
                 fontSize: '20px',
                 fontWeight: 'bold',
@@ -292,7 +508,7 @@ const Sidebar = ({ collapsed }) => {
                 whiteSpace: 'nowrap',
                 padding: '0 8px'
               }}>
-                {brand}
+                {headerBrand}
               </div>
             )
           )
@@ -304,7 +520,11 @@ const Sidebar = ({ collapsed }) => {
         mode="inline"
         selectedKeys={[getSelectedKey()]}
         defaultOpenKeys={getOpenKeys()}
-        items={userRole === 'superadmin' ? superadminItems : getAdminItems()}
+        items={
+            userRole === 'superadmin' ? superadminItems : 
+            userRole === 'channel_partner' ? channelPartnerItems : 
+            getAdminItems()
+        }
         onClick={handleMenuClick}
         style={{
           borderRight: 'none',

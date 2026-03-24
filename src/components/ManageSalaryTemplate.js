@@ -131,29 +131,36 @@ export default function ManageSalaryTemplate() {
       let hasEsiKeys = false;
       let ptFixedAmount = 0;
       let ptSlabs = [];
+      let pfFound = false;
+      let esiFound = false;
+      let ptFound = false;
 
       toArray(rawDed).forEach((it) => {
         const rawKey = String(it?.key ?? it?.name ?? '').trim();
         const key = rawKey.toUpperCase();
-        const value = Number(it?.valueNumber ?? it?.value_number ?? it?.value ?? it?.amount ?? 0);
+        const value = Number(it?.key && it?.value_number !== undefined ? it.value_number : (it?.valueNumber ?? it?.value_number ?? it?.value ?? it?.amount ?? 0));
 
         if (key === 'PROVIDENT_FUND_EMPLOYEE' || key === 'PROVIDENT FUND - EMPLOYEE') {
           pfEmployeeAmount = Number.isFinite(value) ? value : 0;
+          pfFound = true;
           return;
         }
         if (key === 'PROVIDENT_FUND_EMPLOYER' || key === 'PROVIDENT FUND - EMPLOYER') {
           pfEmployerAmount = Number.isFinite(value) ? value : 0;
+          pfFound = true;
           return;
         }
 
         if (key === 'ESI_EMPLOYEE' || key === 'ESI - EMPLOYEE') {
           esiEmployeeAmount = Number.isFinite(value) ? value : 0;
           hasEsiKeys = true;
+          esiFound = true;
           return;
         }
         if (key === 'ESI_EMPLOYER' || key === 'ESI - EMPLOYER') {
           esiEmployerAmount = Number.isFinite(value) ? value : 0;
           hasEsiKeys = true;
+          esiFound = true;
           return;
         }
 
@@ -161,12 +168,14 @@ export default function ManageSalaryTemplate() {
           ptFixedAmount = Number.isFinite(value) ? value : 0;
           const slabs = it?.meta?.slabs;
           ptSlabs = Array.isArray(slabs) ? slabs : [];
+          ptFound = true;
           return;
         }
 
         if (!rawKey) return;
-        if (key === 'PROVIDENT FUND') return;
+        if (key === 'PROVIDENT FUND') { pfFound = true; return; }
         if (key === 'ESI') {
+          esiFound = true;
           // Legacy ESI support: treat as employee percentage when new keys aren't present
           if (!hasEsiKeys) {
             esiEmployeeAmount = Number.isFinite(value) ? value : 0;
@@ -184,25 +193,32 @@ export default function ManageSalaryTemplate() {
       // Always add all default deductions including PF with proper values
       const finalDeductions = [];
 
-      // Add PF first with correct values
-      finalDeductions.push({
-        name: 'PROVIDENT FUND',
-        amount: Number.isFinite(pfEmployeeAmount) ? pfEmployeeAmount : 12,
-        employerAmount: Number.isFinite(pfEmployerAmount) ? pfEmployerAmount : 12
-      });
+      // Add PF if found
+      if (pfFound) {
+        finalDeductions.push({
+          name: 'PROVIDENT FUND',
+          amount: pfEmployeeAmount,
+          employerAmount: pfEmployerAmount
+        });
+      }
 
-      // Add ESI like PF (percent slabs)
-      finalDeductions.push({
-        name: 'ESI',
-        amount: Number.isFinite(esiEmployeeAmount) ? esiEmployeeAmount : 0.75,
-        employerAmount: Number.isFinite(esiEmployerAmount) ? esiEmployerAmount : 3.25
-      });
+      // Add ESI if found
+      if (esiFound) {
+        finalDeductions.push({
+          name: 'ESI',
+          amount: esiEmployeeAmount,
+          employerAmount: esiEmployerAmount
+        });
+      }
 
-      finalDeductions.push({
-        name: 'PROFESSIONAL TAX',
-        amount: Number.isFinite(ptFixedAmount) ? ptFixedAmount : 0,
-        slabs: Array.isArray(ptSlabs) && ptSlabs.length ? ptSlabs : [{ min: 0, max: null, amount: 0 }],
-      });
+      // Add PT if found
+      if (ptFound) {
+        finalDeductions.push({
+          name: 'PROFESSIONAL TAX',
+          amount: ptFixedAmount,
+          slabs: Array.isArray(ptSlabs) && ptSlabs.length ? ptSlabs : [{ min: 0, max: null, amount: 0 }],
+        });
+      }
 
       // Add other deductions from template
       dEntries.forEach((entry) => {
@@ -251,8 +267,8 @@ export default function ManageSalaryTemplate() {
 
       const toItems = (arr = [], isDeduction = false) =>
         (arr || [])
-          .map((it) => ({ 
-            name: String(it?.name || '').trim(), 
+          .map((it) => ({
+            name: String(it?.name || '').trim(),
             amount: Number(it?.amount || 0),
             employerAmount: Number(it?.employerAmount || 0),
             slabs: Array.isArray(it?.slabs) ? it.slabs : [],
@@ -373,6 +389,9 @@ export default function ManageSalaryTemplate() {
     {
       title: 'Actions',
       key: 'actions',
+      align: 'right',
+      width: 220,
+      fixed: 'right',
       render: (_, r) => {
         const items = [
           { key: 'edit', label: 'Edit' },
@@ -383,9 +402,11 @@ export default function ManageSalaryTemplate() {
           if (key === 'delete') remove(r);
         };
         return (
-          <Dropdown menu={{ items, onClick }} trigger={['click']}>
-            <Button icon={<MoreOutlined />}>More</Button>
-          </Dropdown>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Dropdown menu={{ items, onClick }} trigger={['click']}>
+              <Button icon={<MoreOutlined />}>More</Button>
+            </Dropdown>
+          </div>
         );
       },
     },
@@ -407,6 +428,7 @@ export default function ManageSalaryTemplate() {
               loading={listLoading}
               dataSource={(templates || []).map((t) => ({ key: t.id, ...t }))}
               columns={columns}
+              scroll={{ x: 900 }}
               pagination={{ pageSize: 10 }}
             />
           </Card>
@@ -508,7 +530,7 @@ export default function ManageSalaryTemplate() {
                                     label="Employee Contribution (%)"
                                     {...rest}
                                     name={[name, 'amount']}
-                                    style={{ marginBottom: 0 }}                    
+                                    style={{ marginBottom: 0 }}
                                   >
                                     <InputNumber
                                       min={0}
