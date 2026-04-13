@@ -18,7 +18,7 @@ import {
   InputNumber,
   Select
 } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { jsPDF } from 'jspdf';
 import moment from 'moment';
 import Sidebar from './Sidebar';
@@ -49,6 +49,10 @@ export default function PayrollCycle() {
   const [paidOpen, setPaidOpen] = React.useState(false);
   const [paidForm] = Form.useForm();
   const [editForm] = Form.useForm();
+
+  // Tenure Bonus Breakdown State
+  const [bonusModalVisible, setBonusModalVisible] = React.useState(false);
+  const [bonusData, setBonusData] = React.useState(null);
 
   // Load cycle + lines
   const loadCycle = React.useCallback(async () => {
@@ -166,8 +170,8 @@ export default function PayrollCycle() {
     try {
       setLoading(true);
       const res = await api.post(`/admin/payroll/${cycle.id}/mark-paid`);
-      if (res?.data?.success) { 
-        setCycle(res.data.cycle); 
+      if (res?.data?.success) {
+        setCycle(res.data.cycle);
         message.success('Marked as paid');
         // Refresh payroll lines to show paid status
         const payrollRes = await api.get(`/admin/payroll?monthKey=${cycle.monthKey}`);
@@ -200,6 +204,7 @@ export default function PayrollCycle() {
       setLoading(false);
     }
   };
+
 
   const openBulkPaid = async () => {
     if (!cycle) return;
@@ -310,11 +315,11 @@ export default function PayrollCycle() {
   const columns = [
     { title: 'Employee', key: 'emp', render: (_, r) => staffMap[r.userId || r.user_id] || (r.userId || r.user_id) },
     { title: 'Gross', dataIndex: ['totals', 'grossSalary'], key: 'gross', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` },
-    { 
-      title: 'Earnings', 
-      dataIndex: ['totals', 'totalEarnings'], 
-      key: 'earnings', 
-      render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` 
+    {
+      title: 'Earnings',
+      dataIndex: ['totals', 'totalEarnings'],
+      key: 'earnings',
+      render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}`
     },
     { title: 'Deductions', dataIndex: ['totals', 'totalDeductions'], key: 'deductions', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` },
     { title: 'Net', dataIndex: ['totals', 'netSalary'], key: 'net', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` },
@@ -333,7 +338,7 @@ export default function PayrollCycle() {
   const generatePayslipPDF = async (payrollLine) => {
     try {
       console.log('Starting payslip generation...');
-      
+
       if (!cycle || !payrollLine) {
         console.error('Missing cycle or payroll data');
         message.error('Payroll data not available');
@@ -349,7 +354,7 @@ export default function PayrollCycle() {
       }
 
       // Get organization brand info from same endpoint as sidebar
-      let brandInfo = { displayName: 'ThinkTech Solutions' };
+      let brandInfo = { displayName: 'Thinktech Software' };
       try {
         const brandResponse = await api.get('/admin/settings/brand');
         if (brandResponse.data?.brand?.displayName) {
@@ -483,7 +488,7 @@ export default function PayrollCycle() {
         } else {
           ensureSpace(lineHeight + 6);
         }
-        
+
         const curY = yPosition; // keep same baseline for both columns
         // font style
         pdf.setFont('helvetica', isHeader ? 'bold' : 'normal');
@@ -499,20 +504,20 @@ export default function PayrollCycle() {
         const label = String(leftText ?? '');
         const maxLabelWidth = labelWidth - 8; // leave more padding
         const lines = pdf.splitTextToSize(label, maxLabelWidth);
-        
+
         // Calculate total height needed
         const totalHeight = lineHeight * lines.length;
-        
+
         // Draw each line of the label
         lines.forEach((line, index) => {
           pdf.text(line, leftColX, curY + (index * lineHeight));
         });
-        
+
         // value column right-aligned - center it vertically with the label
         const value = String(rightText ?? '');
         const valueY = curY + ((totalHeight - lineHeight) / 2);
         pdf.text(value, valueRightX, valueY, { align: 'right' });
-        
+
         // advance based on number of lines in label
         yPosition += totalHeight + (isHeader ? 4 : 2);
       };
@@ -520,7 +525,7 @@ export default function PayrollCycle() {
       // Header Section - Dynamic Brand Name like Sidebar
       pdf.setFontSize(16);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(brandInfo.displayName || 'ThinkTech Solutions', centerX, yPosition, { align: 'center' });
+      pdf.text(brandInfo.displayName || 'Thinktech Software', centerX, yPosition, { align: 'center' });
       yPosition += 8;
 
       pdf.setFontSize(12);
@@ -531,7 +536,7 @@ export default function PayrollCycle() {
       // Employee Details - Simple Table Format with Department
       pdf.setFontSize(10);
       pdf.setFont('helvetica', 'normal');
-      
+
       // Left column - Employee info
       pdf.text('Employee Name: ' + staff, tableStartX, yPosition);
       yPosition += 6;
@@ -541,7 +546,7 @@ export default function PayrollCycle() {
       yPosition += 6;
       pdf.text('Designation: ' + (staff.designation || 'Employee'), tableStartX, yPosition);
       yPosition += 6;
-      
+
       // Right column - Payment info (top-aligned with Employee Name)
       const rightColX = centerX + 20;
       const rightColStartY = yPosition - 24; // Start at same level as Employee Name
@@ -549,7 +554,7 @@ export default function PayrollCycle() {
       pdf.text('Status: ' + (payrollLine.paidAt ? 'PAID' : 'DUE'), rightColX, rightColStartY + 6);
       pdf.text('Generated: ' + moment().format('DD-MM-YYYY'), rightColX, rightColStartY + 12);
       pdf.text('Working Days: ' + attendanceData.workingDays, rightColX, rightColStartY + 18);
-      
+
       yPosition += 15;
 
       // Draw line separator
@@ -597,14 +602,14 @@ export default function PayrollCycle() {
       for (let i = 0; i < maxRows; i++) {
         const er = earningsRows[i];
         const dr = deductionRows[i];
-        
+
         // Earnings row - Left aligned label, right aligned amount
         if (er) {
           const label = er.label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
           pdf.text(label, leftX + 5, yPosition);
           pdf.text(formatAmount(er.amount), leftX + colWidth - 15, yPosition, { align: 'right' });
         }
-        
+
         // Deductions row - Same format as earnings
         if (dr) {
           let label = dr.label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -615,7 +620,7 @@ export default function PayrollCycle() {
           pdf.text(label, rightX + 5, yPosition);
           pdf.text(formatAmount(dr.amount), rightX + colWidth - 15, yPosition, { align: 'right' });
         }
-        
+
         yPosition += 8;
       }
 
@@ -656,16 +661,16 @@ export default function PayrollCycle() {
       // Signature sections like ss1
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(10);
-      
+
       // Employee Signature
       pdf.text('Employee Signature', tableStartX, yPosition);
       pdf.line(tableStartX, yPosition + 5, tableStartX + 80, yPosition + 5); // Signature line
       yPosition += 15;
-      
+
       // Employer Signature
       pdf.text('Employer Signature', tableStartX + 100, yPosition - 15);
       pdf.line(tableStartX + 100, yPosition - 10, tableStartX + 180, yPosition - 10); // Signature line
-      
+
       yPosition += 10;
 
       // Simple footer
@@ -678,7 +683,7 @@ export default function PayrollCycle() {
       // Save the PDF
       pdf.save(`Payslip_${staff}_${cycle.monthKey}.pdf`);
       message.success('Payslip generated successfully!');
-      
+
     } catch (error) {
       console.error('Error generating payslip:', error);
       message.error('Failed to generate payslip');
@@ -830,6 +835,71 @@ export default function PayrollCycle() {
             <Descriptions.Item label="Absent">{viewRow?.attendanceSummary?.absent || 0}</Descriptions.Item>
             <Descriptions.Item label="Weekly Off">{viewRow?.attendanceSummary?.weeklyOff || 0}</Descriptions.Item>
             <Descriptions.Item label="Holiday">{viewRow?.attendanceSummary?.holidays || 0}</Descriptions.Item>
+            <Descriptions.Item label="Tenure Bonus">
+              {viewRow?.attendanceSummary?.tenureBonus ? (
+                <Space>
+                  <Text strong style={{ color: '#722ed1' }}>
+                    ₹{Number(viewRow.attendanceSummary.tenureBonus.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                  </Text>
+                  <Button
+                    type="link"
+                    icon={<InfoCircleOutlined />}
+                    style={{ padding: 0, height: 'auto' }}
+                    onClick={() => {
+                      setBonusData(viewRow.attendanceSummary.tenureBonus);
+                      setBonusModalVisible(true);
+                    }}
+                  />
+                </Space>
+              ) : (
+                <Text type="secondary">N/A</Text>
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="OT Minutes">{viewRow?.attendanceSummary?.overtime || 0}</Descriptions.Item>
+            <Descriptions.Item label="Early OT Minutes">{viewRow?.attendanceSummary?.earlyOvertime || 0}</Descriptions.Item>
+          </Descriptions>
+        )}
+      </Modal>
+
+      {/* Tenure Bonus Breakdown Modal */}
+      <Modal
+        title={
+          <Space>
+            <InfoCircleOutlined style={{ color: '#722ed1' }} />
+            <span>Tenure Bonus Breakdown</span>
+          </Space>
+        }
+        open={bonusModalVisible}
+        onCancel={() => setBonusModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setBonusModalVisible(false)}>
+            Close
+          </Button>
+        ]}
+        width={450}
+      >
+        {bonusData && (
+          <Descriptions column={1} bordered size="small">
+            <Descriptions.Item label="Applied Rule">
+              <Text strong>{bonusData.ruleName || 'Tenure Bonus Rule'}</Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="Total Tenure">
+              <Text strong>{bonusData.tenureMonths} Months</Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="Matched Bracket">
+              <Tag color="purple">
+                {bonusData.bracketMin} - {bonusData.bracketMax} Months
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="Bonus Percentage">
+              <Text strong style={{ color: '#722ed1' }}>{bonusData.bracketPercent}%</Text>
+              <Text type="secondary" style={{ marginLeft: 8 }}>of Gross</Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="Calculated Amount">
+              <Text strong style={{ fontSize: '18px', color: '#722ed1' }}>
+                ₹{Number(bonusData.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+              </Text>
+            </Descriptions.Item>
           </Descriptions>
         )}
       </Modal>

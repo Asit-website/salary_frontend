@@ -1269,7 +1269,7 @@ export default function StaffProfileView() {
         if (!payrollLine || !cycleData) return message.error('Missing data');
         // Re-use logic from PayrollList or similar
         try {
-          const brandInfo = { displayName: 'ThinkTech Solutions' }; // Or fetch
+          const brandInfo = { displayName: 'Thinktech Software' }; // Or fetch
 
           let attendanceData = { workingDays: 26, presentDays: 26, absentDays: 0, paidLeaveDays: 0, unpaidLeaveDays: 0, weeklyOffDays: 0, holidays: 0, halfDays: 0 };
           const sum = payrollLine.attendanceSummary || {};

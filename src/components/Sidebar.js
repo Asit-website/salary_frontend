@@ -15,7 +15,10 @@ import {
   WalletOutlined,
   TrophyOutlined,
   RobotOutlined,
-  DollarOutlined
+  DollarOutlined,
+  MailOutlined,
+  TeamOutlined,
+  ShareAltOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { API_BASE_URL } from '../api';
@@ -146,6 +149,9 @@ const Sidebar = ({ collapsed }) => {
       settings: 'settings_tab',
       performance: 'performance_tab',
       task_management: 'task_management_tab',
+      social: 'social_tab',
+      ai_reports: 'reports_tab',
+      ai_assistant: 'reports_tab',
     };
     const key = map[moduleKey];
     return !!key && sidebarPermissionKeys.includes(key);
@@ -254,7 +260,7 @@ const Sidebar = ({ collapsed }) => {
         key: 'ai-reports-group',
         icon: <BarChartOutlined />,
         label: 'AI Reports',
-        module: 'reports',
+        module: 'ai_reports',
         children: [
           {
             key: '/ai-reports/attendance-productivity',
@@ -274,7 +280,7 @@ const Sidebar = ({ collapsed }) => {
         key: '/ai-reports/assistant',
         icon: <RobotOutlined />,
         label: 'AI Assistant',
-        module: 'reports'
+        module: 'ai_assistant'
       },
       {
         key: '/assets-management',
@@ -301,6 +307,18 @@ const Sidebar = ({ collapsed }) => {
         module: 'staff',
       },
       {
+        key: '/recruitment',
+        icon: <TeamOutlined />,
+        label: 'Recruitment (ATS)',
+        module: 'recruitment'
+      },
+      {
+        key: '/community-feed',
+        icon: <ShareAltOutlined />,
+        label: 'Community Feed',
+        module: 'social',
+      },
+      {
         key: '/settings',
         icon: <SettingOutlined />,
         label: 'Settings',
@@ -309,12 +327,12 @@ const Sidebar = ({ collapsed }) => {
     ];
 
     if (userRole === 'admin' && channelPartnerId) {
-        items.push({
-            key: '/partner/clients',
-            icon: <UserOutlined />,
-            label: 'My Clients',
-            module: 'partner_clients'
-        });
+      items.push({
+        key: '/partner/clients',
+        icon: <UserOutlined />,
+        label: 'My Clients',
+        module: 'partner_clients'
+      });
     }
 
     if (userRole === 'staff') {
@@ -344,13 +362,18 @@ const Sidebar = ({ collapsed }) => {
       icon: <SettingOutlined />,
       label: 'Plans',
     },
+    {
+      key: '/superadmin/mailing',
+      icon: <MailOutlined />,
+      label: 'Bulk Email',
+    },
   ];
 
   const channelPartnerItems = [
     {
-        key: '/partner/clients',
-        icon: <UserOutlined />,
-        label: 'My Clients',
+      key: '/partner/clients',
+      icon: <UserOutlined />,
+      label: 'My Clients',
     }
   ];
 
@@ -382,6 +405,78 @@ const Sidebar = ({ collapsed }) => {
       }
     }
 
+    // Check for Payroll access
+    if (e.key.startsWith('/payroll') || e.key === '/employee-salary' || e.key === '/advances') {
+      const isActive = !!subscriptionInfo?.payrollEnabled || !!subscriptionInfo?.plan?.payrollEnabled;
+      if (!isActive) {
+        message.warning('You do not have permission to access Payroll module');
+        return;
+      }
+    }
+
+    // Check for Performance access
+    if (e.key.startsWith('/performance')) {
+      const isActive = !!subscriptionInfo?.performanceEnabled || !!subscriptionInfo?.plan?.performanceEnabled;
+      if (!isActive) {
+        message.warning('You do not have permission to access Performance module');
+        return;
+      }
+    }
+
+    // Check for AI Reports access
+    if (e.key.startsWith('/ai-reports/') && e.key !== '/ai-reports/assistant') {
+      const isActive = !!subscriptionInfo?.aiReportsEnabled || !!subscriptionInfo?.plan?.aiReportsEnabled;
+      if (!isActive) {
+        message.warning('You do not have permission to access AI Reports');
+        return;
+      }
+    }
+
+    // Check for AI Assistant access
+    if (e.key === '/ai-reports/assistant') {
+      const isActive = !!subscriptionInfo?.aiAssistantEnabled || !!subscriptionInfo?.plan?.aiAssistantEnabled;
+      if (!isActive) {
+        message.warning('You do not have permission to access AI Assistant');
+        return;
+      }
+    }
+
+    // Check for Task Management access
+    if (e.key === '/task-management') {
+      const isActive = !!subscriptionInfo?.taskManagementEnabled || !!subscriptionInfo?.plan?.taskManagementEnabled;
+      if (!isActive) {
+        message.warning('You do not have permission to access Task Management module');
+        return;
+      }
+    }
+
+    // Check for Roster access
+    if (e.key === '/roster') {
+      const isActive = !!subscriptionInfo?.rosterEnabled || !!subscriptionInfo?.plan?.rosterEnabled;
+      if (!isActive) {
+        message.warning('You do not have permission to access Roster module');
+        return;
+      }
+    }
+
+    // Check for Recruitment access
+    if (e.key === '/recruitment') {
+      const isActive = !!subscriptionInfo?.recruitmentEnabled || !!subscriptionInfo?.plan?.recruitmentEnabled;
+      if (!isActive) {
+        message.warning('You do not have permission to access Recruitment (ATS) module');
+        return;
+      }
+    }
+
+    // Check for Community access
+    if (e.key === '/community-feed') {
+      const isActive = !!subscriptionInfo?.communityEnabled || !!subscriptionInfo?.plan?.communityEnabled;
+      if (!isActive) {
+        message.warning('You do not have permission to access Community Feed');
+        return;
+      }
+    }
+
     navigate(e.key);
   };
 
@@ -407,6 +502,7 @@ const Sidebar = ({ collapsed }) => {
     if (pathname.startsWith('/ai-reports/attendance-productivity')) return '/ai-reports/attendance-productivity';
     if (pathname.startsWith('/ai-reports/risk-detection')) return '/ai-reports/risk-detection';
     if (pathname.startsWith('/ai-reports')) return '/ai-reports/salary-forecast';
+    if (pathname.startsWith('/community-feed')) return '/community-feed';
 
     // Handle report query params for sidebar selection
     const search = location.search;
@@ -521,9 +617,9 @@ const Sidebar = ({ collapsed }) => {
         selectedKeys={[getSelectedKey()]}
         defaultOpenKeys={getOpenKeys()}
         items={
-            userRole === 'superadmin' ? superadminItems : 
-            userRole === 'channel_partner' ? channelPartnerItems : 
-            getAdminItems()
+          userRole === 'superadmin' ? superadminItems :
+            userRole === 'channel_partner' ? channelPartnerItems :
+              getAdminItems()
         }
         onClick={handleMenuClick}
         style={{

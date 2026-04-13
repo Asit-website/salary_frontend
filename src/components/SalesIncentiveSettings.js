@@ -365,7 +365,7 @@ export default function SalesIncentiveSettings() {
         if (ruleType === 'fixed') {
             return (
                 <>
-                    <Form.Item label="Sales Amount Threshold (Rs)" name={['config', 'targetAmount']} rules={[{ required: true }]}>
+                    <Form.Item label="Sales Amount Threshold (Rs) (equal or greater than)" name={['config', 'targetAmount']} rules={[{ required: true }]}>
                         <InputNumber style={{ width: '100%' }} min={0} />
                     </Form.Item>
 

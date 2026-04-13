@@ -265,6 +265,10 @@ const AttendanceManagement = () => {
   };
 
   const fetchAttendance = async () => {
+    if (!selectedDate) {
+      setAttendance([]);
+      return;
+    }
     setLoading(true);
     try {
       const params = {
@@ -509,6 +513,21 @@ const AttendanceManagement = () => {
               Late: {record.latePenaltyText}
             </Tag>
           )}
+          {!record.latePenaltyText && record.latePunchInMinutes > 0 && (
+            <Tag color="error" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
+              Late by {record.latePunchInMinutes} min
+            </Tag>
+          )}
+          {record.earlyExitMinutes > 0 && (
+            <Tag color="warning" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
+              Early Exit: {record.earlyExitMinutes} min
+            </Tag>
+          )}
+          {record.earlyOvertimeMinutes > 0 && (
+            <Tag color="cyan" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
+              Early OT: {record.earlyOvertimeMinutes} min
+            </Tag>
+          )}
         </Space>
       ),
     },
@@ -589,7 +608,7 @@ const AttendanceManagement = () => {
               <Space>
                 <DatePicker
                   value={selectedDate}
-                  onChange={(date) => setSelectedDate(date)}
+                  onChange={(date) => setSelectedDate(date || dayjs())}
                   picker="date"
                   format="DD MMM YYYY"
                   placeholder="Select date"
@@ -680,9 +699,15 @@ const AttendanceManagement = () => {
                   <Option value="leave">Leave</Option>
                 </Select>
                 <Select
+                  showSearch
                   value={staffNameFilter}
                   onChange={setStaffNameFilter}
                   className="att-filter"
+                  placeholder="Staff Name"
+                  optionFilterProp="children"
+                  filterOption={(input, option) =>
+                    String(option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
                 >
                   <Option value="all">Staff Name</Option>
                   {staffList.map(staff => (
@@ -700,7 +725,7 @@ const AttendanceManagement = () => {
               loading={loading}
               rowKey="id"
               pagination={{
-                pageSize: 10,
+                pageSize: 50,
                 showSizeChanger: true,
                 showQuickJumper: true,
               }}
@@ -716,7 +741,12 @@ const AttendanceManagement = () => {
             <Form form={markForm} layout="vertical">
               <Form.Item name="staffId" label="Select Staff Member" rules={[{ required: true, message: 'Please select staff' }]} >
                 <Select
+                  showSearch
                   placeholder="Select staff"
+                  optionFilterProp="children"
+                  filterOption={(input, option) =>
+                    String(option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
                   onSelect={(uid) => {
                     const rec = attendance.find(
                       a => (a.userId === uid || a.userId === Number(uid)) && a.date === selectedDate.format('YYYY-MM-DD')
@@ -807,11 +837,16 @@ const AttendanceManagement = () => {
               <label style={{ fontWeight: 500 }}>Select Staff Members:</label>
               <Select
                 mode="multiple"
+                showSearch
                 placeholder="Select staff to add rows below"
                 style={{ width: '100%', marginTop: 6 }}
                 value={bulkRows.map(r => r.userId)}
                 onSelect={handleBulkStaffSelect}
                 onDeselect={handleBulkStaffDeselect}
+                optionFilterProp="children"
+                filterOption={(input, option) =>
+                  String(option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                }
               >
                 {Array.isArray(staffList) && staffList.map(s => (
                   <Option key={s.id} value={s.id}>{s.name} ({s.staffId || 'N/A'})</Option>

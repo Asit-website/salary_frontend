@@ -1,5 +1,6 @@
-import { Layout, Typography, Card, Space, Switch, InputNumber, Button, message, Breadcrumb, Input } from 'antd';
-import { ThunderboltOutlined, HomeOutlined } from '@ant-design/icons';
+// Updated Late Penalty UI Imports
+import { Layout, Typography, Card, Space, Switch, InputNumber, Button, message, Breadcrumb, Input, Divider } from 'antd';
+import { ThunderboltOutlined, HomeOutlined, DeleteOutlined, PlusOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import React, { useState, useEffect, Fragment } from 'react';
@@ -126,28 +127,48 @@ export default function AutomationRules() {
                                     <span>Late Punch-In Penalty</span>
                                 </Space>
                             }
-                            extra={
-                                <Switch
-                                    checked={latePenalty.active}
-                                    onChange={(checked) => setLatePenalty({ ...latePenalty, active: checked })}
-                                />
-                            }
+                        // extra={
+                        //     <Switch
+                        //         checked={latePenalty.active}
+                        //         onChange={(checked) => setLatePenalty({ ...latePenalty, active: checked })}
+                        //     />
+                        // }
                         >
                             <Space direction="vertical" size={16} style={{ width: '100%' }}>
                                 <Text type="secondary">
                                     Automatically deduct absent days from payroll based on repeated late punch-ins.
                                 </Text>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr)', gap: '10px', marginTop: 10 }}>
+                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
+                                    <Space direction="vertical" size={4}>
+                                        <Text strong><InfoCircleOutlined style={{ color: '#1890ff', marginRight: 8 }} />Assignment-Based Rules Available</Text>
+                                        <Text size="small" type="secondary">You can now create flexible late penalty rules (Fixed, Hourly, Multiplier) and assign them to specific staff members.</Text>
+                                        <Button
+                                            type="primary"
+                                            size="small"
+                                            icon={<ThunderboltOutlined />}
+                                            style={{ marginTop: 8 }}
+                                            onClick={() => navigate('/settings/late-punchin-rules')}
+                                        >
+                                            Manage Per-User Penalty Rules
+                                        </Button>
+                                    </Space>
+                                </Card>
+
+                                {/* <Divider plain style={{ margin: '8px 0' }}><Text type="secondary" size="small">OR USE LEGACY GLOBAL SLABS (Applies if no per-user rule assigned)</Text></Divider> */}
+
+                                {/* <div style={{ display: 'grid', gridTemplateColumns: 'minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) 40px', gap: '10px', marginTop: 10 }}>
                                     <Text strong>Min Late (mins)</Text>
                                     <Text strong>Max Late (mins)</Text>
                                     <Text strong>Deduct Days</Text>
                                     <Text strong>Every X Occurrences</Text>
+                                    <Text strong></Text>
                                     
                                     {latePenalty.tiers.map((t, idx) => (
                                         <React.Fragment key={t.id || idx}>
                                             <InputNumber
-                                                min={1}
+                                                min={0}
+                                                style={{ width: '100%' }}
                                                 value={t.minMinutes}
                                                 onChange={(v) => {
                                                     const newTiers = [...latePenalty.tiers];
@@ -158,16 +179,18 @@ export default function AutomationRules() {
                                             />
                                             <InputNumber
                                                 min={1}
+                                                style={{ width: '100%' }}
                                                 value={t.maxMinutes}
-                                                disabled={t.maxMinutes > 1000 || !latePenalty.active} 
                                                 onChange={(v) => {
                                                     const newTiers = [...latePenalty.tiers];
                                                     newTiers[idx].maxMinutes = v;
                                                     setLatePenalty({ ...latePenalty, tiers: newTiers });
                                                 }}
+                                                disabled={!latePenalty.active}
                                             />
                                             <InputNumber
-                                                min={0.5} step={0.5}
+                                                min={0} step={0.5}
+                                                style={{ width: '100%' }}
                                                 value={t.deduction}
                                                 onChange={(v) => {
                                                     const newTiers = [...latePenalty.tiers];
@@ -178,6 +201,7 @@ export default function AutomationRules() {
                                             />
                                             <InputNumber
                                                 min={1}
+                                                style={{ width: '100%' }}
                                                 value={t.frequency}
                                                 onChange={(v) => {
                                                     const newTiers = [...latePenalty.tiers];
@@ -186,21 +210,52 @@ export default function AutomationRules() {
                                                 }}
                                                 disabled={!latePenalty.active}
                                             />
+                                            <Button 
+                                                type="text" 
+                                                danger 
+                                                icon={<DeleteOutlined style={{ fontSize: 16 }} />} 
+                                                disabled={!latePenalty.active}
+                                                onClick={() => {
+                                                    const newTiers = latePenalty.tiers.filter((_, i) => i !== idx);
+                                                    setLatePenalty({ ...latePenalty, tiers: newTiers });
+                                                }}
+                                            />
                                         </React.Fragment>
                                     ))}
-                                </div>
+                                </div> */}
 
-                                <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
+                                {/* <div style={{ marginTop: 8 }}>
+                                    <Button
+                                        type="dashed"
+                                        icon={<PlusOutlined />}
+                                        onClick={() => {
+                                            const lastTier = latePenalty.tiers[latePenalty.tiers.length - 1];
+                                            const newMin = lastTier ? (Number(lastTier.maxMinutes) + 1) : 1;
+                                            setLatePenalty({
+                                                ...latePenalty,
+                                                tiers: [...latePenalty.tiers, { id: Date.now(), minMinutes: newMin, maxMinutes: newMin + 30, deduction: 0.5, frequency: 1 }]
+                                            });
+                                        }}
+                                        disabled={!latePenalty.active}
+                                        style={{ width: '100%' }}
+                                    >
+                                        Add New Slab
+                                    </Button>
+                                </div> */}
+
+                                {/* <div style={{ marginTop: 24, borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
                                     <Button
                                         type="primary"
+                                        size="large"
                                         onClick={() => saveRule('late_punchin_penalty', latePenalty.active, {
                                             tiers: latePenalty.tiers
                                         })}
                                         loading={saving}
+                                        icon={<ThunderboltOutlined />}
                                     >
-                                        Save Changes
+                                        Save Late Penalty Configuration
                                     </Button>
-                                </div>
+                                </div> */}
                             </Space>
                         </Card>
 

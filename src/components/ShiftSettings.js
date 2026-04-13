@@ -315,11 +315,11 @@ export default function ShiftSettings() {
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
         </Col>
-        <Col span={12}>
+        {/* <Col span={12}>
           <Form.Item name="overtimeStartMinutes" label="Overtime Starts After (minutes)">
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
-        </Col>
+        </Col> */}
       </Row>
     </Card>
 

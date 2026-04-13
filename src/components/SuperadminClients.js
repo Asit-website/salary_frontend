@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, InputNumber, Select, message, Space, DatePicker, Tag, Checkbox } from 'antd';
+import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, InputNumber, Select, message, Space, DatePicker, Tag, Checkbox, Row, Col } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../api';
@@ -119,6 +119,11 @@ export default function SuperadminClients() {
     const salesEnabled = sub.salesEnabled !== null ? sub.salesEnabled : (plan.salesEnabled || false);
     const geolocationEnabled = sub.geolocationEnabled !== null ? sub.geolocationEnabled : (plan.geolocationEnabled || false);
     const expenseEnabled = sub.expenseEnabled !== null ? sub.expenseEnabled : (plan.expenseEnabled || false);
+    const payrollEnabled = sub.payrollEnabled !== null ? sub.payrollEnabled : (plan.payrollEnabled || false);
+    const performanceEnabled = sub.performanceEnabled !== null ? sub.performanceEnabled : (plan.performanceEnabled || false);
+    const aiReportsEnabled = sub.aiReportsEnabled !== null ? sub.aiReportsEnabled : (plan.aiReportsEnabled || false);
+    const aiAssistantEnabled = sub.aiAssistantEnabled !== null ? sub.aiAssistantEnabled : (plan.aiAssistantEnabled || false);
+    const taskManagementEnabled = sub.taskManagementEnabled !== null ? sub.taskManagementEnabled : (plan.taskManagementEnabled || false);
 
     console.log('Opening limit modal for client:', client.name);
 
@@ -128,7 +133,16 @@ export default function SuperadminClients() {
       maxGeolocationStaff,
       salesEnabled,
       geolocationEnabled,
-      expenseEnabled
+      expenseEnabled,
+      payrollEnabled,
+      performanceEnabled,
+      aiReportsEnabled,
+      aiAssistantEnabled,
+      aiAssistantEnabled,
+      taskManagementEnabled,
+      rosterEnabled: sub.rosterEnabled !== null ? sub.rosterEnabled : (plan.rosterEnabled || false),
+      recruitmentEnabled: sub.recruitmentEnabled !== null ? sub.recruitmentEnabled : (plan.recruitmentEnabled || false),
+      communityEnabled: sub.communityEnabled !== null ? sub.communityEnabled : (plan.communityEnabled || false)
     });
     setStaffLimitOpen(true);
   };
@@ -154,7 +168,16 @@ export default function SuperadminClients() {
         maxGeolocationStaff: values.maxGeolocationStaff !== undefined ? Number(values.maxGeolocationStaff) : undefined,
         salesEnabled: !!values.salesEnabled,
         geolocationEnabled: !!values.geolocationEnabled,
-        expenseEnabled: !!values.expenseEnabled
+        expenseEnabled: !!values.expenseEnabled,
+        payrollEnabled: !!values.payrollEnabled,
+        performanceEnabled: !!values.performanceEnabled,
+        aiReportsEnabled: !!values.aiReportsEnabled,
+        aiAssistantEnabled: !!values.aiAssistantEnabled,
+        aiAssistantEnabled: !!values.aiAssistantEnabled,
+        taskManagementEnabled: !!values.taskManagementEnabled,
+        rosterEnabled: !!values.rosterEnabled,
+        recruitmentEnabled: !!values.recruitmentEnabled,
+        communityEnabled: !!values.communityEnabled
       };
 
       const res = await api.post(`/superadmin/clients/${selectedClientForLimit.id}/subscription`, payload);
@@ -277,7 +300,15 @@ export default function SuperadminClients() {
       maxGeolocationStaff: sub.maxGeolocationStaff !== null ? sub.maxGeolocationStaff : (resolvedPlan.maxGeolocationStaff || 0),
       salesEnabled: sub.salesEnabled !== null ? !!sub.salesEnabled : (!!resolvedPlan.salesEnabled || false),
       geolocationEnabled: sub.geolocationEnabled !== null ? !!sub.geolocationEnabled : (!!resolvedPlan.geolocationEnabled || false),
-      expenseEnabled: sub.expenseEnabled !== null ? !!sub.expenseEnabled : (!!resolvedPlan.expenseEnabled || false)
+      expenseEnabled: sub.expenseEnabled !== null ? !!sub.expenseEnabled : (!!resolvedPlan.expenseEnabled || false),
+      payrollEnabled: sub.payrollEnabled !== null ? !!sub.payrollEnabled : (!!resolvedPlan.payrollEnabled || false),
+      performanceEnabled: sub.performanceEnabled !== null ? !!sub.performanceEnabled : (!!resolvedPlan.performanceEnabled || false),
+      aiReportsEnabled: sub.aiReportsEnabled !== null ? !!sub.aiReportsEnabled : (!!resolvedPlan.aiReportsEnabled || false),
+      aiAssistantEnabled: sub.aiAssistantEnabled !== null ? !!sub.aiAssistantEnabled : (!!resolvedPlan.aiAssistantEnabled || false),
+      taskManagementEnabled: sub.taskManagementEnabled !== null ? !!sub.taskManagementEnabled : (!!resolvedPlan.taskManagementEnabled || false),
+      rosterEnabled: sub.rosterEnabled !== null ? !!sub.rosterEnabled : (!!resolvedPlan.rosterEnabled || false),
+      recruitmentEnabled: sub.recruitmentEnabled !== null ? !!sub.recruitmentEnabled : (!!resolvedPlan.recruitmentEnabled || false),
+      communityEnabled: sub.communityEnabled !== null ? !!sub.communityEnabled : (!!resolvedPlan.communityEnabled || false)
     });
     setAssignOpen(true);
   };
@@ -292,7 +323,15 @@ export default function SuperadminClients() {
         maxGeolocationStaff: plan.maxGeolocationStaff || 0,
         salesEnabled: !!plan.salesEnabled,
         geolocationEnabled: !!plan.geolocationEnabled,
-        expenseEnabled: !!plan.expenseEnabled
+        expenseEnabled: !!plan.expenseEnabled,
+        payrollEnabled: !!plan.payrollEnabled,
+        performanceEnabled: !!plan.performanceEnabled,
+        aiReportsEnabled: !!plan.aiReportsEnabled,
+        aiAssistantEnabled: !!plan.aiAssistantEnabled,
+        taskManagementEnabled: !!plan.taskManagementEnabled,
+        rosterEnabled: !!plan.rosterEnabled,
+        recruitmentEnabled: !!plan.recruitmentEnabled,
+        communityEnabled: !!plan.communityEnabled
       });
     }
   };
@@ -318,6 +357,14 @@ export default function SuperadminClients() {
         salesEnabled: !!values.salesEnabled,
         geolocationEnabled: !!values.geolocationEnabled,
         expenseEnabled: !!values.expenseEnabled,
+        payrollEnabled: !!values.payrollEnabled,
+        performanceEnabled: !!values.performanceEnabled,
+        aiReportsEnabled: !!values.aiReportsEnabled,
+        aiAssistantEnabled: !!values.aiAssistantEnabled,
+        taskManagementEnabled: !!values.taskManagementEnabled,
+        rosterEnabled: !!values.rosterEnabled,
+        recruitmentEnabled: !!values.recruitmentEnabled,
+        communityEnabled: !!values.communityEnabled,
       };
       await api.post(`/superadmin/clients/${editing.id}/subscription`, payload);
       message.success('Subscription assigned');
@@ -483,7 +530,12 @@ export default function SuperadminClients() {
               (r.name || '').toLowerCase().includes(searchText.toLowerCase()) ||
               (r.phone || '').includes(searchText)
             )}
-            pagination={{ pageSize: 10 }}
+            pagination={{ 
+              pageSize: 100,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} clients`
+            }}
           />
         </Content>
       </Layout>
@@ -567,7 +619,7 @@ export default function SuperadminClients() {
         onCancel={() => setAssignOpen(false)}
         onOk={submitAssign}
         okText="Assign"
-        width={500}
+        width={800}
         destroyOnClose={true}
       >
         <Form layout="vertical" form={assignForm}>
@@ -594,17 +646,63 @@ export default function SuperadminClients() {
 
           {editing?.currentSubscription && editing?.currentSubscription.status === 'ACTIVE' && (
             <>
-              <Form.Item name="salesEnabled" valuePropName="checked">
-                <Checkbox>Enable Sales Module</Checkbox>
-              </Form.Item>
-
-              <Form.Item name="geolocationEnabled" valuePropName="checked">
-                <Checkbox>Enable Geolocation</Checkbox>
-              </Form.Item>
-
-              <Form.Item name="expenseEnabled" valuePropName="checked">
-                <Checkbox>Enable Expense Module</Checkbox>
-              </Form.Item>
+            <Row gutter={[16, 0]}>
+              <Col span={8}>
+                <Form.Item name="salesEnabled" valuePropName="checked">
+                  <Checkbox>Enable Sales Module</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="geolocationEnabled" valuePropName="checked">
+                  <Checkbox>Enable Geolocation</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="expenseEnabled" valuePropName="checked">
+                  <Checkbox>Enable Expense Module</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="payrollEnabled" valuePropName="checked">
+                  <Checkbox>Enable Payroll Module</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="performanceEnabled" valuePropName="checked">
+                  <Checkbox>Enable Performance Module</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="aiReportsEnabled" valuePropName="checked">
+                  <Checkbox>Enable AI Reports</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="aiAssistantEnabled" valuePropName="checked">
+                  <Checkbox>Enable AI Assistant</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="taskManagementEnabled" valuePropName="checked">
+                  <Checkbox>Enable Task Management</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="rosterEnabled" valuePropName="checked">
+                  <Checkbox>Enable Roster Module</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="recruitmentEnabled" valuePropName="checked">
+                  <Checkbox>Enable Recruitment Module</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="communityEnabled" valuePropName="checked">
+                  <Checkbox>Enable Community Module</Checkbox>
+                </Form.Item>
+              </Col>
+            </Row>
             </>
           )}
 
@@ -701,7 +799,7 @@ export default function SuperadminClients() {
         onCancel={() => setStaffLimitOpen(false)}
         onOk={submitStaffLimit}
         okText="Update"
-        width={500}
+        width={800}
       >
         <Form form={staffLimitForm} layout="vertical">
           <Form.Item
@@ -712,17 +810,63 @@ export default function SuperadminClients() {
             <InputNumber min={1} style={{ width: '100%' }} placeholder="Enter staff limit" />
           </Form.Item>
 
-          <Form.Item name="salesEnabled" valuePropName="checked">
-            <Checkbox>Enable Sales Module</Checkbox>
-          </Form.Item>
-
-          <Form.Item name="geolocationEnabled" valuePropName="checked">
-            <Checkbox>Enable Geolocation</Checkbox>
-          </Form.Item>
-
-          <Form.Item name="expenseEnabled" valuePropName="checked">
-            <Checkbox>Enable Expense Module</Checkbox>
-          </Form.Item>
+          <Row gutter={[16, 0]}>
+            <Col span={8}>
+              <Form.Item name="salesEnabled" valuePropName="checked">
+                <Checkbox>Enable Sales Module</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="geolocationEnabled" valuePropName="checked">
+                <Checkbox>Enable Geolocation</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="expenseEnabled" valuePropName="checked">
+                <Checkbox>Enable Expense Module</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="payrollEnabled" valuePropName="checked">
+                <Checkbox>Enable Payroll Module</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="performanceEnabled" valuePropName="checked">
+                <Checkbox>Enable Performance Module</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="aiReportsEnabled" valuePropName="checked">
+                <Checkbox>Enable AI Reports</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="aiAssistantEnabled" valuePropName="checked">
+                <Checkbox>Enable AI Assistant</Checkbox>
+              </Form.Item>
+            </Col>
+              <Col span={8}>
+                <Form.Item name="taskManagementEnabled" valuePropName="checked">
+                  <Checkbox>Enable Task Management</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="rosterEnabled" valuePropName="checked">
+                  <Checkbox>Enable Roster Module</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="recruitmentEnabled" valuePropName="checked">
+                  <Checkbox>Enable Recruitment Module</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="communityEnabled" valuePropName="checked">
+                  <Checkbox>Enable Community Module</Checkbox>
+                </Form.Item>
+              </Col>
+            </Row>
 
           <Form.Item
             label="Max Geolocation Staff"

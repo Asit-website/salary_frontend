@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, InputNumber, Switch, message, Space } from 'antd';
+import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, InputNumber, Switch, message, Space, Row, Col } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
 import api from '../api';
 import Sidebar from './Sidebar';
@@ -45,6 +45,14 @@ export default function SuperadminPlans() {
       salesEnabled: rec.salesEnabled,
       geolocationEnabled: rec.geolocationEnabled,
       expenseEnabled: rec.expenseEnabled,
+      payrollEnabled: rec.payrollEnabled,
+      performanceEnabled: rec.performanceEnabled,
+      aiReportsEnabled: rec.aiReportsEnabled,
+      aiAssistantEnabled: rec.aiAssistantEnabled,
+      taskManagementEnabled: rec.taskManagementEnabled,
+      rosterEnabled: rec.rosterEnabled,
+      recruitmentEnabled: rec.recruitmentEnabled,
+      communityEnabled: rec.communityEnabled,
       maxGeolocationStaff: rec.maxGeolocationStaff,
       active: rec.active,
     });
@@ -70,17 +78,25 @@ export default function SuperadminPlans() {
   };
 
   const columns = [
-    { title: 'Code', dataIndex: 'code' },
-    { title: 'Name', dataIndex: 'name' },
+    { title: 'Code', dataIndex: 'code', width: 120, fixed: 'left' },
+    { title: 'Name', dataIndex: 'name', width: 150 },
     { title: 'Days', dataIndex: 'periodDays', width: 90 },
     { title: 'Price', dataIndex: 'price', width: 100, render: (v) => `₹ ${Number(v || 0)}` },
     { title: 'Sales', dataIndex: 'salesEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
     { title: 'Geo', dataIndex: 'geolocationEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
     { title: 'Exp', dataIndex: 'expenseEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
+    { title: 'Payroll', dataIndex: 'payrollEnabled', width: 90, render: (v) => v ? '✅' : '❌' },
+    { title: 'Perf', dataIndex: 'performanceEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
+    { title: 'AI Rep', dataIndex: 'aiReportsEnabled', width: 100, render: (v) => v ? '✅' : '❌' },
+    { title: 'AI Asst', dataIndex: 'aiAssistantEnabled', width: 100, render: (v) => v ? '✅' : '❌' },
+    { title: 'Task Mgmt', dataIndex: 'taskManagementEnabled', width: 110, render: (v) => v ? '✅' : '❌' },
+    { title: 'Roster', dataIndex: 'rosterEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
+    { title: 'ATS', dataIndex: 'recruitmentEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
+    { title: 'Community', dataIndex: 'communityEnabled', width: 100, render: (v) => v ? '✅' : '❌' },
     // { title: 'Max Geo Staff', dataIndex: 'maxGeolocationStaff', width: 120, render: (v) => v || 0 },
     { title: 'Active', dataIndex: 'active', width: 90, render: (v) => v ? 'Yes' : 'No' },
     {
-      title: 'Actions', key: 'act', width: 120, render: (_, rec) => (
+      title: 'Actions', key: 'act', width: 100, fixed: 'right', render: (_, rec) => (
         <Space>
           <Button size="small" onClick={() => onEdit(rec)}>Edit</Button>
         </Space>
@@ -115,7 +131,14 @@ export default function SuperadminPlans() {
             <h2 style={{ margin: 0 }}>Plans</h2>
             <Button type="primary" onClick={onCreate}>New Plan</Button>
           </div>
-          <Table rowKey="id" loading={loading} columns={columns} dataSource={rows} pagination={{ pageSize: 10 }} />
+          <Table
+            rowKey="id"
+            loading={loading}
+            columns={columns}
+            dataSource={rows}
+            pagination={{ pageSize: 10 }}
+            scroll={{ x: 1300 }}
+          />
         </Content>
       </Layout>
 
@@ -140,18 +163,63 @@ export default function SuperadminPlans() {
           <Form.Item label="Price" name="price" initialValue={0}>
             <InputNumber min={0} step={1} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item label="Sales Enabled" name="salesEnabled" valuePropName="checked" initialValue={false}>
-            <Switch />
-          </Form.Item>
-          <Form.Item label="Geolocation Enabled" name="geolocationEnabled" valuePropName="checked" initialValue={false}>
-            <Switch />
-          </Form.Item>
-          <Form.Item label="Expense Enabled" name="expenseEnabled" valuePropName="checked" initialValue={false}>
-            <Switch />
-          </Form.Item>
-          {/* <Form.Item label="Max Geolocation Staff" name="maxGeolocationStaff" initialValue={0}>
-            <InputNumber min={0} style={{ width: '100%' }} />
-          </Form.Item> */}
+          <Row gutter={[16, 0]}>
+            <Col span={8}>
+              <Form.Item label="Sales Enabled" name="salesEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Geolocation Enabled" name="geolocationEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Expense Enabled" name="expenseEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Payroll Enabled" name="payrollEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Performance Enabled" name="performanceEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="AI Reports Enabled" name="aiReportsEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="AI Assistant Enabled" name="aiAssistantEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Task Management Enabled" name="taskManagementEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Roster Enabled" name="rosterEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Recruitment Enabled" name="recruitmentEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Community Enabled" name="communityEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item label="Active" name="active" valuePropName="checked" initialValue={true}>
             <Switch />
           </Form.Item>

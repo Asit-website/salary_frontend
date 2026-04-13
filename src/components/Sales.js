@@ -957,6 +957,28 @@ export default function Sales() {
         );
       })()
     },
+    {
+      key: 'approvals',
+      label: 'Incentive Approvals',
+      children: (() => {
+        const deptOptions = departments.map(d => ({ label: d, value: d }));
+        const filtered = (approvals || []).filter(a => {
+          const name = (a.staff?.profile?.name || a.staff?.phone || '').toLowerCase();
+          return (!approvalSearch || name.includes(approvalSearch.toLowerCase()))
+            && (!approvalStaffFilter || a.staffUserId === approvalStaffFilter || a.staffUserId === Number(approvalStaffFilter));
+        });
+        return (
+          <Card title="Incentive Approvals">
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              <Input.Search placeholder="Search by staff" allowClear style={{ width: 220 }} value={approvalSearch} onChange={e => setApprovalSearch(e.target.value)} />
+              <Select placeholder="Filter by Department" allowClear style={{ width: 200 }} value={approvalDeptFilter} onChange={v => setApprovalDeptFilter(v ?? null)} options={deptOptions} />
+              <Select placeholder="Filter by Employee" allowClear showSearch style={{ width: 200 }} value={approvalStaffFilter} onChange={v => setApprovalStaffFilter(v ?? null)} options={staffOptions} filterOption={(inp, opt) => (opt?.label ?? '').toLowerCase().includes(inp.toLowerCase())} />
+            </div>
+            <Table rowKey={(r) => r.id} loading={loadingApprovals} columns={approvalColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
+          </Card>
+        );
+      })()
+    },
   ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading, visits, visitsLoading, orders, ordersLoading, approvals, loadingApprovals, departments, staffOptions, assignSearch, assignDeptFilter, assignStaffFilter, targetSearch, targetDeptFilter, targetStaffFilter, visitSearch, visitDeptFilter, visitStaffFilter, orderSearch, orderDeptFilter, orderStaffFilter, approvalSearch, approvalDeptFilter, approvalStaffFilter, getRecordStaffName]);
 
   return (

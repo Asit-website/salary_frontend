@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Table, Button, Typography, Tag, Space, Input, message, Menu, Modal } from 'antd';
+import { Layout, Card, Table, Button, Typography, Tag, Space, Input, message, Menu, Modal, Select } from 'antd';
 import {
     UserOutlined,
     SearchOutlined,
@@ -20,13 +20,16 @@ const EmployeeSalaryList = () => {
     const [collapsed, setCollapsed] = useState(false);
     const [loading, setLoading] = useState(false);
     const [staff, setStaff] = useState([]);
+    const [departments, setDepartments] = useState([]);
     const [searchText, setSearchText] = useState('');
+    const [selectedDept, setSelectedDept] = useState('all');
     const [breakdownVisible, setBreakdownVisible] = useState(false);
     const [selectedStaff, setSelectedStaff] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchStaffSalary();
+        fetchDepartments();
     }, []);
 
     const fetchStaffSalary = async () => {
@@ -34,7 +37,10 @@ const EmployeeSalaryList = () => {
         try {
             const response = await api.get('/admin/staff-salary-list');
             if (response.data.success) {
-                setStaff(response.data.data || []);
+                const staffData = response.data.data || [];
+                setStaff(staffData);
+                // Also trigger department fetch to sync with any new data
+                fetchDepartments(staffData);
             }
         } catch (error) {
             console.error('Failed to fetch staff salary list:', error);
@@ -44,17 +50,52 @@ const EmployeeSalaryList = () => {
         }
     };
 
+    const fetchDepartments = async (currentStaff = []) => {
+        try {
+            const response = await api.get('/admin/business-functions');
+            let businessDepts = [];
+            if (response.data.success) {
+                const list = response.data.data || [];
+                const deptFn = list.find((f) => String(f.name || '').toLowerCase() === 'department');
+                if (deptFn && Array.isArray(deptFn.values)) {
+                    businessDepts = deptFn.values.filter(v => v && v.value).map(v => v.value);
+                }
+            }
+            
+            // Also collect departments actually used in staff profiles
+            const activeDepts = (currentStaff.length > 0 ? currentStaff : staff)
+                .map(s => s.department)
+                .filter(Boolean);
+            
+            // Combine and unique
+            const combined = [...new Set([...businessDepts, ...activeDepts])].sort();
+            setDepartments(combined.map(d => ({ name: d })));
+        } catch (error) {
+            console.error('Failed to fetch departments:', error);
+            // Fallback to extraction from current staff
+            const activeDepts = (currentStaff.length > 0 ? currentStaff : staff)
+                .map(s => s.department)
+                .filter(Boolean);
+            const combined = [...new Set(activeDepts)].sort();
+            setDepartments(combined.map(d => ({ name: d })));
+        }
+    };
+
     const handleLogout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         navigate('/');
     };
 
-    const filteredData = staff.filter(item =>
-        item.name.toLowerCase().includes(searchText.toLowerCase()) ||
-        item.staffId?.toLowerCase().includes(searchText.toLowerCase()) ||
-        item.phone?.toLowerCase().includes(searchText.toLowerCase())
-    );
+    const filteredData = staff.filter(item => {
+        const matchesSearch = item.name.toLowerCase().includes(searchText.toLowerCase()) ||
+            item.staffId?.toLowerCase().includes(searchText.toLowerCase()) ||
+            item.phone?.toLowerCase().includes(searchText.toLowerCase());
+        
+        const matchesDept = selectedDept === 'all' || item.department === selectedDept;
+        
+        return matchesSearch && matchesDept;
+    });
 
     const handleViewBreakdown = (record) => {
         setSelectedStaff(record);
@@ -167,13 +208,28 @@ const EmployeeSalaryList = () => {
                 </Header>
                 <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', minHeight: 280 }}>
                     <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Input
-                            placeholder="Search by name, ID or phone"
-                            prefix={<SearchOutlined />}
-                            style={{ width: 300 }}
-                            value={searchText}
-                            onChange={(e) => setSearchText(e.target.value)}
-                        />
+                        <Space size={16}>
+                            <Input
+                                placeholder="Search by name, ID or phone"
+                                prefix={<SearchOutlined />}
+                                style={{ width: 300 }}
+                                value={searchText}
+                                onChange={(e) => setSearchText(e.target.value)}
+                            />
+                            <Select 
+                                showSearch
+                                optionFilterProp="children"
+                                value={selectedDept} 
+                                onChange={setSelectedDept} 
+                                style={{ width: 200 }}
+                                placeholder="Select Department"
+                            >
+                                <Select.Option value="all">All Departments</Select.Option>
+                                {departments.map(dept => (
+                                    <Select.Option key={dept.id || dept.name} value={dept.name}>{dept.name}</Select.Option>
+                                ))}
+                            </Select>
+                        </Space>
                         <Text type="secondary">Showing fixed salary packages as per profiles</Text>
                     </div>
                     <Table

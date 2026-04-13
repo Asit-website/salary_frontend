@@ -70,6 +70,7 @@ const AddRegularStaff = () => {
   const conveyanceAllowanceWatch = Form.useWatch('conveyance_allowance', form);
   const medicalAllowanceWatch = Form.useWatch('medical_allowance', form);
   const otherAllowancesWatch = Form.useWatch('other_allowances', form);
+  const travelAllowanceWatch = Form.useWatch('travel_allowance', form);
 
   const calcTotalEarnings = () =>
     Number(basicSalaryWatch || 0) +
@@ -78,6 +79,7 @@ const AddRegularStaff = () => {
     Number(specialAllowanceWatch || 0) +
     Number(conveyanceAllowanceWatch || 0) +
     Number(medicalAllowanceWatch || 0) +
+    Number(travelAllowanceWatch || 0) +
     Number(otherAllowancesWatch || 0) +
     (extraEarnings || []).reduce((sum, r) => sum + (parseFloat(r?.amount) || 0), 0);
 
@@ -207,7 +209,7 @@ const AddRegularStaff = () => {
       const db = sv.deductions || {};
 
       // Handle dynamic extras
-      const knownE = ['basic_salary', 'hra', 'da', 'special_allowance', 'conveyance_allowance', 'medical_allowance', 'other_allowances'];
+      const knownE = ['basic_salary', 'hra', 'da', 'special_allowance', 'conveyance_allowance', 'medical_allowance', 'travel_allowance', 'other_allowances'];
       const extE = [];
       Object.entries(eb).forEach(([k, v]) => {
         if (!knownE.includes(k) && k !== 'totalEarnings' && k !== 'totalIncentives') {
@@ -262,6 +264,7 @@ const AddRegularStaff = () => {
         special_allowance: eb.special_allowance ?? editingStaff.specialAllowance,
         conveyance_allowance: eb.conveyance_allowance ?? editingStaff.conveyanceAllowance,
         medical_allowance: eb.medical_allowance ?? editingStaff.medicalAllowance,
+        travel_allowance: eb.travel_allowance ?? 0,
         other_allowances: eb.other_allowances ?? editingStaff.otherAllowances,
         provident_fund_employee: db.provident_fund ?? editingStaff.pfDeduction,
         esi: db.esi ?? editingStaff.esiDeduction,
@@ -436,6 +439,7 @@ const AddRegularStaff = () => {
           Number(earnings['SPECIAL ALLOWANCE'] || 0) +
           Number(earnings['CONVEYANCE ALLOWANCE'] || 0) +
           Number(earnings['MEDICAL ALLOWANCE'] || 0) +
+          Number(earnings['TRAVEL ALLOWANCE'] || 0) +
           Number(earnings['OTHER ALLOWANCES'] || 0);
         const esiEmployeeAmount = Math.round(totalEarnings * (esiPercent / 100));
         const professionalTaxAmount = pickProfessionalTax(totalEarnings, slabs);
@@ -448,6 +452,7 @@ const AddRegularStaff = () => {
             special_allowance: Number(earnings['SPECIAL ALLOWANCE'] || 0),
             conveyance_allowance: Number(earnings['CONVEYANCE ALLOWANCE'] || 0),
             medical_allowance: Number(earnings['MEDICAL ALLOWANCE'] || 0),
+            travel_allowance: Number(earnings['TRAVEL ALLOWANCE'] || 0),
             other_allowances: Number(earnings['OTHER ALLOWANCES'] || 0),
             provident_fund_employee: pfEmployeeAmount,
             provident_fund_employer: 0,
@@ -600,7 +605,7 @@ const AddRegularStaff = () => {
       const earningsTpl = selectedTemplate ? toKV(selectedTemplate.earnings) : null;
       const deductionsTpl = selectedTemplate ? toKV(selectedTemplate.deductions) : null;
       const tplEmpty = (!earningsTpl || Object.keys(earningsTpl).length === 0) && (!deductionsTpl || Object.keys(deductionsTpl).length === 0);
-      const knownE = ['BASIC SALARY', 'HRA', 'DA', 'SPECIAL ALLOWANCE', 'CONVEYANCE ALLOWANCE', 'MEDICAL ALLOWANCE', 'OTHER ALLOWANCES'];
+      const knownE = ['BASIC SALARY', 'HRA', 'DA', 'SPECIAL ALLOWANCE', 'CONVEYANCE ALLOWANCE', 'MEDICAL ALLOWANCE', 'TRAVEL ALLOWANCE', 'OTHER ALLOWANCES'];
       const knownD = ['PROVIDENT FUND', 'ESI', 'PROFESSIONAL TAX', 'INCOME TAX', 'LOAN DEDUCTION', 'OTHER DEDUCTIONS'];
       const hasKnownE = earningsTpl && knownE.some(k => Object.prototype.hasOwnProperty.call(earningsTpl, k));
       const hasKnownD = deductionsTpl && knownD.some(k => Object.prototype.hasOwnProperty.call(deductionsTpl, k));
@@ -673,17 +678,15 @@ const AddRegularStaff = () => {
       if (showE('SPECIAL ALLOWANCE')) salaryValues.earnings.special_allowance = special_allowance;
       if (showE('CONVEYANCE ALLOWANCE')) salaryValues.earnings.conveyance_allowance = conveyance_allowance;
       if (showE('MEDICAL ALLOWANCE')) salaryValues.earnings.medical_allowance = medical_allowance;
+      if (showE('TRAVEL ALLOWANCE')) salaryValues.earnings.travel_allowance = parseFloat(allValues.travel_allowance) || 0;
       if (showE('OTHER ALLOWANCES')) salaryValues.earnings.other_allowances = other_allowances;
 
-      if (showD('PROVIDENT FUND') || allValues.provident_fund_employee !== undefined) {
-        // Backend + Staff Profile/Payroll expects `provident_fund` (this is Employee PF).
-        salaryValues.deductions.provident_fund = provident_fund_employee;
-      }
-      if (showD('ESI')) salaryValues.deductions.esi = esi;
-      if (showD('PROFESSIONAL TAX')) salaryValues.deductions.professional_tax = professional_tax;
-      if (showD('INCOME TAX')) salaryValues.deductions.income_tax = income_tax;
-      if (showD('LOAN DEDUCTION')) salaryValues.deductions.loan_deduction = loan_deduction;
-      if (showD('OTHER DEDUCTIONS')) salaryValues.deductions.other_deductions = other_deductions;
+      if (showD('PROVIDENT FUND') || (provident_fund_employee !== 0)) { salaryValues.deductions.provident_fund = provident_fund_employee; }
+      if (showD('ESI') || (esi !== 0)) salaryValues.deductions.esi = esi;
+      if (showD('PROFESSIONAL TAX') || (professional_tax !== 0)) salaryValues.deductions.professional_tax = professional_tax;
+      if (showD('INCOME TAX') || (income_tax !== 0)) salaryValues.deductions.income_tax = income_tax;
+      if (showD('LOAN DEDUCTION') || (loan_deduction !== 0)) salaryValues.deductions.loan_deduction = loan_deduction;
+      if (showD('OTHER DEDUCTIONS') || (other_deductions !== 0)) salaryValues.deductions.other_deductions = other_deductions;
 
       // Add dynamic extras
       const toKey = (s) => (s || '')
@@ -1179,6 +1182,16 @@ const AddRegularStaff = () => {
                         </Form.Item>
                       </Col>
                     )}
+                    {showE('TRAVEL ALLOWANCE') && (
+                      <Col span={24}>
+                        <Form.Item
+                          name="travel_allowance"
+                          label="Travel Allowance"
+                        >
+                          <Input type="number" placeholder="Enter travel allowance" style={{ height: '40px' }} />
+                        </Form.Item>
+                      </Col>
+                    )}
                     {showE('MEDICAL ALLOWANCE') && (
                       <Col span={24}>
                         <Form.Item
@@ -1595,3 +1608,9 @@ const AddRegularStaff = () => {
 };
 
 export default AddRegularStaff;
+
+
+
+
+
+

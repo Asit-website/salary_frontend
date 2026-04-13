@@ -20,7 +20,7 @@ import {
   Row,
   Col
 } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, PlusOutlined, MinusCircleOutlined, InfoCircleOutlined } from '@ant-design/icons';
 // import { jsPDF } from 'jspdf'; // Removed client-side generation
 import moment from 'moment';
 import Sidebar from './Sidebar';
@@ -74,23 +74,27 @@ const normalizeAttendanceSummary = (summary, monthKey) => {
     absent = Math.max(0, referenceDays - (present + half + leave + weeklyOff + holidays));
   }
 
-  const latePenaltyDays = Number(s.latePenaltyDays || 0);
-  const pUnits = present + (half * 0.5) + paidLeave + weeklyOff + holidays;
-  const payableDays = Math.max(0, pUnits - latePenaltyDays);
+    const latePenaltyDays = Number(s.latePenaltyDays || s.latePenalty || 0);
+    const pUnits = present + (half * 0.5) + paidLeave + weeklyOff + holidays;
+    const payableDays = Math.max(0, pUnits - (s.latePenaltyDays || 0)); // Keep logic for days if present
 
-  return {
-    ...s,
-    present,
-    half,
-    leave,
-    paidLeave,
-    unpaidLeave,
-    absent,
-    weeklyOff,
-    holidays,
-    payableDays,
-    latePenaltyDays
-  };
+    return {
+      ...s,
+      present,
+      half,
+      leave,
+      paidLeave,
+      unpaidLeave,
+      absent,
+      weeklyOff,
+      holidays,
+      payableDays,
+      latePenaltyDays,
+      lateCount: Number(s.lateCount || 0),
+      latePenalty: Number(s.latePunchInPenalty || s.latePenalty || 0),
+      breakPenalty: Number(s.breakPenalty || 0),
+      excessBreakMinutes: Number(s.excessBreakMinutes || 0)
+    };
 };
 
 const PayrollList = () => {
@@ -107,13 +111,55 @@ const PayrollList = () => {
   const [loading, setLoading] = useState(false);
   const [cycle, setCycle] = useState(null);
   const [lines, setLines] = useState([]);
-  const [staffMap, setStaffMap] = useState({});
+  const [staffMap, setStaffMap] = useState({}); // id -> name
+  const [staffDataMap, setStaffDataMap] = useState({}); // id -> full staff object
+  const [salaryTemplates, setSalaryTemplates] = useState([]);
 
   // Row selection + view/edit state
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [viewRow, setViewRow] = useState(null);
   const [editRow, setEditRow] = useState(null);
   const [baseData, setBaseData] = useState({ earnings: {}, incentives: {}, deductions: {} });
+
+  // Attendance Drill-down State
+  const [drilldownModalVisible, setDrilldownModalVisible] = useState(false);
+  const [drilldownRecords, setDrilldownRecords] = useState([]);
+  const [drilldownType, setDrilldownType] = useState(''); // 'Late' | 'Early Exit' | 'Break' | 'Overtime' | 'Early Overtime'
+  const [drilldownLoading, setDrilldownLoading] = useState(false);
+  
+  // Tenure Bonus Breakdown State
+  const [bonusModalVisible, setBonusModalVisible] = useState(false);
+  const [bonusData, setBonusData] = useState(null);
+
+  const showAttendanceDrilldown = async (userId, type) => {
+    setDrilldownModalVisible(true);
+    setDrilldownType(type);
+    setDrilldownLoading(true);
+    setDrilldownRecords([]);
+
+    try {
+      const res = await api.get(`/admin/staff/${userId}/attendance?month=${value}`);
+      if (res.data?.success) {
+        let filtered = [];
+        if (type === 'Late') {
+          filtered = res.data.data.filter(r => (r.latePunchInMinutes || 0) > 0);
+        } else if (type === 'Early Exit') {
+          filtered = res.data.data.filter(r => (r.earlyExitMinutes || 0) > 0);
+        } else if (type === 'Break') {
+          filtered = res.data.data.filter(r => (r.excessBreakMinutes || 0) > 0);
+        } else if (type === 'Overtime') {
+          filtered = res.data.data.filter(r => (r.overtimeMinutes || 0) > 0);
+        } else if (type === 'Early Overtime') {
+          filtered = res.data.data.filter(r => (r.earlyOvertimeMinutes || 0) > 0);
+        }
+        setDrilldownRecords(filtered);
+      }
+    } catch (e) {
+      message.error(`Failed to fetch ${type} details`);
+    } finally {
+      setDrilldownLoading(false);
+    }
+  };
 
   // Forms
   const [paidOpen, setPaidOpen] = useState(false);
@@ -132,11 +178,24 @@ const PayrollList = () => {
       const arr = Array.isArray(resp?.data?.staff) ? resp.data.staff
         : (Array.isArray(resp?.data?.data) ? resp.data.data : []);
       const map = {};
-      for (const s of arr) map[s.id] = s.name || s.phone || `User #${s.id}`;
+      const dataMap = {};
+      for (const s of arr) {
+        map[s.id] = s.name || s.phone || `User #${s.id}`;
+        dataMap[s.id] = s;
+      }
       setStaffMap(map);
+      setStaffDataMap(dataMap);
     } catch (_) {
       setStaffMap({});
+      setStaffDataMap({});
     }
+  }, []);
+
+  const loadTemplates = useCallback(async () => {
+    try {
+      const res = await api.get('/admin/salary-templates');
+      if (res?.data?.success) setSalaryTemplates(res.data.data || []);
+    } catch(e){}
   }, []);
 
   // Load Cycle Data
@@ -183,7 +242,8 @@ const PayrollList = () => {
   useEffect(() => {
     loadStaffMap();
     loadCycle();
-  }, [loadCycle, loadStaffMap]);
+    loadTemplates();
+  }, [loadCycle, loadStaffMap, loadTemplates]);
 
   // Actions
   const onOpenCycle = async () => {
@@ -365,6 +425,7 @@ const PayrollList = () => {
     }
   };
 
+
   const openBulkPaid = async () => {
     if (!cycle) return;
     if (!selectedRowKeys || selectedRowKeys.length === 0) {
@@ -427,6 +488,31 @@ const PayrollList = () => {
 
   const onOpenEdit = (row) => {
     setEditRow(row);
+    const userId = row?.userId || row?.user_id;
+    const staffObj = staffDataMap[userId];
+    const staffTplId = staffObj?.salaryTemplateId || staffObj?.profile?.salaryTemplateId;
+    const tpl = salaryTemplates.find(t => t.id === staffTplId);
+
+    const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
+    
+    let tplEarnKeys = null;
+    let tplDedKeys = null;
+    if (tpl) {
+      try {
+        const parse = (v) => typeof v === 'string' ? JSON.parse(v) : (v || []);
+        tplEarnKeys = parse(tpl.earnings).map(it => it.name || it.key).filter(Boolean).filter(k => !norm(k).includes('employer'));
+        tplDedKeys = parse(tpl.deductions).map(it => it.name || it.key).filter(Boolean).filter(k => !norm(k).includes('employer')).map(k => {
+          const nk = norm(k);
+          if (nk === 'providentfund' || nk === 'providentfundemployee') return 'provident_fund';
+          if (nk === 'esi' || nk === 'esiemployee') return 'esi';
+          if (nk === 'professionaltax') return 'professional_tax';
+          return k;
+        });
+      } catch(e){}
+    }
+
+    const prefEarn = ['basic_salary', 'hra', 'da', 'special_allowance', 'conveyance_allowance', 'medical_allowance', 'telephone_allowance', 'other_allowances'];
+    const prefDed = ['provident_fund', 'esi', 'professional_tax', 'income_tax', 'loan_deduction', 'other_deductions'];
 
     // Calculate accurate ratio from attendance to reverse-engineer BASE values
     const acc = row?.attendanceSummary || {};
@@ -441,27 +527,26 @@ const PayrollList = () => {
     const reverse = (obj) => {
       const res = {};
       Object.entries(obj || {}).forEach(([k, v]) => {
-        // If currentRatio is too low, we can't reverse; just keep current
         res[k] = currentRatio > 0.001 ? Number(v || 0) / currentRatio : Number(v || 0);
       });
       return res;
     };
 
     let bE = reverse(row?.earnings);
-    let bI = reverse(row?.incentives);
+    let bI = reverse(row?.incentives); // binary search usually not needed for incentives but logic kept
     let bD = reverse(row?.deductions);
 
-    // If baseEarnings is zero (because of 0 attendance), fallback to User Package
-    const sum = (o) => Object.values(o || {}).reduce((s, v) => s + (Number(v) || 0), 0);
-    if (sum(bE) === 0 && row.user) {
-      const u = row.user;
+    // If baseEarnings is zero (because of 0 attendance), fallback to User Package (if no payroll yet)
+    const sumVal = (o) => Object.values(o || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+    if (sumVal(bE) === 0 && staffObj) {
+      const u = staffObj;
       const parseMaybe = (v) => {
         if (!v) return v;
         if (typeof v !== 'string') return v;
         try { v = JSON.parse(v); } catch { return v; }
         return v;
       };
-      const sv = parseMaybe(u.salaryValues || u.salary_values);
+      const sv = parseMaybe(u.salaryValues || u.salary_values || u.profile?.salaryValues);
       const svRootE = (sv?.earnings && typeof sv.earnings === 'object') ? sv.earnings : null;
       const svRootI = (sv?.incentives && typeof sv.incentives === 'object') ? sv.incentives : null;
       const svRootD = (sv?.deductions && typeof sv.deductions === 'object') ? sv.deductions : null;
@@ -488,26 +573,44 @@ const PayrollList = () => {
 
     setBaseData({ earnings: bE, incentives: bI, deductions: bD });
 
-    const toArr = (obj) => Object.entries(obj || {}).map(([k, v]) => {
+    const filterEntries = (obj, pref, tplKeys) => {
+      return Object.entries(obj || {}).filter(([k, v]) => {
+        const nk = norm(k);
+        const inTpl = tplKeys ? tplKeys.some(tk => norm(tk) === nk) : false;
+        const inPref = !tplKeys && pref.includes(k);
+        return Number(v) !== 0 || inTpl || inPref;
+      });
+    };
+
+    const toArrRaw = (entries, tplKeys) => entries.map(([k, v]) => {
       let label = k;
-      if (k.startsWith('LEAVE_ENCASHMENT:')) {
-        const key = k.split(': ')[1]?.toLowerCase();
-        if (key && categoryNames[key]) label = `LEAVE_ENCASHMENT: ${categoryNames[key]}`;
+      const nk = norm(k);
+      const match = tplKeys ? tplKeys.find(tk => norm(tk) === nk) : null;
+      if (match) label = match;
+      else {
+        if (k.startsWith('LEAVE_ENCASHMENT:')) {
+          const key = k.split(': ')[1]?.toLowerCase();
+          if (key && categoryNames[key]) label = `LEAVE_ENCASHMENT: ${categoryNames[key]}`;
+        }
       }
       return {
         name: label,
-        amount: Math.ceil(Number(v || 0))
+        amount: Number(v || 0)
       };
     });
+
+    const earningsEntries = filterEntries(row?.earnings, prefEarn, tplEarnKeys);
+    const deductionEntries = filterEntries(row?.deductions, prefDed, tplDedKeys);
+    const incentiveEntries = Object.entries(row?.incentives || {});
 
     const att = normalizeAttendanceSummary(row?.attendanceSummary || {}, cycle?.monthKey);
 
     editForm.setFieldsValue({
       status: row?.status || 'INCLUDED',
       remarks: row?.remarks || '',
-      earnings: toArr(row?.earnings),
-      incentives: toArr(row?.incentives),
-      deductions: toArr(row?.deductions),
+      earnings: toArrRaw(earningsEntries, tplEarnKeys),
+      incentives: incentiveEntries.map(([k,v]) => ({ name: k, amount: Number(v||0) })),
+      deductions: toArrRaw(deductionEntries, tplDedKeys),
       present: att.present || 0,
       half: att.half || 0,
       leave: att.leave || 0,
@@ -662,15 +765,15 @@ const PayrollList = () => {
 
   const columns = [
     { title: 'Employee', key: 'emp', render: (_, r) => staffMap[r.userId || r.user_id] || (r.userId || r.user_id) },
-    { title: 'Gross', dataIndex: ['totals', 'grossSalary'], key: 'gross', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` },
+    { title: 'Gross', dataIndex: ['totals', 'grossSalary'], key: 'gross', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` },
     {
       title: 'Earnings',
       dataIndex: ['totals', 'totalEarnings'],
       key: 'earnings',
-      render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}`
+      render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}`
     },
-    { title: 'Deductions', dataIndex: ['totals', 'totalDeductions'], key: 'deductions', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` },
-    { title: 'Net', dataIndex: ['totals', 'netSalary'], key: 'net', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}` },
+    { title: 'Deductions', dataIndex: ['totals', 'totalDeductions'], key: 'deductions', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` },
+    { title: 'Net', dataIndex: ['totals', 'netSalary'], key: 'net', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` },
     {
       title: 'Actions', key: 'actions', render: (_, r) => {
         if (r._status === 'NOT_GENERATED') {
@@ -879,19 +982,60 @@ const PayrollList = () => {
               const newRatio = daysInMonth > 0 ? Math.min(1, Math.max(0, payableDays / daysInMonth)) : 1;
 
               // Update Earnings, Incentives, and Deductions based on BASE values
-              const eArr = Object.entries(baseData.earnings).map(([k, v]) => ({
-                name: k,
-                amount: Math.round(Number(v || 0) * newRatio)
+              const userId = editRow?.userId || editRow?.user_id;
+              const staffObj = staffDataMap[userId];
+              const staffTplId = staffObj?.salaryTemplateId || staffObj?.profile?.salaryTemplateId;
+              const tpl = salaryTemplates.find(t => t.id === staffTplId);
+              const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
+
+              let tplEarnKeys = null;
+              let tplDedKeys = null;
+              if (tpl) {
+                try {
+                  const parse = (v) => typeof v === 'string' ? JSON.parse(v) : (v || []);
+                  tplEarnKeys = parse(tpl.earnings).map(it => it.name || it.key).filter(Boolean).filter(k => !norm(k).includes('employer'));
+                  tplDedKeys = parse(tpl.deductions).map(it => it.name || it.key).filter(Boolean).filter(k => !norm(k).includes('employer')).map(k => {
+                    const nk = norm(k);
+                    if (nk === 'providentfund' || nk === 'providentfundemployee') return 'provident_fund';
+                    if (nk === 'esi' || nk === 'esiemployee') return 'esi';
+                    if (nk === 'professionaltax') return 'professional_tax';
+                    return k;
+                  });
+                } catch(e){}
+              }
+
+              const prefEarn = ['basic_salary', 'hra', 'da', 'special_allowance', 'conveyance_allowance', 'medical_allowance', 'telephone_allowance', 'other_allowances'];
+              const prefDed = ['provident_fund', 'esi', 'professional_tax', 'income_tax', 'loan_deduction', 'other_deductions'];
+
+              const labelize = (k, tplKeys) => {
+                const nk = norm(k);
+                const match = tplKeys ? tplKeys.find(tk => norm(tk) === nk) : null;
+                return match || k;
+              };
+
+              const filterEntries = (obj, pref, tplKeys) => {
+                return Object.entries(obj || {}).filter(([k, v]) => {
+                  const nk = norm(k);
+                  const inTpl = tplKeys ? tplKeys.some(tk => norm(tk) === nk) : false;
+                  const inPref = !tplKeys && pref.includes(k);
+                  const val = Number(v || 0) * newRatio;
+                  return val !== 0 || inTpl || inPref;
+                });
+              };
+
+              const eArr = filterEntries(baseData.earnings, prefEarn, tplEarnKeys).map(([k, v]) => ({
+                name: labelize(k, tplEarnKeys),
+                amount: Number(v || 0) * newRatio
               }));
 
               const iArr = Object.entries(baseData.incentives).map(([k, v]) => ({
                 name: k,
-                amount: Math.round(Number(v || 0) * newRatio)
+                amount: Number(v || 0) * newRatio
               }));
 
-              const dArr = Object.entries(baseData.deductions).map(([k, v]) => ({
-                name: k,
-                amount: Math.round(Number(v || 0) * newRatio)
+              const dArr = filterEntries(baseData.deductions, prefDed, tplDedKeys).map(([k, v]) => ({
+                name: labelize(k, tplDedKeys),
+                amount: Number(v || 0) * newRatio
               }));
 
               editForm.setFieldsValue({
@@ -917,7 +1061,11 @@ const PayrollList = () => {
               <Col span={6}><Form.Item name="weeklyOff" label="Weekly Off"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
               <Col span={6}><Form.Item name="holidays" label="Holidays"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Late Count"><InputNumber value={editRow?.attendanceSummary?.lateCount || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Late Penalty (Days)"><InputNumber value={editRow?.attendanceSummary?.latePenaltyDays || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Late Penalty"><InputNumber value={editRow?.attendanceSummary?.latePunchInPenalty || editRow?.attendanceSummary?.latePenalty || 0} disabled style={{ width: '100%' }} precision={2} prefix="₹" /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Early Exit (Min)"><InputNumber value={editRow?.attendanceSummary?.earlyExitMinutes || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="EE Penalty"><InputNumber value={editRow?.attendanceSummary?.earlyExitPenalty || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Excess Break (Min)"><InputNumber value={editRow?.attendanceSummary?.excessBreakMinutes || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Break Penalty"><InputNumber value={editRow?.attendanceSummary?.breakPenalty || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
             </Row>
           </Card>
           <div style={{ marginBottom: 16 }}>
@@ -992,10 +1140,10 @@ const PayrollList = () => {
             const normalizedAtt = normalizeAttendanceSummary(viewRow?.attendanceSummary || {}, cycle?.monthKey);
             return (
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="Gross">₹{Number(viewRow?.totals?.grossSalary || 0).toLocaleString('en-IN')}</Descriptions.Item>
-            <Descriptions.Item label="Net">₹{Number(viewRow?.totals?.netSalary || 0).toLocaleString('en-IN')}</Descriptions.Item>
-            <Descriptions.Item label="Earnings">₹{Number(viewRow?.totals?.totalEarnings || 0).toLocaleString('en-IN')}</Descriptions.Item>
-            <Descriptions.Item label="Deductions">₹{Number(viewRow?.totals?.totalDeductions || 0).toLocaleString('en-IN')}</Descriptions.Item>
+            <Descriptions.Item label="Gross">₹{Number(viewRow?.totals?.grossSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</Descriptions.Item>
+            <Descriptions.Item label="Net">₹{Number(viewRow?.totals?.netSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</Descriptions.Item>
+            <Descriptions.Item label="Earnings">₹{Number(viewRow?.totals?.totalEarnings || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</Descriptions.Item>
+            <Descriptions.Item label="Deductions">₹{Number(viewRow?.totals?.totalDeductions || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</Descriptions.Item>
             <Descriptions.Item label="Ratio" span={2}>{Number(viewRow?.totals?.ratio ?? 1).toFixed(4)}</Descriptions.Item>
             <Descriptions.Item label="Present">{normalizedAtt.present || 0}</Descriptions.Item>
             <Descriptions.Item label="Half">{normalizedAtt.half || 0}</Descriptions.Item>
@@ -1006,31 +1154,54 @@ const PayrollList = () => {
             <Descriptions.Item label="Weekly Off">{normalizedAtt.weeklyOff || 0}</Descriptions.Item>
             <Descriptions.Item label="Holiday">{normalizedAtt.holidays || 0}</Descriptions.Item>
             <Descriptions.Item label="Late Count">{normalizedAtt.lateCount || 0}</Descriptions.Item>
-            <Descriptions.Item label="Late Penalty">{normalizedAtt.latePenaltyDays || 0} days</Descriptions.Item>
+            <Descriptions.Item label="Late Penalty">
+              {normalizedAtt.latePenalty > 0 ? (
+                <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Late')}>
+                  ₹{normalizedAtt.latePenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                </Button>
+              ) : (
+                <Text>{normalizedAtt.latePenaltyDays || 0} days</Text>
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="Tenure Bonus">
+              {viewRow?.attendanceSummary?.tenureBonus ? (
+                <Space>
+                  <Text strong style={{ color: '#722ed1' }}>
+                    ₹{Number(viewRow.attendanceSummary.tenureBonus.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                  </Text>
+                  <Button 
+                    type="link" 
+                    icon={<InfoCircleOutlined />} 
+                    style={{ padding: 0, height: 'auto' }} 
+                    onClick={() => {
+                        setBonusData(viewRow.attendanceSummary.tenureBonus);
+                        setBonusModalVisible(true);
+                    }}
+                  />
+                </Space>
+              ) : (
+                <Text type="secondary">N/A</Text>
+              )}
+            </Descriptions.Item>
+            {Object.entries(viewRow?.earnings || {}).some(([k]) => k.startsWith('LEAVE_ENCASHMENT:')) && (
+              <Descriptions.Item label="Leave Encashment" span={2}>
+                <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                  {Object.entries(viewRow.earnings)
+                    .filter(([k]) => k.startsWith('LEAVE_ENCASHMENT:'))
+                    .map(([k, v]) => (
+                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #f0f0f0' }}>
+                        <Text type="secondary">{k.replace('LEAVE_ENCASHMENT:', '').trim()}</Text>
+                        <Text>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</Text>
+                      </div>
+                    ))}
+                </Space>
+              </Descriptions.Item>
+            )}
             <Descriptions.Item label="Payable Days" span={2}>
               <Text strong style={{ color: '#52c41a', fontSize: '16px' }}>
                 {normalizedAtt.payableDays || 0} days
               </Text>
             </Descriptions.Item>
-            {/* Show Leave Encashment if present in earnings */}
-            {Object.entries(viewRow?.earnings || {}).some(([k]) => k.startsWith('LEAVE_ENCASHMENT:')) && (
-              <Descriptions.Item label="Leave Encashment" span={2}>
-                <Space direction="vertical" size={2} style={{ width: '100%' }}>
-                  {Object.entries(viewRow?.earnings || {})
-                    .filter(([k]) => k.startsWith('LEAVE_ENCASHMENT:'))
-                    .map(([k, v]) => {
-                      const key = k.split(': ')[1]?.toLowerCase();
-                      const name = categoryNames[key] || k.split(': ')[1] || 'Encashment';
-                      return (
-                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                          <Text type="secondary">{name}:</Text>
-                          <Text strong>₹{Number(v || 0).toLocaleString('en-IN')}</Text>
-                        </div>
-                      );
-                    })}
-                </Space>
-              </Descriptions.Item>
-            )}
             {(Number(viewRow?.attendanceSummary?.overtimeMinutes || 0) > 0 ||
               Number(viewRow?.attendanceSummary?.overtimePay || viewRow?.earnings?.overtime_pay || 0) > 0) ? (
               <>
@@ -1039,17 +1210,159 @@ const PayrollList = () => {
                   {` (${Number(viewRow?.attendanceSummary?.overtimeMinutes || 0)}m)`}
                 </Descriptions.Item>
                 <Descriptions.Item label="OT Pay">
-                  ₹{Number(
-                    viewRow?.attendanceSummary?.overtimePay
-                    || viewRow?.earnings?.overtime_pay
-                    || 0
-                  ).toLocaleString('en-IN')}
+                  <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Overtime')}>
+                    ₹{Number(
+                      viewRow?.attendanceSummary?.overtimePay
+                      || viewRow?.earnings?.overtime_pay
+                      || 0
+                    ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                  </Button>
+                </Descriptions.Item>
+              </>
+            ) : null}
+            {(Number(viewRow?.attendanceSummary?.earlyOvertimeMinutes || 0) > 0 ||
+              Number(viewRow?.attendanceSummary?.earlyOvertimePay || viewRow?.earnings?.early_overtime_pay || 0) > 0) ? (
+              <>
+                <Descriptions.Item label="Early OT (Min)">
+                  {Number(viewRow?.attendanceSummary?.earlyOvertimeMinutes || 0)}m
+                </Descriptions.Item>
+                <Descriptions.Item label="Early OT Pay">
+                  <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Early Overtime')}>
+                    ₹{Number(
+                      viewRow?.attendanceSummary?.earlyOvertimePay
+                      || viewRow?.earnings?.early_overtime_pay
+                      || 0
+                    ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                  </Button>
+                </Descriptions.Item>
+              </>
+            ) : null}
+            {(Number(viewRow?.attendanceSummary?.earlyExitMinutes || 0) > 0 ||
+              Number(viewRow?.attendanceSummary?.earlyExitPenalty || viewRow?.deductions?.early_exit_penalty || 0) > 0) ? (
+              <>
+                <Descriptions.Item label="Early Exit">
+                  {Number(viewRow?.attendanceSummary?.earlyExitMinutes || 0)}m
+                </Descriptions.Item>
+                <Descriptions.Item label="EE Penalty">
+                  <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Early Exit')}>
+                    ₹{Number(
+                      viewRow?.attendanceSummary?.earlyExitPenalty
+                      || viewRow?.deductions?.early_exit_penalty
+                      || 0
+                    ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                  </Button>
+                </Descriptions.Item>
+              </>
+            ) : null}
+            {(Number(viewRow?.attendanceSummary?.breakPenalty || viewRow?.deductions?.break_penalty || 0) > 0 ||
+              Number(viewRow?.attendanceSummary?.excessBreakMinutes || 0) > 0) ? (
+              <>
+                <Descriptions.Item label="Excess Break">{Number(viewRow?.attendanceSummary?.excessBreakMinutes || 0)}m</Descriptions.Item>
+                <Descriptions.Item label="Break Penalty">
+                  <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Break')}>
+                    ₹{Number(
+                      viewRow?.attendanceSummary?.breakPenalty
+                      || viewRow?.deductions?.break_penalty
+                      || 0
+                    ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                  </Button>
                 </Descriptions.Item>
               </>
             ) : null}
           </Descriptions>
             );
           })()
+        )}
+      </Modal>
+
+      {/* Attendance Drill-down Modal */}
+      <Modal
+        open={drilldownModalVisible}
+        title={`${drilldownType} Details - ${monthText}`}
+        onCancel={() => setDrilldownModalVisible(false)}
+        footer={<Button onClick={() => setDrilldownModalVisible(false)}>Close</Button>}
+        width={600}
+      >
+        <Table
+          dataSource={drilldownRecords}
+          loading={drilldownLoading}
+          rowKey="id"
+          pagination={false}
+          size="small"
+          columns={[
+            { title: 'Date', dataIndex: 'date', key: 'date', render: (d) => moment(d).format('DD MMM (ddd)') },
+            { 
+              title: 'Duration', 
+              key: 'duration',
+              render: (_, r) => {
+                if (drilldownType === 'Late') return `${r.latePunchInMinutes || 0} min`;
+                if (drilldownType === 'Early Exit') return `${r.earlyExitMinutes || 0} min`;
+                if (drilldownType === 'Break') return `${r.excessBreakMinutes || 0} min`;
+                if (drilldownType === 'Overtime') return `${(Number(r.overtimeMinutes || 0) / 60).toFixed(2)} hrs (${r.overtimeMinutes || 0} min)`;
+                if (drilldownType === 'Early Overtime') return `${r.earlyOvertimeMinutes || 0} min`;
+                return '-';
+              }
+            },
+            { 
+              title: drilldownType.includes('Overtime') ? 'Earnings' : 'Penalty', 
+              key: 'amt',
+              align: 'right',
+              render: (_, r) => {
+                let amt = 0;
+                if (drilldownType === 'Late') amt = r.latePunchInAmount || 0;
+                else if (drilldownType === 'Early Exit') amt = r.earlyExitAmount || 0;
+                else if (drilldownType === 'Break') amt = r.breakDeductionAmount || 0;
+                else if (drilldownType === 'Overtime') amt = r.overtimeAmount || 0;
+                else if (drilldownType === 'Early Overtime') amt = r.earlyOvertimeAmount || 0;
+                
+                const isEarning = drilldownType.includes('Overtime');
+                return <Text strong type={isEarning ? "success" : "danger"}>₹{Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>;
+              }
+            }
+          ]}
+        />
+      </Modal>
+
+      {/* Tenure Bonus Breakdown Modal */}
+      <Modal
+        title={
+          <Space>
+            <InfoCircleOutlined style={{ color: '#722ed1' }} />
+            <span>Tenure Bonus Breakdown</span>
+          </Space>
+        }
+        open={bonusModalVisible}
+        onCancel={() => setBonusModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setBonusModalVisible(false)}>
+            Close
+          </Button>
+        ]}
+        width={450}
+      >
+        {bonusData && (
+          <Descriptions column={1} bordered size="small">
+            <Descriptions.Item label="Applied Rule">
+                <Text strong>{bonusData.ruleName || 'Tenure Bonus Rule'}</Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="Total Tenure">
+                <Text strong>{bonusData.tenureMonths} Months</Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="Matched Bracket">
+                <Tag color="purple">
+                    {bonusData.bracketMin} - {bonusData.bracketMax} Months
+                </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="Bonus Percentage">
+                <Text strong style={{ color: '#722ed1' }}>{bonusData.bracketPercent}%</Text>
+                <Text type="secondary" style={{ marginLeft: 8 }}>of Gross</Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="Calculated Amount">
+                <Text strong style={{ fontSize: '18px', color: '#722ed1' }}>
+                    ₹{Number(bonusData.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                </Text>
+            </Descriptions.Item>
+          </Descriptions>
         )}
       </Modal>
     </Layout>

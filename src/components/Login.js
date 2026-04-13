@@ -86,6 +86,7 @@ const Login = () => {
         return;
       }
       if (res.data?.success) {
+        sessionStorage.clear(); // Clear all impersonation data
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('user', JSON.stringify(res.data.user));
         message.success('Login successful');

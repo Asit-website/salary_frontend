@@ -32,6 +32,8 @@ import SuperadminPlans from './components/SuperadminPlans';
 import SuperadminDashboard from './components/SuperadminDashboard';
 import SuperadminClients from './components/SuperadminClients';
 import SuperadminChannelPartners from './components/SuperadminChannelPartners';
+import SuperadminMailing from './components/SuperadminMailing';
+import SuperadminMailReport from './components/SuperadminMailReport';
 import ChannelPartnerClients from './components/ChannelPartnerClients';
 import RolesPermissions from './components/RolesPermissions';
 import AssetsManagement from './components/AssetsManagement';
@@ -57,7 +59,15 @@ import AIReports from './components/AIReports';
 import AttendanceProductivity from './components/AttendanceProductivity';
 import AdminChatbot from './components/AdminChatbot';
 import RiskDetectionReports from './components/RiskDetectionReports';
+import OvertimeAutomation from './components/OvertimeAutomation';
+import EarlyExitAutomation from './components/EarlyExitAutomation';
+import BreakAutomation from './components/BreakAutomation';
+import EarlyOvertimeAutomation from './components/EarlyOvertimeAutomation';
+import LatePunchInAutomation from './components/LatePunchInAutomation';
+import TenureBonusAutomation from './components/TenureBonusAutomation';
 import Advances from './components/Advances';
+import Recruitment from './components/Recruitment';
+import CommunityFeed from './components/CommunityFeed';
 
 const { Content } = Layout;
 
@@ -111,6 +121,8 @@ function App() {
       <Route path="/superadmin/dashboard" element={<PrivateRoute><SuperadminDashboard /></PrivateRoute>} />
       <Route path="/superadmin/clients" element={<PrivateRoute><SuperadminClients /></PrivateRoute>} />
       <Route path="/superadmin/channel-partners" element={<PrivateRoute><SuperadminChannelPartners /></PrivateRoute>} />
+      <Route path="/superadmin/mailing" element={<PrivateRoute><SuperadminMailing /></PrivateRoute>} />
+      <Route path="/superadmin/mailing/report/:id" element={<PrivateRoute><SuperadminMailReport /></PrivateRoute>} />
       <Route path="/partner/clients" element={<PrivateRoute><ChannelPartnerClients /></PrivateRoute>} />
       <Route path="/roles-permissions" element={<PrivateRoute><RolesPermissions /></PrivateRoute>} />
       <Route path="/expense-management" element={<PrivateRoute><ExpenseManagement /></PrivateRoute>} />
@@ -119,11 +131,19 @@ function App() {
       <Route path="/settings/sales-incentives" element={<PrivateRoute><SalesIncentiveSettings /></PrivateRoute>} />
       <Route path="/settings/device-management" element={<PrivateRoute><DeviceManagementSettings /></PrivateRoute>} />
       <Route path="/settings/automation-rules" element={<PrivateRoute><AutomationRules /></PrivateRoute>} />
+      <Route path="/settings/overtime-rules" element={<PrivateRoute><OvertimeAutomation /></PrivateRoute>} />
+      <Route path="/settings/early-exit-rules" element={<PrivateRoute><EarlyExitAutomation /></PrivateRoute>} />
+      <Route path="/settings/early-overtime-rules" element={<PrivateRoute><EarlyOvertimeAutomation /></PrivateRoute>} />
+      <Route path="/settings/break-rules" element={<PrivateRoute><BreakAutomation /></PrivateRoute>} />
+      <Route path="/settings/late-punchin-rules" element={<PrivateRoute><LatePunchInAutomation /></PrivateRoute>} />
+      <Route path="/settings/tenure-bonus-rules" element={<PrivateRoute><TenureBonusAutomation /></PrivateRoute>} />
       <Route path="/performance/appraisals" element={<PrivateRoute><AppraisalManagement /></PrivateRoute>} />
       <Route path="/performance/ratings" element={<PrivateRoute><RatingSystem /></PrivateRoute>} />
       <Route path="/leave/requests" element={<PrivateRoute><LeaveRequests /></PrivateRoute>} />
       <Route path="/leave/encashment" element={<PrivateRoute><LeaveEncashment /></PrivateRoute>} />
       <Route path="/task-management" element={<PrivateRoute><TaskManagement /></PrivateRoute>} />
+      <Route path="/recruitment" element={<PrivateRoute><Recruitment /></PrivateRoute>} />
+      <Route path="/community-feed" element={<PrivateRoute><CommunityFeed /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" />} />
     </Routes>
   );

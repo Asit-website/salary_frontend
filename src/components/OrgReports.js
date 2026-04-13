@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Select, DatePicker, Button, Table, message, Space, Spin, Row, Col, Typography, Layout, Tag } from 'antd';
+import { 
+  Card, Select, DatePicker, Button, Table, message, Space, Spin, Row, Col, 
+  Typography, Layout, Tag, Cascader, Modal 
+} from 'antd';
 import { DownloadOutlined, FileExcelOutlined, MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api';
@@ -13,9 +16,13 @@ const { Header, Content } = Layout;
 
 const OrgReports = () => {
   const [loading, setLoading] = useState(false);
-  const [reportType, setReportType] = useState('attendance');
+  const [reportType, setReportType] = useState(['attendance']);
   const [month, setMonth] = useState(moment().format('YYYY-MM'));
   const [data, setData] = useState([]);
+  const [reportData, setReportData] = useState(null);
+  const [historyModalVisible, setHistoryModalVisible] = useState(false);
+  const [historyItems, setHistoryItems] = useState([]);
+  const [historyTitle, setHistoryTitle] = useState('');
   const [downloading, setDownloading] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [employees, setEmployees] = useState([]);
@@ -53,12 +60,12 @@ const OrgReports = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const type = params.get('type');
-    if (type && reportTypes.some(rt => rt.value === type)) {
-      setReportType(type);
+    if (type && reportOptions.some(rt => rt.value === type)) {
+      setReportType([type]);
     }
   }, [location.search]);
 
-  const reportTypes = [
+  const reportOptions = [
     { value: 'attendance', label: 'Attendance Report' },
     { value: 'monthly-attendance', label: 'Monthly Attendance (Detailed Excel)' },
     { value: 'leave', label: 'Leave Report' },
@@ -68,7 +75,23 @@ const OrgReports = () => {
     { value: 'sales', label: 'Sales Report' },
     { value: 'activities', label: 'Activities Report' },
     { value: 'tickets', label: 'Tickets Report' },
-    { value: 'meetings', label: 'Meetings Report' }
+    { value: 'meetings', label: 'Meetings Report' },
+    {
+      value: 'salary-register',
+      label: 'Salary Register (Excel)',
+      children: [
+        { value: 'designation', label: 'Designation Wise' },
+        { value: 'department', label: 'Department Wise' }
+      ]
+    },
+    {
+      value: 'monthly-summary',
+      label: 'Monthly Summary (Excel)',
+      children: [
+        { value: 'designation', label: 'Designation Wise' },
+        { value: 'department', label: 'Department Wise' }
+      ]
+    }
   ];
 
   const months = [];
@@ -89,8 +112,9 @@ const OrgReports = () => {
   const fetchReportData = async () => {
     const requestId = ++activeRequestRef.current;
 
-    if (reportType === 'monthly-attendance') {
-      // This report is Excel-only; clear any stale data immediately
+    const mainType = reportType[0];
+    if (mainType === 'monthly-attendance' || mainType === 'salary-register' || mainType === 'monthly-summary') {
+      // These reports are Excel-only; clear any stale data immediately
       setData([]);
       setLoading(false);
       return;
@@ -99,27 +123,28 @@ const OrgReports = () => {
     setLoading(true);
     try {
       let endpoint;
-      if (reportType === 'attendance') {
+      const mainType = reportType[0];
+      if (mainType === 'attendance') {
         endpoint = '/admin/reports/org-attendance-matrix';
-      } else if (reportType === 'monthly-attendance') {
+      } else if (mainType === 'monthly-attendance') {
         endpoint = '/admin/reports/monthly-attendance';
-      } else if (reportType === 'leave') {
+      } else if (mainType === 'leave') {
         endpoint = '/admin/reports/org-leave';
-      } else if (reportType === 'applied-leave') {
+      } else if (mainType === 'applied-leave') {
         endpoint = '/admin/reports/org-applied-leave';
-      } else if (reportType === 'leave-balance') {
+      } else if (mainType === 'leave-balance') {
         endpoint = '/admin/reports/org-leave-balance';
-      } else if (reportType === 'punch-report') {
+      } else if (mainType === 'punch-report') {
         endpoint = '/admin/reports/org-punch-matrix';
-      } else if (reportType === 'detailed-attendance') {
+      } else if (mainType === 'detailed-attendance') {
         endpoint = '/admin/reports/org-detailed-attendance';
-      } else if (reportType === 'sales') {
+      } else if (mainType === 'sales') {
         endpoint = '/admin/reports/org-sales';
-      } else if (reportType === 'activities') {
+      } else if (mainType === 'activities') {
         endpoint = '/admin/reports/org-activities';
-      } else if (reportType === 'tickets') {
+      } else if (mainType === 'tickets') {
         endpoint = '/admin/reports/org-tickets';
-      } else if (reportType === 'meetings') {
+      } else if (mainType === 'meetings') {
         endpoint = '/admin/reports/org-meetings';
       }
 
@@ -138,7 +163,8 @@ const OrgReports = () => {
       if (requestId !== activeRequestRef.current) return;
 
       if (response.data.success) {
-        if (reportType === 'punch-report') {
+        setReportData(response.data.data);
+        if (reportType[0] === 'punch-report') {
           const { staffList, matrix, daysInMonth, startDate } = response.data.data;
           const formatted = staffList.map((staff, idx) => {
             const row = { id: staff.id, sn: idx + 1, staffName: staff.profile?.name || 'N/A' };
@@ -152,7 +178,7 @@ const OrgReports = () => {
             return row;
           });
           setData(formatted);
-        } else if (reportType === 'attendance') {
+        } else if (reportType[0] === 'attendance') {
           const { staffList, matrix, daysInMonth, startDate, summary } = response.data.data;
           const formatted = staffList.map((staff, idx) => {
             const row = {
@@ -160,7 +186,8 @@ const OrgReports = () => {
               sn: idx + 1,
               staffName: staff.profile?.name || 'N/A',
               halfDays: summary?.[staff.id]?.halfDays || 0,
-              overtimeMinutes: summary?.[staff.id]?.overtimeMinutes || 0
+              overtimeMinutes: summary?.[staff.id]?.overtimeMinutes || 0,
+              lateMinutes: summary?.[staff.id]?.lateMinutes || 0
             };
             for (let i = 1; i <= daysInMonth; i++) {
               const d = new Date(startDate);
@@ -176,13 +203,13 @@ const OrgReports = () => {
         }
       } else {
         // Handle cases where backend might just serve the file for some reports
-        if (reportType !== 'monthly-attendance') {
+        if (reportType[0] !== 'monthly-attendance') {
           message.error('Failed to fetch report data');
         }
       }
     } catch (error) {
       console.error('Error fetching report:', error);
-      if (reportType !== 'monthly-attendance') {
+      if (reportType[0] !== 'monthly-attendance') {
         message.error('Error loading report data');
       }
     } finally {
@@ -196,34 +223,43 @@ const OrgReports = () => {
     setDownloading(true);
     try {
       let endpoint;
-      if (reportType === 'attendance') {
+      const mainType = reportType[0];
+      const subType = reportType[1];
+
+      if (mainType === 'attendance') {
         endpoint = '/admin/reports/org-attendance-matrix';
-      } else if (reportType === 'monthly-attendance') {
+      } else if (mainType === 'monthly-attendance') {
         endpoint = '/admin/reports/monthly-attendance';
-      } else if (reportType === 'leave') {
+      } else if (mainType === 'leave') {
         endpoint = '/admin/reports/org-leave';
-      } else if (reportType === 'applied-leave') {
+      } else if (mainType === 'applied-leave') {
         endpoint = '/admin/reports/org-applied-leave';
-      } else if (reportType === 'leave-balance') {
+      } else if (mainType === 'leave-balance') {
         endpoint = '/admin/reports/org-leave-balance';
-      } else if (reportType === 'punch-report') {
+      } else if (mainType === 'punch-report') {
         endpoint = '/admin/reports/org-punch-matrix';
-      } else if (reportType === 'detailed-attendance') {
+      } else if (mainType === 'detailed-attendance') {
         endpoint = '/admin/reports/org-detailed-attendance';
-      } else if (reportType === 'sales') {
+      } else if (mainType === 'sales') {
         endpoint = '/admin/reports/org-sales';
-      } else if (reportType === 'activities') {
+      } else if (mainType === 'activities') {
         endpoint = '/admin/reports/org-activities';
-      } else if (reportType === 'tickets') {
+      } else if (mainType === 'tickets') {
         endpoint = '/admin/reports/org-tickets';
-      } else if (reportType === 'meetings') {
+      } else if (mainType === 'meetings') {
         endpoint = '/admin/reports/org-meetings';
+      } else if (mainType === 'salary-register') {
+        endpoint = '/admin/payroll/salary-register-excel-by-month';
+      } else if (mainType === 'monthly-summary') {
+        endpoint = '/admin/payroll/monthly-summary-excel';
       }
 
       const params = {
         month: moment(month).month() + 1,
         year: moment(month).year(),
-        format: 'excel'
+        format: 'excel',
+        monthKey: month,
+        groupBy: subType || 'designation'
       };
 
       // Add employee IDs to params if specific employees are selected
@@ -241,7 +277,7 @@ const OrgReports = () => {
       const link = document.createElement('a');
       link.href = url;
       const scopeText = reportScope === 'selected' ? 'selected-employees' : 'all-employees';
-      const fileName = `org-${reportType}-report-${scopeText}-${month}.xlsx`;
+      const fileName = `org-${mainType}-report-${scopeText}-${month}.xlsx`;
       link.setAttribute('download', fileName);
       document.body.appendChild(link);
       link.click();
@@ -255,6 +291,24 @@ const OrgReports = () => {
     } finally {
       setDownloading(false);
     }
+  };
+
+  const showHistory = (staffId, staffName, type) => {
+    if (!reportData?.details?.[staffId]) return;
+    const staffDetails = reportData.details[staffId];
+    const items = Object.entries(staffDetails)
+      .filter(([_, dayData]) => (type === 'late' ? dayData.late > 0 : dayData.ot > 0))
+      .map(([date, dayData]) => ({
+        key: date,
+        date: date,
+        status: dayData.status,
+        minutes: type === 'late' ? dayData.late : dayData.ot
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    setHistoryItems(items);
+    setHistoryTitle(`${type === 'late' ? 'Late Arrival' : 'Overtime'} History - ${staffName}`);
+    setHistoryModalVisible(true);
   };
 
   const getSalesColumns = () => [
@@ -320,8 +374,30 @@ const OrgReports = () => {
         align: 'center'
       });
     }
-    cols.push({ title: 'Half Days', dataIndex: 'halfDays', key: 'halfDays', width: 100, align: 'center' });
-    cols.push({ title: 'OT (Min)', dataIndex: 'overtimeMinutes', key: 'overtimeMinutes', width: 100, align: 'center' });
+    cols.push({ 
+      title: 'OT (Min)', 
+      dataIndex: 'overtimeMinutes', 
+      key: 'overtimeMinutes', 
+      width: 100, 
+      align: 'center',
+      render: (val, record) => val > 0 ? (
+        <a style={{ fontWeight: 'bold' }} onClick={() => showHistory(record.id, record.staffName, 'ot')}>
+          {val}
+        </a>
+      ) : 0
+    });
+    cols.push({ 
+      title: 'Late By (Min)', 
+      dataIndex: 'lateMinutes', 
+      key: 'lateMinutes', 
+      width: 100, 
+      align: 'center',
+      render: (val, record) => val > 0 ? (
+        <a style={{ color: '#ff4d4f', fontWeight: 'bold' }} onClick={() => showHistory(record.id, record.staffName, 'late')}>
+          {val}
+        </a>
+      ) : 0
+    });
     return cols;
   };
 
@@ -610,6 +686,38 @@ const OrgReports = () => {
     { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true }
   ];
 
+  const renderTable = () => (
+    <Table
+      columns={
+        reportType[0] === 'attendance' ? getAttendanceColumns() :
+          reportType[0] === 'monthly-attendance' ? [] :
+            reportType[0] === 'leave' ? getLeaveColumns() :
+              reportType[0] === 'applied-leave' ? getAppliedLeaveColumns() :
+                reportType[0] === 'leave-balance' ? getLeaveBalanceColumns() :
+                  reportType[0] === 'punch-report' ? getPunchColumns() :
+                    reportType[0] === 'detailed-attendance' ? getDetailedAttendanceColumns() :
+                      reportType[0] === 'activities' ? getActivitiesColumns() :
+                        reportType[0] === 'tickets' ? getTicketsColumns() :
+                          reportType[0] === 'meetings' ? getMeetingsColumns() :
+                            reportType[0] === 'salary-register' ? [] :
+                              reportType[0] === 'monthly-summary' ? [] :
+                                getSalesColumns()
+      }
+      dataSource={data}
+      rowKey={(record, index) => record.id || index}
+      pagination={{
+        pageSize: 50,
+        showSizeChanger: true,
+        showTotal: (total) => `Total ${total} records`
+      }}
+      locale={{
+        emptyText: (reportType[0] === 'monthly-attendance' || reportType[0] === 'salary-register' || reportType[0] === 'monthly-summary')
+          ? 'Preview not available for this detailed report. Please use "Download Excel" button above.'
+          : 'No data available'
+      }}
+      scroll={{ x: reportType === 'attendance' || reportType === 'punch-report' ? 'max-content' : 1200 }}
+    />
+  );
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -637,7 +745,7 @@ const OrgReports = () => {
           <div style={{ padding: '24px' }}>
             <Card style={{ marginBottom: '24px' }}>
               <Row gutter={16} align="middle">
-                <Col span={4}>
+                <Col span={5}>
                   <Text strong>Report Scope:</Text>
                   <Select
                     style={{ width: '100%', marginTop: '8px' }}
@@ -669,27 +777,26 @@ const OrgReports = () => {
                   </Col>
                 )}
 
-                <Col span={4}>
+                <Col span={7}>
                   <Text strong>Report Type:</Text>
-                  <Select
+                  <Cascader
                     style={{ width: '100%', marginTop: '8px' }}
+                    options={reportOptions}
                     value={reportType}
                     onChange={setReportType}
-                  >
-                    {reportTypes.map(type => (
-                      <Option key={type.value} value={type.value}>
-                        {type.label}
-                      </Option>
-                    ))}
-                  </Select>
+                    placeholder="Select Report"
+                    expandTrigger="hover"
+                  />
                 </Col>
 
-                <Col span={4}>
+                <Col span={5}>
                   <Text strong>Month:</Text>
                   <Select
                     style={{ width: '100%', marginTop: '8px' }}
                     value={month}
                     onChange={setMonth}
+                    showSearch
+                    optionFilterProp="children"
                   >
                     {months.map(month => (
                       <Option key={month.value} value={month.value}>
@@ -715,53 +822,47 @@ const OrgReports = () => {
 
             <Card>
               <Title level={4}>
-                {reportType === 'attendance' ? 'Monthly Attendance Report' :
-                  reportType === 'monthly-attendance' ? 'Monthly Detailed Attendance Report (Excel Only)' :
-                    reportType === 'leave' ? 'Leave Report' :
-                      reportType === 'applied-leave' ? 'Applied Leave Report' :
-                        reportType === 'leave-balance' ? 'Leave Balance Report' :
-                          reportType === 'punch-report' ? 'Monthly Punch Report' :
-                            reportType === 'detailed-attendance' ? 'Detailed Attendance Report' :
-                              reportType === 'activities' ? 'Activities Report' :
-                                reportType === 'tickets' ? 'Tickets Report' :
-                                  reportType === 'meetings' ? 'Meetings Report' :
-                                    'Sales Report'} - {moment(month).format('MMMM YYYY')}
+                {reportType[0] === 'attendance' ? 'Monthly Attendance Report' :
+                  reportType[0] === 'monthly-attendance' ? 'Monthly Detailed Attendance Report (Excel Only)' :
+                    reportType[0] === 'leave' ? 'Leave Report' :
+                      reportType[0] === 'applied-leave' ? 'Applied Leave Report' :
+                        reportType[0] === 'leave-balance' ? 'Leave Balance Report' :
+                          reportType[0] === 'punch-report' ? 'Monthly Punch Report' :
+                            reportType[0] === 'detailed-attendance' ? 'Detailed Attendance Report' :
+                              reportType[0] === 'activities' ? 'Activities Report' :
+                                reportType[0] === 'tickets' ? 'Tickets Report' :
+                                  reportType[0] === 'meetings' ? 'Meetings Report' :
+                                    reportType[0] === 'salary-register' ? 'Salary Register (Excel Only)' :
+                                      reportType[0] === 'monthly-summary' ? `Monthly Summary (${(reportType[1] || 'designation').toUpperCase()} WISE)` :
+                                        'Sales Report'} - {moment(month).format('MMMM YYYY')}
               </Title>
 
               <Spin spinning={loading}>
-                <Table
-                  columns={
-                    reportType === 'attendance' ? getAttendanceColumns() :
-                      reportType === 'monthly-attendance' ? [] :
-                        reportType === 'leave' ? getLeaveColumns() :
-                          reportType === 'applied-leave' ? getAppliedLeaveColumns() :
-                            reportType === 'leave-balance' ? getLeaveBalanceColumns() :
-                              reportType === 'punch-report' ? getPunchColumns() :
-                                reportType === 'detailed-attendance' ? getDetailedAttendanceColumns() :
-                                  reportType === 'activities' ? getActivitiesColumns() :
-                                    reportType === 'tickets' ? getTicketsColumns() :
-                                      reportType === 'meetings' ? getMeetingsColumns() :
-                                        getSalesColumns()
-                  }
-                  dataSource={data}
-                  rowKey={(record, index) => record.id || index}
-                  pagination={{
-                    pageSize: 50,
-                    showSizeChanger: true,
-                    showTotal: (total) => `Total ${total} records`
-                  }}
-                  locale={{
-                    emptyText: reportType === 'monthly-attendance'
-                      ? 'Preview not available for this detailed report. Please use "Download Excel" button above.'
-                      : 'No data available'
-                  }}
-                  scroll={{ x: reportType === 'attendance' || reportType === 'punch-report' ? 'max-content' : 1200 }}
-                />
+                {renderTable()}
               </Spin>
             </Card>
           </div>
         </Content>
       </Layout>
+
+      <Modal
+        title={historyTitle}
+        open={historyModalVisible}
+        onCancel={() => setHistoryModalVisible(false)}
+        footer={[<Button key="close" onClick={() => setHistoryModalVisible(false)}>Close</Button>]}
+        width={600}
+      >
+        <Table 
+          size="small"
+          dataSource={historyItems}
+          pagination={false}
+          columns={[
+            { title: 'Date', dataIndex: 'date', key: 'date' },
+            { title: 'Status', dataIndex: 'status', key: 'status', align: 'center' },
+            { title: 'Minutes', dataIndex: 'minutes', key: 'minutes', align: 'right', render: (m) => <strong>{m} m</strong> }
+          ]}
+        />
+      </Modal>
     </Layout>
   );
 };

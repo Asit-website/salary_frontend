@@ -1193,19 +1193,19 @@ const Dashboard = () => {
                     <div style={{ display: 'flex', gap: '16px' }}>
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '20px', fontWeight: '600', color: '#52c41a' }}>
-                          {leaves.filter(l => l.status === 'approved').length}
+                          {leaves.filter(l => l.status?.toLowerCase() === 'approved').length}
                         </div>
                         <div style={{ fontSize: '12px', color: '#8c8c8c' }}>Approved</div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '20px', fontWeight: '600', color: '#ff4d4f' }}>
-                          {leaves.filter(l => l.status === 'rejected').length}
+                          {leaves.filter(l => l.status?.toLowerCase() === 'rejected').length}
                         </div>
                         <div style={{ fontSize: '12px', color: '#8c8c8c' }}>Rejected</div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '20px', fontWeight: '600', color: '#fa8c16' }}>
-                          {leaves.filter(l => l.status === 'pending').length}
+                          {leaves.filter(l => l.status?.toLowerCase() === 'pending').length}
                         </div>
                         <div style={{ fontSize: '12px', color: '#8c8c8c' }}>Pending</div>
                       </div>
@@ -1234,7 +1234,7 @@ const Dashboard = () => {
                             width: '40px',
                             height: '40px',
                             borderRadius: '50%',
-                            background: leave.status === 'approved' ? '#52c41a' : leave.status === 'rejected' ? '#ff4d4f' : '#fa8c16',
+                            background: leave.status?.toLowerCase() === 'approved' ? '#52c41a' : leave.status?.toLowerCase() === 'rejected' ? '#ff4d4f' : '#fa8c16',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -1272,8 +1272,8 @@ const Dashboard = () => {
                             fontWeight: '500',
                             padding: '2px 8px',
                             borderRadius: '12px',
-                            background: leave.status === 'approved' ? '#f6ffed' : leave.status === 'rejected' ? '#fff2f0' : '#fff7e6',
-                            color: leave.status === 'approved' ? '#52c41a' : leave.status === 'rejected' ? '#ff4d4f' : '#fa8c16'
+                            background: leave.status?.toLowerCase() === 'approved' ? '#f6ffed' : leave.status?.toLowerCase() === 'rejected' ? '#fff2f0' : '#fff7e6',
+                            color: leave.status?.toLowerCase() === 'approved' ? '#52c41a' : leave.status?.toLowerCase() === 'rejected' ? '#ff4d4f' : '#fa8c16'
                           }}>
                             {leave.status?.toUpperCase() || 'UNKNOWN'}
                           </span>

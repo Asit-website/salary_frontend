@@ -162,7 +162,7 @@ const StaffManagement = () => {
       console.error('Failed to fetch salary templates:', error);
     }
   };
-  
+
   const fetchDepartments = async () => {
     try {
       const resp = await api.get('/admin/business-functions');
@@ -583,9 +583,9 @@ const StaffManagement = () => {
                 const formData = new FormData();
                 formData.append('staffUserId', issuingForStaff.id);
                 formData.append('templateId', values.templateId);
-                
+
                 if (attachments && attachments.length > 0) {
-                    attachments.forEach(file => formData.append('attachments', file));
+                  attachments.forEach(file => formData.append('attachments', file));
                 }
 
                 const resp = await api.post('/admin/letters/issue', formData, {
@@ -615,7 +615,7 @@ const StaffManagement = () => {
                 </Select>
               </Form.Item>
               <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>The letter will be generated based on the selected template with staff details automatically filled in.</Text>
-              
+
               <div style={{ marginTop: 20 }}>
                 <Text strong style={{ display: 'block', marginBottom: 8 }}>Additional Attachments (Optional)</Text>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
@@ -640,7 +640,7 @@ const StaffManagement = () => {
                         }
 
                         setAttachments([...attachments, ...files]);
-                        
+
                         files.forEach(file => {
                           if (file.type.startsWith('image/')) {
                             const reader = new FileReader();
@@ -656,7 +656,7 @@ const StaffManagement = () => {
                     }}
                   />
                 </div>
-                
+
                 <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {attachments.map((file, idx) => {
                     const previewObj = attachmentPreviews.find(p => p.name === file.name);

@@ -270,7 +270,7 @@ export default function LeaveTemplates(){
                             </Form.Item>
                           </Col>
                           <Col span={6}>
-                            <Form.Item {...rest} name={[name, 'key']} label="Key" rules={[{ required: true }]}> 
+                            <Form.Item {...rest} name={[name, 'key']} label="Key"> 
                               <Input placeholder="CL" />
                             </Form.Item>
                           </Col>

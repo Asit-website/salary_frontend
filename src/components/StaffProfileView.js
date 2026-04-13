@@ -77,12 +77,17 @@ export default function StaffProfileView() {
   const [photoUrl, setPhotoUrl] = useState('');
   const [backgroundEditOpen, setBackgroundEditOpen] = useState(false);
   const [backgroundForm] = Form.useForm();
+  const [salaryTemplates, setSalaryTemplates] = useState([]);
+  const [manualSalaryOpen, setManualSalaryOpen] = useState(false);
+  const [manualSalaryForm] = Form.useForm();
 
   const staffStartMonth = React.useMemo(() => {
     const candidates = [
+      staff?.dateOfJoining,
       staff?.profile?.dateOfJoining,
       staff?.createdAt,
       staff?.profile?.createdAt,
+      staff?.created_at,
     ].filter(Boolean);
     for (const c of candidates) {
       const d = dayjs(c);
@@ -163,12 +168,41 @@ export default function StaffProfileView() {
   const prefEarn = ['basic_salary', 'hra', 'da', 'special_allowance', 'travel_allowance', 'conveyance_allowance', 'medical_allowance', 'telephone_allowance', 'bonus', 'overtime'];
   const prefDed = ['provident_fund', 'esi', 'professional_tax', 'income_tax', 'loan_deduction', 'other_deductions'];
   const toEntries = (obj) => Object.entries(obj || {});
-  const orderByPref = (entries, pref) => {
-    const map = new Map(entries);
+  const orderByPref = (entries, pref, templateKeys = null) => {
+    const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
+    const map = new Map(); // Key: normalized, Value: { originalKey, value }
+
+    entries.forEach(([k, v]) => {
+      const nk = norm(k);
+      if (nk) {
+        // If we have duplicates in 'entries' themselves (rare but possible), sum them
+        const existing = map.get(nk);
+        map.set(nk, { key: k, value: (existing ? existing.value : 0) + (Number(v) || 0) });
+      }
+    });
+
     const used = new Set();
     const ordered = [];
-    pref.forEach(k => { if (map.has(k)) { ordered.push([k, map.get(k)]); used.add(k); } });
-    entries.forEach(([k, v]) => { if (!used.has(k)) ordered.push([k, v]); });
+    const effectivePref = templateKeys && templateKeys.length > 0 ? templateKeys : pref;
+
+    effectivePref.forEach(k => {
+      if (!k) return;
+      const nk = norm(k);
+      const existing = map.get(nk);
+      // We ALWAYS use the name from 'effectivePref' (the template key/pref key) for the final entry
+      ordered.push([k, existing ? existing.value : 0]);
+      used.add(nk);
+    });
+
+    // Add anything else that wasn't in the preference/template list
+    entries.forEach(([k, v]) => {
+      const nk = norm(k);
+      if (nk && !used.has(nk)) {
+        ordered.push([k, v]);
+        used.add(nk);
+      }
+    });
+
     return ordered;
   };
 
@@ -191,8 +225,48 @@ export default function StaffProfileView() {
       }
     }
     if (!sv) sv = extractSV(staff || {});
-    const earningsEntries = orderByPref(toEntries(sv.earnings), prefEarn);
-    const deductionEntries = orderByPref(toEntries(sv.deductions), prefDed);
+
+    const staffTplId = staff?.profile?.salaryTemplateId || staff?.salaryTemplateId;
+    const tpl = salaryTemplates.find(t => t.id === staffTplId);
+
+    let tplEarnKeys = null;
+    let tplDedKeys = null;
+
+    if (tpl) {
+      try {
+        const parse = (v) => typeof v === 'string' ? JSON.parse(v) : (v || []);
+        const e = parse(tpl.earnings);
+        const d = parse(tpl.deductions);
+        const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
+        tplEarnKeys = e.map(it => it.name || it.key).filter(Boolean).filter(k => !norm(k).includes('employer'));
+        tplDedKeys = d.map(it => it.name || it.key).filter(Boolean).filter(k => !norm(k).includes('employer'));
+        // Normalize specific deduction keys to match prefDed
+        tplDedKeys = tplDedKeys.map(k => {
+          const nk = norm(k);
+          if (nk === 'providentfundemployee' || nk === 'providentfund') return 'provident_fund';
+          if (nk === 'esiemployee' || nk === 'esi') return 'esi';
+          if (nk === 'professionaltax') return 'professional_tax';
+          return k;
+        });
+      } catch (e) { console.error('Tpl parse error', e); }
+    }
+
+    const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
+    const earningsEntries = orderByPref(toEntries(sv.earnings), prefEarn, tplEarnKeys)
+      .filter(([k, v]) => {
+        const nk = norm(k);
+        const inTpl = tplEarnKeys ? tplEarnKeys.some(tk => norm(tk) === nk) : false;
+        const inPref = !tplEarnKeys && prefEarn.includes(k);
+        return Number(v) !== 0 || inTpl || inPref;
+      });
+    const deductionEntries = orderByPref(toEntries(sv.deductions), prefDed, tplDedKeys)
+      .filter(([k, v]) => {
+        const nk = norm(k);
+        const inTpl = tplDedKeys ? tplDedKeys.some(tk => norm(tk) === nk) : false;
+        const inPref = !tplDedKeys && prefDed.includes(k);
+        return Number(v) !== 0 || inTpl || inPref;
+      });
+
     salaryForm.setFieldsValue({
       earnings: earningsEntries.map(([k, v]) => ({ name: k, amount: Number(v) || 0 })),
       deductions: deductionEntries.map(([k, v]) => ({ name: k, amount: Number(v) || 0 })),
@@ -218,6 +292,30 @@ export default function StaffProfileView() {
     } catch (e) {
       if (e?.errorFields) return;
       message.error(e?.response?.data?.message || 'Failed to update salary');
+    }
+  };
+
+  const saveManualSalary = async () => {
+    try {
+      const v = await manualSalaryForm.validateFields();
+      const payload = {
+        staffId: id,
+        monthKey: v.month.format('YYYY-MM'),
+        netAmount: v.netAmount
+      };
+      setLoading(true);
+      const res = await api.post('/admin/payroll/manual-historical', payload);
+      if (res.data?.success) {
+        message.success('Historical salary saved');
+        setManualSalaryOpen(false);
+        manualSalaryForm.resetFields();
+        loadSalaryMonths();
+      }
+    } catch (e) {
+      if (e?.errorFields) return;
+      message.error(e?.response?.data?.message || 'Failed to save historical salary');
+    } finally {
+      setLoading(false);
     }
   };
   const extractSV = (u) => {
@@ -253,41 +351,46 @@ export default function StaffProfileView() {
         return Number.isFinite(v1) && v1 !== 0 ? v1 : (Number.isFinite(v2) ? v2 : 0);
       };
       const earnKeys = ['basic_salary', 'hra', 'da', 'special_allowance', 'travel_allowance', 'conveyance_allowance', 'medical_allowance', 'telephone_allowance', 'bonus', 'overtime'];
-      earnKeys.forEach(k => { const v = pick(k); if (v) e[k] = v; });
+      earnKeys.forEach(k => { const v = pick(k); if (v) e[k.toLowerCase()] = v; });
       const dedKeys = ['provident_fund', 'esi', 'professional_tax', 'income_tax', 'loan_deduction', 'other_deductions'];
-      dedKeys.forEach(k => { const v = pick(k); if (v) d[k] = v; });
+      dedKeys.forEach(k => { const v = pick(k); if (v) d[k.toLowerCase()] = v; });
       return { earnings: e, deductions: d };
     };
+    const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
     if (sv && typeof sv === 'object') {
-      // Ensure keys exist
-      if (!sv.earnings) sv.earnings = {};
-      if (!sv.deductions) sv.deductions = {};
-      sv.deductions = normalizeDeductions(sv.deductions);
+      const e = {};
+      const d = {};
+
+      if (sv.earnings && typeof sv.earnings === 'object') {
+        Object.entries(sv.earnings).forEach(([k, v]) => { if (k) e[norm(k)] = v; });
+      }
+      if (sv.deductions && typeof sv.deductions === 'object') {
+        Object.entries(normalizeDeductions(sv.deductions)).forEach(([k, v]) => { if (k) d[norm(k)] = v; });
+      }
+
       // If base earnings/deductions are empty, derive from numeric columns as fallback
-      let noBaseEarn = !sv.earnings || Object.keys(sv.earnings).length === 0;
-      let noBaseDed = !sv.deductions || Object.keys(sv.deductions).length === 0;
+      let noBaseEarn = Object.keys(e).length === 0;
+      let noBaseDed = Object.keys(d).length === 0;
+
       if (noBaseEarn || noBaseDed) {
         const base = baseFromNumerics();
-        if (noBaseEarn) sv.earnings = base.earnings;
-        if (noBaseDed) sv.deductions = normalizeDeductions(base.deductions);
-        noBaseEarn = !sv.earnings || Object.keys(sv.earnings).length === 0;
-        noBaseDed = !sv.deductions || Object.keys(sv.deductions).length === 0;
+        if (noBaseEarn) Object.assign(e, base.earnings);
+        if (noBaseDed) Object.assign(d, base.deductions);
       }
-      // If still empty and months exist, copy from most recent month entry
-      if ((noBaseEarn || noBaseDed) && sv.months && typeof sv.months === 'object') {
-        const keys = Object.keys(sv.months).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
-        const pickKey = (sv.lastUpdatedMonth || sv.lastUpdatedMonthKey || keys[keys.length - 1]);
-        const m = pickKey ? sv.months[pickKey] : null;
-        if (m && typeof m === 'object') {
-          const me = (m.earnings && typeof m.earnings === 'object') ? m.earnings : {};
-          const md = (m.deductions && typeof m.deductions === 'object') ? normalizeDeductions(m.deductions) : {};
-          if (noBaseEarn) sv.earnings = me;
-          if (noBaseDed) sv.deductions = md;
-        }
-      }
-      return sv;
+
+      return {
+        earnings: e,
+        deductions: d,
+        lastUpdatedMonth: sv.lastUpdatedMonth,
+        lastUpdatedMonthKey: sv.lastUpdatedMonthKey,
+        months: sv.months
+      };
     }
-    return baseFromNumerics();
+    const base = baseFromNumerics();
+    const res = { earnings: {}, deductions: {} };
+    Object.entries(base.earnings).forEach(([k, v]) => res.earnings[norm(k)] = v);
+    Object.entries(base.deductions).forEach(([k, v]) => res.deductions[norm(k)] = v);
+    return res;
   };
 
   // Parse raw salaryValues (handles double-encoded)
@@ -314,46 +417,21 @@ export default function StaffProfileView() {
   const loadSalaryMonths = React.useCallback(async () => {
     if (activeKey !== 'salaryOverview' || !staff) return;
 
-    // Use current date for "0" months back
     const now = dayjs();
     const list = [];
     const minAllowedMonth = staffStartMonth;
 
     // We generate list of months: [Current, Last, Last-1, ...]
+    // We iterate up to monthsCount, but we don't 'break' strictly if there's data
     for (let i = 0; i < monthsCount; i++) {
       const m = now.subtract(i, 'month');
-      if (minAllowedMonth && m.startOf('month').isBefore(minAllowedMonth, 'month')) {
-        break;
-      }
       const ym = m.format('YYYY-MM');
-      const isCurrent = (i === 0);
-
-      // 1. Base Expected Salary (from Structure)
-      let sv = getMonthSV(staff, ym);
-      let amount = 0;
-
-      // Calculate Net
-      const sum = (o) => Object.values(o || {}).reduce((s, v) => s + (Number(v) || 0), 0);
-      const gross = sum(sv.earnings);
-      const ded = sum(sv.deductions);
-      amount = gross - ded;
-
-      // 2. Attendance Ratio (if available) - not used here, handled in renderSection
-      let ratio = 1;
 
       // Check payment status from payroll
       let paymentStatus = 'DUE';
       let paidAmount = 0;
       let payrollData = null;
       let cycleData = null;
-
-      // Helper to parsing
-      const parseMaybe = (v) => {
-        if (v == null) return v;
-        if (typeof v === 'object') return v;
-        if (typeof v === 'string') { try { return JSON.parse(v); } catch { return {}; } }
-        return v;
-      };
 
       try {
         const payrollRes = await api.get(`/admin/payroll?monthKey=${ym}&staffId=${id}`);
@@ -363,40 +441,57 @@ export default function StaffProfileView() {
             const userLine = payrollRes.data.lines.find(line => line.userId === Number(id));
             if (userLine) {
               payrollData = userLine;
-              const ftotals = parseMaybe(userLine.totals);
-              if (ftotals) {
-                // Apply totals from Payroll
-                // If calculate net from earnings/deductions to be consistent
-                const e = Number(ftotals.totalEarnings || 0) + Number(ftotals.totalIncentives || 0);
-                const d = Number(ftotals.totalDeductions || 0);
-                amount = e - d;
-
-                // Or use netSalary if trusted
-                // amount = Number(ftotals.netSalary || amount);
-
-                if (ftotals.ratio !== undefined) {
-                  ratio = Number(ftotals.ratio);
-                }
-              }
-              if (userLine.paidAt) {
-                paymentStatus = 'PAID';
-                paidAmount = userLine.paidAmount || amount;
-              }
             }
           }
         }
       } catch (_) { /* ignore */ }
+
+      const currentMonthKey = m.format('YYYY-MM');
+      const startMonthKey = minAllowedMonth ? minAllowedMonth.format('YYYY-MM') : null;
+
+      const isBeforeStart = startMonthKey && currentMonthKey < startMonthKey;
+      const isSkeletonLine = payrollData && !payrollData.paidAt && (Number(payrollData.netAmount) === 0 || !payrollData.id);
+
+      // If we are before the employee joined AND (no data OR it's just a skeleton record), we stop looking back
+      if (isBeforeStart && (!payrollData || isSkeletonLine)) {
+        break;
+      }
+
+      const isCurrent = (i === 0);
+
+      // 1. Base Expected Salary (from Structure)
+      let sv = getMonthSV(staff, ym);
+      let amountCounted = 0;
+
+      // Calculate Net from structure
+      const sum = (o) => Object.values(o || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+      const gross = sum(sv.earnings);
+      const ded = sum(sv.deductions);
+      amountCounted = gross - ded;
+
+      let ratio = 1;
+      if (payrollData) {
+        const ftotals = typeof payrollData.totals === 'string' ? JSON.parse(payrollData.totals) : (payrollData.totals || {});
+        const e = Number(ftotals.totalEarnings || 0) + Number(ftotals.totalIncentives || 0);
+        const d = Number(ftotals.totalDeductions || 0);
+        amountCounted = e - d;
+        if (ftotals.ratio !== undefined) ratio = Number(ftotals.ratio);
+        if (payrollData.paidAt) {
+          paymentStatus = 'PAID';
+          paidAmount = payrollData.paidAmount || amountCounted;
+        }
+      }
 
       list.push({
         key: ym,
         month: m.format('MMM YYYY'),
         title: m.format('MMM YYYY'),
         range: `${m.startOf('month').format('DD MMM')} - ${m.endOf('month').format('DD MMM YYYY')}`,
-        amount,
+        amount: amountCounted,
         ratio,
         payrollData,
         cycleData,
-        dueAmount: isCurrent && paymentStatus === 'DUE' ? amount : 0,
+        dueAmount: isCurrent && paymentStatus === 'DUE' ? amountCounted : 0,
         paidAmount: paymentStatus === 'PAID' ? paidAmount : 0,
         paymentStatus,
         isCurrent
@@ -418,6 +513,17 @@ export default function StaffProfileView() {
     })();
     loadSalaryMonths();
   }, [loadSalaryMonths]);
+
+  // Staff data and templates loader
+  useEffect(() => {
+    const loadTpls = async () => {
+      try {
+        const res = await api.get('/admin/salary-templates');
+        if (res.data?.success) setSalaryTemplates(res.data.data || []);
+      } catch (_) { /* ignore */ }
+    };
+    loadTpls();
+  }, []);
 
   // Loans data loader
   useEffect(() => {
@@ -1155,15 +1261,53 @@ export default function StaffProfileView() {
     }
     if (activeKey === 'salaryStructure') {
       const sv = extractSV(staff || {});
-      const labelize = (k) => {
+      const staffTplId = staff?.profile?.salaryTemplateId || staff?.salaryTemplateId;
+      const tpl = salaryTemplates.find(t => t.id === staffTplId);
+
+      let tplEarnKeys = null;
+      let tplDedKeys = null;
+      const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
+
+      if (tpl) {
+        try {
+          const parse = (v) => typeof v === 'string' ? JSON.parse(v) : (v || []);
+          tplEarnKeys = parse(tpl.earnings).map(it => it.name || it.key).filter(Boolean).filter(k => !norm(k).includes('employer'));
+          tplDedKeys = parse(tpl.deductions).map(it => it.name || it.key).filter(Boolean).filter(k => !norm(k).includes('employer')).map(k => {
+            const nk = norm(k);
+            if (nk === 'providentfundemployee' || nk === 'providentfund') return 'provident_fund';
+            if (nk === 'esiemployee' || nk === 'esi') return 'esi';
+            if (nk === 'professionaltax') return 'professional_tax';
+            return k;
+          });
+        } catch (e) { }
+      }
+
+      const allTplKeys = [...(tplEarnKeys || []), ...(tplDedKeys || [])];
+
+      const labelize = (k, tplKeys = []) => {
         if (!k) return '';
+        const nk = norm(k);
+        const match = tplKeys.find(tk => norm(tk) === nk);
+        if (match) return match;
         const upper = { hra: 'HRA', da: 'DA', pf: 'PF', esi: 'ESI' };
-        if (upper[k]) return upper[k];
-        if (k === 'provident_fund') return 'Employee PF';
+        if (upper[k.toLowerCase()]) return upper[k.toLowerCase()];
+        if (nk === 'providentfund' || nk === 'providentfundemployee') return 'Employee PF';
         return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       };
-      const earningsEntries = orderByPref(toEntries(sv.earnings), prefEarn);
-      const deductionEntries = orderByPref(toEntries(sv.deductions), prefDed);
+
+      const earningsEntries = orderByPref(toEntries(sv.earnings), prefEarn, tplEarnKeys).filter(([k, v]) => {
+        const nk = norm(k);
+        const inTpl = tplEarnKeys ? tplEarnKeys.some(tk => norm(tk) === nk) : false;
+        const inPref = !tplEarnKeys && prefEarn.includes(k);
+        return Number(v) !== 0 || inTpl || inPref;
+      });
+      const deductionEntries = orderByPref(toEntries(sv.deductions), prefDed, tplDedKeys).filter(([k, v]) => {
+        const nk = norm(k);
+        const inTpl = tplDedKeys ? tplDedKeys.some(tk => norm(tk) === nk) : false;
+        const inPref = !tplDedKeys && prefDed.includes(k);
+        return Number(v) !== 0 || inTpl || inPref;
+      });
+
       const gross = earningsEntries.reduce((s, [, v]) => s + (Number(v) || 0), 0);
       const totalDed = deductionEntries.reduce((s, [, v]) => s + (Number(v) || 0), 0);
       const net = gross - totalDed;
@@ -1175,7 +1319,7 @@ export default function StaffProfileView() {
               <Card size="small" title="Earnings">
                 {earningsEntries.map(([k, v]) => (
                   <Row key={k} style={{ marginBottom: 8 }}>
-                    <Col span={16}>{labelize(k)}</Col>
+                    <Col span={16}>{labelize(k, allTplKeys)}</Col>
                     <Col span={8} style={{ textAlign: 'right' }}>{currency(v)}</Col>
                   </Row>
                 ))}
@@ -1190,7 +1334,7 @@ export default function StaffProfileView() {
               <Card size="small" title="Deductions">
                 {deductionEntries.map(([k, v]) => (
                   <Row key={k} style={{ marginBottom: 8 }}>
-                    <Col span={16}>{labelize(k)}</Col>
+                    <Col span={16}>{labelize(k, allTplKeys)}</Col>
                     <Col span={8} style={{ textAlign: 'right' }}>{currency(v)}</Col>
                   </Row>
                 ))}
@@ -1208,6 +1352,7 @@ export default function StaffProfileView() {
               <Col span={8} style={{ textAlign: 'right' }}><strong>{currency(net)}</strong></Col>
             </Row>
           </Card>
+
           <Modal title="Edit Salary Structure" open={salaryEditOpen} onCancel={() => setSalaryEditOpen(false)} onOk={saveSalary} okText="Save" width={700}>
             <Form form={salaryForm} layout="vertical">
               <Row gutter={12}>
@@ -1261,16 +1406,53 @@ export default function StaffProfileView() {
 
       const currency = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(n || 0));
 
+      const staffTplId = staff?.profile?.salaryTemplateId || staff?.salaryTemplateId;
+      const tpl = salaryTemplates.find(t => t.id === staffTplId);
       const sv = extractSV(staff || {});
-      const labelize = (k) => {
+
+      let tplEarnKeys = null;
+      let tplDedKeys = null;
+      const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
+
+      if (tpl) {
+        try {
+          const parse = (v) => typeof v === 'string' ? JSON.parse(v) : (v || []);
+          tplEarnKeys = parse(tpl.earnings).map(it => it.name || it.key).filter(Boolean).filter(k => !norm(k).includes('employer'));
+          tplDedKeys = parse(tpl.deductions).map(it => it.name || it.key).filter(Boolean).filter(k => !norm(k).includes('employer')).map(k => {
+            const nk = norm(k);
+            if (nk === 'providentfundemployee' || nk === 'providentfund') return 'provident_fund';
+            if (nk === 'esiemployee' || nk === 'esi') return 'esi';
+            if (nk === 'professionaltax') return 'professional_tax';
+            return k;
+          });
+        } catch (e) { }
+      }
+      const allTplKeys = [...(tplEarnKeys || []), ...(tplDedKeys || [])];
+
+      const labelize = (k, tplKeys = []) => {
         if (!k) return '';
+        const nk = norm(k);
+        const match = tplKeys.find(tk => norm(tk) === nk);
+        if (match) return match;
         const upper = { hra: 'HRA', da: 'DA', pf: 'PF', esi: 'ESI' };
-        if (upper[k]) return upper[k];
-        if (k === 'provident_fund') return 'Employee PF';
+        if (upper[k.toLowerCase()]) return upper[k.toLowerCase()];
+        if (nk === 'providentfund' || nk === 'providentfundemployee') return 'Employee PF';
         return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       };
-      const earningsEntries = orderByPref(toEntries(sv.earnings), prefEarn);
-      const deductionEntries = orderByPref(toEntries(sv.deductions), prefDed);
+
+      const earningsEntries = orderByPref(toEntries(sv.earnings), prefEarn, tplEarnKeys).filter(([k, v]) => {
+        const nk = norm(k);
+        const inTpl = tplEarnKeys ? tplEarnKeys.some(tk => norm(tk) === nk) : false;
+        const inPref = !tplEarnKeys && prefEarn.includes(k);
+        return Number(v) !== 0 || inTpl || inPref;
+      });
+      const deductionEntries = orderByPref(toEntries(sv.deductions), prefDed, tplDedKeys).filter(([k, v]) => {
+        const nk = norm(k);
+        const inTpl = tplDedKeys ? tplDedKeys.some(tk => norm(tk) === nk) : false;
+        const inPref = !tplDedKeys && prefDed.includes(k);
+        return Number(v) !== 0 || inTpl || inPref;
+      });
+
       const gross = earningsEntries.reduce((s, [, v]) => s + (Number(v) || 0), 0);
       const totalDed = deductionEntries.reduce((s, [, v]) => s + (Number(v) || 0), 0);
       const net = gross - totalDed;
@@ -1325,7 +1507,7 @@ export default function StaffProfileView() {
         if (!payrollLine || !cycleData) return message.error('Missing data');
         // Re-use logic from PayrollList or similar
         try {
-          const brandInfo = { displayName: 'ThinkTech Solutions' }; // Or fetch
+          const brandInfo = { displayName: 'Thinktech Software' }; // Or fetch
 
           let attendanceData = { workingDays: 26, presentDays: 26, absentDays: 0, paidLeaveDays: 0, unpaidLeaveDays: 0, weeklyOffDays: 0, holidays: 0, halfDays: 0 };
           const sum = payrollLine.attendanceSummary || {};
@@ -1469,7 +1651,8 @@ export default function StaffProfileView() {
       return (
         <Card title="Salary Overview" extra={
           <Space>
-            <Button onClick={handleAddPrev} disabled={!hasMoreMonths}>+ Add Previous Month</Button>
+            <Button onClick={() => setManualSalaryOpen(true)}>Add Previous Month Salary</Button>
+            {/* <Button onClick={handleAddPrev} disabled={!hasMoreMonths}>+ Add Previous Month</Button> */}
             {(() => {
               const m = (salaryMonths || []).find((x) => x.key === activeMonthKey);
               return (
@@ -1511,13 +1694,23 @@ export default function StaffProfileView() {
                       let targetDed = 0;
 
                       // Helper to distribute total into components
-                      const distribute = (entries, targetTotal) => {
-                        const totalWeight = entries.reduce((s, [, v]) => s + (Number(v) || 0), 0);
-                        if (totalWeight === 0) return entries.map(([k]) => ({ key: k, label: labelize(k), amount: 0 }));
+                      const distribute = (entries, targetTotal, tplKeys) => {
+                        const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
 
-                        let distribution = entries.map(([k, v]) => ({
+                        // CRITICAL: Filter entries FIRST to decide what to show
+                        const filteredEntries = entries.filter(([k, v]) => {
+                          const nk = norm(k);
+                          const inTpl = tplKeys ? tplKeys.some(tk => norm(tk) === nk) : false;
+                          const inPref = !tplKeys && (prefEarn.includes(k) || prefDed.includes(k)); // fallback if no tpl
+                          return Number(v) !== 0 || inTpl;
+                        });
+
+                        const totalWeight = filteredEntries.reduce((s, [, v]) => s + (Number(v) || 0), 0);
+                        if (totalWeight === 0) return filteredEntries.map(([k]) => ({ key: k, label: labelize(k, allTplKeys), amount: 0 }));
+
+                        let distribution = filteredEntries.map(([k, v]) => ({
                           key: k,
-                          label: labelize(k),
+                          label: labelize(k, allTplKeys),
                           amount: Math.round(((Number(v) || 0) / totalWeight) * targetTotal)
                         }));
 
@@ -1556,7 +1749,7 @@ export default function StaffProfileView() {
 
                         // Distribute Earnings
                         const earningsList = Object.entries(pe);
-                        const earningsDist = distribute(earningsList, dbTotalEarnings);
+                        const earningsDist = distribute(earningsList, dbTotalEarnings, tplEarnKeys);
 
                         // Incentives
                         const incentivesList = Object.entries(pi);
@@ -1566,7 +1759,7 @@ export default function StaffProfileView() {
 
                         // Deductions
                         const deductionsList = Object.entries(pd);
-                        finalDeductions = distribute(deductionsList, dbTotalDeductions);
+                        finalDeductions = distribute(deductionsList, dbTotalDeductions, tplDedKeys);
 
                         targetGross = dbTotalEarnings + dbTotalIncentives;
                         targetDed = dbTotalDeductions;
@@ -1596,8 +1789,8 @@ export default function StaffProfileView() {
                         targetDed = estDed;
                         targetGross = estGross;
 
-                        finalEarnings = distribute(eEntries, targetGross);
-                        finalDeductions = distribute(dEntries, targetDed);
+                        finalEarnings = distribute(eEntries, targetGross, tplEarnKeys);
+                        finalDeductions = distribute(dEntries, targetDed, tplDedKeys);
                       }
 
                       return (
@@ -1657,6 +1850,24 @@ export default function StaffProfileView() {
               </div>
             ) : null}
           </div>
+
+          <Modal title="Add Historical Salary" open={manualSalaryOpen} onCancel={() => setManualSalaryOpen(false)} onOk={saveManualSalary} okText="Save" centered>
+            <Form form={manualSalaryForm} layout="vertical">
+              <Form.Item name="month" label="Select Month" rules={[{ required: true, message: 'Please select month' }]}>
+                <DatePicker
+                  picker="month"
+                  style={{ width: '100%' }}
+                  disabledDate={(current) => {
+                    const cutoff = staffStartMonth || dayjs().startOf('month');
+                    return current && current.isSameOrAfter ? current.isSameOrAfter(cutoff, 'month') : !current.isBefore(cutoff, 'month');
+                  }}
+                />
+              </Form.Item>
+              <Form.Item name="netAmount" label="Net Salary Amount" rules={[{ required: true, message: 'Please enter amount' }]}>
+                <InputNumber min={0} style={{ width: '100%' }} prefix="₹" placeholder="Enter net amount" />
+              </Form.Item>
+            </Form>
+          </Modal>
         </Card>
       );
     }
