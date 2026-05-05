@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, InputNumber, Select, message, Space, DatePicker, Tag, Checkbox, Row, Col } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import api from '../api';
 import Sidebar from './Sidebar';
@@ -9,6 +10,7 @@ const { Header, Content } = Layout;
 const { Title } = Typography;
 
 export default function SuperadminClients() {
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState([]);
@@ -21,6 +23,8 @@ export default function SuperadminClients() {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [form] = Form.useForm();
   const [planDetailsOpen, setPlanDetailsOpen] = useState(false);
+  const [assignModalTitle, setAssignModalTitle] = useState('Assign/Renew Subscription');
+  const [isUpgrade, setIsUpgrade] = useState(false);
   const [selectedClientPlan, setSelectedClientPlan] = useState({});
   const [staffCounts, setStaffCounts] = useState({});
   const [staffLimitOpen, setStaffLimitOpen] = useState(false);
@@ -31,6 +35,9 @@ export default function SuperadminClients() {
   const [selectedClientForGeoLimit, setSelectedClientForGeoLimit] = useState(null);
   const [geoStaffCounts, setGeoStaffCounts] = useState({});
   const [searchText, setSearchText] = useState('');
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperadmin = user.role === 'superadmin';
+  const userPermissions = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : (user.permissions || {});
   const formInitials = editing ? {
     name: editing.name || '',
     phone: editing.phone || '',
@@ -53,8 +60,6 @@ export default function SuperadminClients() {
       setLoading(true);
       const res = await api.get('/superadmin/clients');
       setRows(res.data?.clients || []);
-      // Load staff counts for all clients
-      await loadStaffCounts(res.data?.clients || []);
     } catch (e) {
       message.error('Failed to load clients');
     } finally {
@@ -101,7 +106,7 @@ export default function SuperadminClients() {
       const res = await api.get(`/superadmin/clients/${client.id}/plan-details`);
       setSelectedClientPlan({
         clientName: client.name,
-        ...res.data.planDetails
+        plans: res.data.plans || []
       });
       setPlanDetailsOpen(true);
     } catch (e) {
@@ -225,7 +230,14 @@ export default function SuperadminClients() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!isSuperadmin && !userPermissions.clients) {
+      message.error('You do not have permission to access Clients Management');
+      navigate('/superadmin/dashboard');
+      return;
+    }
+    load();
+  }, []);
 
   // Ensure form resets when opening create
   useEffect(() => {
@@ -310,6 +322,44 @@ export default function SuperadminClients() {
       recruitmentEnabled: sub.recruitmentEnabled !== null ? !!sub.recruitmentEnabled : (!!resolvedPlan.recruitmentEnabled || false),
       communityEnabled: sub.communityEnabled !== null ? !!sub.communityEnabled : (!!resolvedPlan.communityEnabled || false)
     });
+    setAssignModalTitle('Assign/Renew Subscription');
+    setIsUpgrade(false);
+    setAssignOpen(true);
+  };
+
+  const openUpgrade = async (rec) => {
+    setEditing(rec);
+    await loadPlans();
+    assignForm.resetFields();
+
+    const sub = rec.currentSubscription || {};
+    const plan = rec.plan || {};
+
+    // Calculate next start date (1 second after current plan ends)
+    const currentEndAt = sub.endAt ? dayjs(sub.endAt) : dayjs();
+    const nextStartAt = currentEndAt.add(1, 'second');
+
+    const currentPlanId = sub.planId || plan.id;
+
+    assignForm.setFieldsValue({
+      planId: currentPlanId,
+      startAt: nextStartAt,
+      staffLimit: plan.staffLimit || '',
+      maxGeolocationStaff: plan.maxGeolocationStaff || 0,
+      salesEnabled: !!plan.salesEnabled,
+      geolocationEnabled: !!plan.geolocationEnabled,
+      expenseEnabled: !!plan.expenseEnabled,
+      payrollEnabled: !!plan.payrollEnabled,
+      performanceEnabled: !!plan.performanceEnabled,
+      aiReportsEnabled: !!plan.aiReportsEnabled,
+      aiAssistantEnabled: !!plan.aiAssistantEnabled,
+      taskManagementEnabled: !!plan.taskManagementEnabled,
+      rosterEnabled: !!plan.rosterEnabled,
+      recruitmentEnabled: !!plan.recruitmentEnabled,
+      communityEnabled: !!plan.communityEnabled
+    });
+    setAssignModalTitle('Upgrade Plan (Queued)');
+    setIsUpgrade(true);
     setAssignOpen(true);
   };
 
@@ -382,10 +432,12 @@ export default function SuperadminClients() {
       if (res.data.success) {
         const newToken = res.data.token;
         const newUser = encodeURIComponent(JSON.stringify(res.data.user));
+        const orgs = encodeURIComponent(JSON.stringify(res.data.organizations || []));
+        const canCreateOrg = res.data.canCreateOrg ? 'true' : 'false';
 
         // Open in a new tab via the /impersonate route
         // The ImpersonateRedirect component will store in sessionStorage (tab-specific)
-        window.open(`/impersonate?token=${newToken}&user=${newUser}`, '_blank');
+        window.open(`/impersonate?token=${newToken}&user=${newUser}&orgs=${orgs}&canCreateOrg=${canCreateOrg}`, '_blank');
       }
     } catch (e) {
       message.error(e?.response?.data?.message || 'Failed to impersonate client');
@@ -430,12 +482,12 @@ export default function SuperadminClients() {
     {
       title: 'Actions', width: 500,
       render: (_, rec) => {
-        const staffCount = staffCounts[rec.id] || 0;
-        const staffLimit = rec.currentSubscription?.staffLimit || rec.plan?.staffLimit || 'Unlimited';
+        const staffCount = rec.staffCount || 0;
+        const staffLimit = rec.staffLimit || 'Unlimited';
         const isOverLimit = staffLimit !== 'Unlimited' && staffCount > staffLimit;
 
-        const geoStaffCount = geoStaffCounts[rec.id] || 0;
-        const geoStaffLimit = rec.currentSubscription?.maxGeolocationStaff || rec.plan?.maxGeolocationStaff || 0;
+        const geoStaffCount = rec.geoStaffCount || 0;
+        const geoStaffLimit = rec.maxGeolocationStaff || 0;
         const isOverGeoLimit = geoStaffLimit > 0 && geoStaffCount > geoStaffLimit;
 
         return (
@@ -444,8 +496,15 @@ export default function SuperadminClients() {
               <Button size="small" onClick={() => onEdit(rec)}>Edit</Button>
               <Button size="small" onClick={() => openPlanDetails(rec)}>View Plan</Button>
               <Button size="small" type="primary" onClick={() => openAssign(rec)}>Assign/Renew</Button>
-              <Button 
-                size="small" 
+              <Button
+                size="small"
+                style={{ backgroundColor: '#722ed1', color: 'white', borderColor: '#722ed1' }}
+                onClick={() => openUpgrade(rec)}
+              >
+                Upgrade
+              </Button>
+              <Button
+                size="small"
                 danger={rec.status !== 'SUSPENDED'}
                 style={rec.status === 'SUSPENDED' ? { backgroundColor: '#52c41a', color: 'white', borderColor: '#52c41a' } : {}}
                 onClick={() => handleToggleStatus(rec)}
@@ -453,30 +512,48 @@ export default function SuperadminClients() {
                 {rec.status === 'SUSPENDED' ? 'Activate' : 'Deactivate'}
               </Button>
             </Space>
-            <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: '#666' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '12px', color: '#666' }}>
               <div>
-                <span>Staff: </span>
-                <Tag
-                  color={isOverLimit ? 'red' : staffLimit !== 'Unlimited' && staffCount >= staffLimit * 0.8 ? 'orange' : 'green'}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => openStaffLimitModal(rec)}
-                >
-                  {staffCount}/{staffLimit}
-                </Tag>
-                {isOverLimit && <span style={{ color: 'red', marginLeft: 4 }}>⚠️ Over limit</span>}
+                <Space direction="vertical" size={0}>
+                  <Space>
+                    <span>Staff: </span>
+                    <Tag
+                      color={isOverLimit ? 'red' : staffLimit !== 'Unlimited' && staffCount >= staffLimit * 0.8 ? 'orange' : 'green'}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => openStaffLimitModal(rec)}
+                    >
+                      {staffCount}/{staffLimit}
+                    </Tag>
+                    {isOverLimit && <span style={{ color: 'red' }}>⚠️ Over limit</span>}
+                  </Space>
+                  {rec.staffBreakdown && rec.staffBreakdown.filter(b => !b.isParent && b.staffCount > 0).map(b => (
+                    <div key={b.orgId} style={{ fontSize: '11px', fontStyle: 'italic', color: '#8c8c8c' }}>
+                      {b.staffCount} created by child company {b.name}
+                    </div>
+                  ))}
+                </Space>
               </div>
 
               {(rec.currentSubscription?.geolocationEnabled || rec.plan?.geolocationEnabled) && (
                 <div>
-                  <span>Geo Staff: </span>
-                  <Tag
-                    color={isOverGeoLimit ? 'red' : geoStaffLimit > 0 && geoStaffCount >= geoStaffLimit * 0.8 ? 'orange' : 'green'}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => openGeoStaffLimitModal(rec)}
-                  >
-                    {geoStaffCount}/{geoStaffLimit || '∞'}
-                  </Tag>
-                  {isOverGeoLimit && <span style={{ color: 'red', marginLeft: 4 }}>⚠️ Over limit</span>}
+                  <Space direction="vertical" size={0}>
+                    <Space>
+                      <span>Geo Staff: </span>
+                      <Tag
+                        color={isOverGeoLimit ? 'red' : geoStaffLimit > 0 && geoStaffCount >= geoStaffLimit * 0.8 ? 'orange' : 'green'}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => openGeoStaffLimitModal(rec)}
+                      >
+                        {geoStaffCount}/{geoStaffLimit || '∞'}
+                      </Tag>
+                      {isOverGeoLimit && <span style={{ color: 'red' }}>⚠️ Over limit</span>}
+                    </Space>
+                    {rec.staffBreakdown && rec.staffBreakdown.filter(b => !b.isParent && b.geoStaffCount > 0).map(b => (
+                      <div key={`geo-${b.orgId}`} style={{ fontSize: '11px', fontStyle: 'italic', color: '#8c8c8c' }}>
+                        {b.geoStaffCount} geo staff from child company {b.name}
+                      </div>
+                    ))}
+                  </Space>
                 </div>
               )}
             </div>
@@ -530,7 +607,7 @@ export default function SuperadminClients() {
               (r.name || '').toLowerCase().includes(searchText.toLowerCase()) ||
               (r.phone || '').includes(searchText)
             )}
-            pagination={{ 
+            pagination={{
               pageSize: 100,
               showSizeChanger: true,
               showQuickJumper: true,
@@ -614,7 +691,7 @@ export default function SuperadminClients() {
       </Modal>
 
       <Modal
-        title="Assign/Renew Subscription"
+        title={assignModalTitle}
         open={assignOpen}
         onCancel={() => setAssignOpen(false)}
         onOk={submitAssign}
@@ -628,7 +705,7 @@ export default function SuperadminClients() {
               placeholder="Select plan"
               options={plans.map(p => ({ value: p.id, label: `${p.name} (${p.periodDays}d)` }))}
               onChange={handlePlanChange}
-              disabled={editing?.currentSubscription && editing?.currentSubscription.status === 'ACTIVE'}
+              disabled={!isUpgrade && editing?.currentSubscription && editing?.currentSubscription.status === 'ACTIVE'}
             />
           </Form.Item>
           <Form.Item label="Start Date" name="startAt" rules={[{ required: true }]}>
@@ -646,63 +723,63 @@ export default function SuperadminClients() {
 
           {editing?.currentSubscription && editing?.currentSubscription.status === 'ACTIVE' && (
             <>
-            <Row gutter={[16, 0]}>
-              <Col span={8}>
-                <Form.Item name="salesEnabled" valuePropName="checked">
-                  <Checkbox>Enable Sales Module</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="geolocationEnabled" valuePropName="checked">
-                  <Checkbox>Enable Geolocation</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="expenseEnabled" valuePropName="checked">
-                  <Checkbox>Enable Expense Module</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="payrollEnabled" valuePropName="checked">
-                  <Checkbox>Enable Payroll Module</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="performanceEnabled" valuePropName="checked">
-                  <Checkbox>Enable Performance Module</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="aiReportsEnabled" valuePropName="checked">
-                  <Checkbox>Enable AI Reports</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="aiAssistantEnabled" valuePropName="checked">
-                  <Checkbox>Enable AI Assistant</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="taskManagementEnabled" valuePropName="checked">
-                  <Checkbox>Enable Task Management</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="rosterEnabled" valuePropName="checked">
-                  <Checkbox>Enable Roster Module</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="recruitmentEnabled" valuePropName="checked">
-                  <Checkbox>Enable Recruitment Module</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="communityEnabled" valuePropName="checked">
-                  <Checkbox>Enable Community Module</Checkbox>
-                </Form.Item>
-              </Col>
-            </Row>
+              <Row gutter={[16, 0]}>
+                <Col span={8}>
+                  <Form.Item name="salesEnabled" valuePropName="checked">
+                    <Checkbox>Enable Sales Module</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="geolocationEnabled" valuePropName="checked">
+                    <Checkbox>Enable Geolocation</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="expenseEnabled" valuePropName="checked">
+                    <Checkbox>Enable Expense Module</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="payrollEnabled" valuePropName="checked">
+                    <Checkbox>Enable Payroll Module</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="performanceEnabled" valuePropName="checked">
+                    <Checkbox>Enable Performance Module</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="aiReportsEnabled" valuePropName="checked">
+                    <Checkbox>Enable AI Reports</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="aiAssistantEnabled" valuePropName="checked">
+                    <Checkbox>Enable AI Assistant</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="taskManagementEnabled" valuePropName="checked">
+                    <Checkbox>Enable Task Management</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="rosterEnabled" valuePropName="checked">
+                    <Checkbox>Enable Roster Module</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="recruitmentEnabled" valuePropName="checked">
+                    <Checkbox>Enable Recruitment Module</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="communityEnabled" valuePropName="checked">
+                    <Checkbox>Enable Community Module</Checkbox>
+                  </Form.Item>
+                </Col>
+              </Row>
             </>
           )}
 
@@ -743,54 +820,70 @@ export default function SuperadminClients() {
         footer={[
           <Button key="close" onClick={() => setPlanDetailsOpen(false)}>Close</Button>
         ]}
-        width={600}
+        width={700}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           <div>
             <div style={{ marginBottom: 4, color: '#6b7280', fontSize: 12 }}>Client Name</div>
-            <div style={{ fontSize: 16, fontWeight: 500 }}>{selectedClientPlan.clientName || 'N/A'}</div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: '#111827' }}>{selectedClientPlan.clientName || 'N/A'}</div>
           </div>
 
-          <div>
-            <div style={{ marginBottom: 4, color: '#6b7280', fontSize: 12 }}>Plan Name</div>
-            <div style={{ fontSize: 16, fontWeight: 500 }}>{selectedClientPlan.planName || 'No Plan'}</div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 24 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ marginBottom: 4, color: '#6b7280', fontSize: 12 }}>Start Date</div>
-              <div style={{ fontSize: 14 }}>
-                {selectedClientPlan.startDate ? new Date(selectedClientPlan.startDate).toLocaleDateString() : 'N/A'}
-              </div>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ marginBottom: 4, color: '#6b7280', fontSize: 12 }}>Expiry Date</div>
-              <div style={{ fontSize: 14 }}>
-                {selectedClientPlan.endDate ? new Date(selectedClientPlan.endDate).toLocaleDateString() : 'N/A'}
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <div style={{ marginBottom: 4, color: '#6b7280', fontSize: 12 }}>Status</div>
-            <Tag color={selectedClientPlan.status === 'active' ? '#52c41a' :
-              selectedClientPlan.status === 'expired' ? '#ff4d4f' : '#faad14'}>
-              {selectedClientPlan.status ? selectedClientPlan.status.charAt(0).toUpperCase() + selectedClientPlan.status.slice(1) : 'Unknown'}
-            </Tag>
-          </div>
-
-          {selectedClientPlan.features && Array.isArray(selectedClientPlan.features) && (
-            <div>
-              <div style={{ marginBottom: 8, color: '#6b7280', fontSize: 12 }}>Features</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {selectedClientPlan.features.map((feature, index) => (
-                  <div key={index} style={{ fontSize: 13, color: '#262626' }}>
-                    • {feature}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {selectedClientPlan.plans && selectedClientPlan.plans.length > 0 ? (
+              selectedClientPlan.plans.map((p, idx) => (
+                <div key={idx} style={{
+                  padding: '16px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '12px',
+                  backgroundColor: p.status === 'active' ? '#f0f9ff' : '#ffffff',
+                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 2 }}>Plan Name</div>
+                      <div style={{ fontSize: 16, fontWeight: 600, color: '#1f2937' }}>{p.planName}</div>
+                    </div>
+                    <Tag
+                      style={{ borderRadius: '6px', px: '8px' }}
+                      color={p.status === 'active' ? 'success' : p.status === 'future' ? 'processing' : 'error'}
+                    >
+                      {p.status.toUpperCase()}
+                    </Tag>
                   </div>
-                ))}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>Start Date</div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{p.startDate ? dayjs(p.startDate).format('DD MMM YYYY') : 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>Expiry Date</div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{p.endDate ? dayjs(p.endDate).format('DD MMM YYYY') : 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>Staff Limit</div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{p.staffLimit || 'Unlimited'}</div>
+                    </div>
+                  </div>
+
+                  {p.features && p.features.length > 0 && (
+                    <div style={{ marginTop: 8, pt: 8, borderTop: '1px dashed #e5e7eb' }}>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Included Features</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {p.features.map((f, fi) => (
+                          <Tag key={fi} style={{ margin: 0, fontSize: '10px', backgroundColor: '#f3f4f6', border: 'none' }}>{f}</Tag>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>
+                No active or queued plans found.
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </Modal>
       <Modal
@@ -846,27 +939,27 @@ export default function SuperadminClients() {
                 <Checkbox>Enable AI Assistant</Checkbox>
               </Form.Item>
             </Col>
-              <Col span={8}>
-                <Form.Item name="taskManagementEnabled" valuePropName="checked">
-                  <Checkbox>Enable Task Management</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="rosterEnabled" valuePropName="checked">
-                  <Checkbox>Enable Roster Module</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="recruitmentEnabled" valuePropName="checked">
-                  <Checkbox>Enable Recruitment Module</Checkbox>
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="communityEnabled" valuePropName="checked">
-                  <Checkbox>Enable Community Module</Checkbox>
-                </Form.Item>
-              </Col>
-            </Row>
+            <Col span={8}>
+              <Form.Item name="taskManagementEnabled" valuePropName="checked">
+                <Checkbox>Enable Task Management</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="rosterEnabled" valuePropName="checked">
+                <Checkbox>Enable Roster Module</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="recruitmentEnabled" valuePropName="checked">
+                <Checkbox>Enable Recruitment Module</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="communityEnabled" valuePropName="checked">
+                <Checkbox>Enable Community Module</Checkbox>
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Form.Item
             label="Max Geolocation Staff"

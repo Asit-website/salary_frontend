@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, Select, message, Space, Tag, DatePicker } from 'antd';
 import dayjs from 'dayjs';
 import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
 
@@ -9,6 +10,7 @@ const { Header, Content } = Layout;
 const { Title } = Typography;
 
 export default function SuperadminChannelPartners() {
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState([]);
@@ -16,6 +18,9 @@ export default function SuperadminChannelPartners() {
   const [editing, setEditing] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [form] = Form.useForm();
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isSuperadmin = user.role === 'superadmin';
+  const userPermissions = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : (user.permissions || {});
 
   const load = async () => {
     try {
@@ -29,7 +34,17 @@ export default function SuperadminChannelPartners() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!isSuperadmin && !userPermissions.partners) {
+      message.error('You do not have permission to access Channel Partner Management');
+      const dest = userPermissions.leads ? '/superadmin/leads' : 
+                   userPermissions.mailing ? '/superadmin/mailing' : 
+                   '/superadmin/dashboard';
+      navigate(dest);
+      return;
+    }
+    load();
+  }, []);
 
   const onCreate = () => {
     setEditing(null);

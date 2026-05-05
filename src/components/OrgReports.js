@@ -72,7 +72,7 @@ const OrgReports = () => {
     { value: 'applied-leave', label: 'Applied Leave Report' },
     { value: 'leave-balance', label: 'Leave Balance Report' },
     { value: 'punch-report', label: 'Punch Report (Matrix)' },
-    { value: 'sales', label: 'Sales Report' },
+    { value: 'sales', label: 'Visit Report' },
     { value: 'activities', label: 'Activities Report' },
     { value: 'tickets', label: 'Tickets Report' },
     { value: 'meetings', label: 'Meetings Report' },
@@ -91,7 +91,11 @@ const OrgReports = () => {
         { value: 'designation', label: 'Designation Wise' },
         { value: 'department', label: 'Department Wise' }
       ]
-    }
+    },
+    { value: 'per-day-salary', label: 'Per Day Salary Average (with OT)' },
+    { value: 'comparison', label: 'Month-over-Month Comparison' },
+    { value: 'ot-impact', label: 'Overtime Impact Analysis' },
+    { value: 'late-penalty', label: 'Late Penalty Analysis' }
   ];
 
   const months = [];
@@ -146,6 +150,14 @@ const OrgReports = () => {
         endpoint = '/admin/reports/org-tickets';
       } else if (mainType === 'meetings') {
         endpoint = '/admin/reports/org-meetings';
+      } else if (mainType === 'per-day-salary') {
+        endpoint = '/admin/reports/per-day-salary-average';
+      } else if (mainType === 'comparison') {
+        endpoint = '/admin/reports/comparison';
+      } else if (mainType === 'ot-impact') {
+        endpoint = '/admin/reports/ot-impact';
+      } else if (mainType === 'late-penalty') {
+        endpoint = '/admin/reports/late-penalty-analysis';
       }
 
       const params = {
@@ -198,6 +210,18 @@ const OrgReports = () => {
             return row;
           });
           setData(formatted);
+        } else if (reportType[0] === 'per-day-salary') {
+          const formatted = response.data.data.map((item, idx) => ({
+            ...item,
+            sn: idx + 1
+          }));
+          setData(formatted);
+        } else if (reportType[0] === 'comparison' || reportType[0] === 'ot-impact' || reportType[0] === 'late-penalty') {
+          const formatted = response.data.data.map((item, idx) => ({
+            ...item,
+            sn: idx + 1
+          }));
+          setData(formatted);
         } else {
           setData(response.data.data);
         }
@@ -248,6 +272,14 @@ const OrgReports = () => {
         endpoint = '/admin/reports/org-tickets';
       } else if (mainType === 'meetings') {
         endpoint = '/admin/reports/org-meetings';
+      } else if (mainType === 'per-day-salary') {
+        endpoint = '/admin/reports/per-day-salary-average';
+      } else if (mainType === 'comparison') {
+        endpoint = '/admin/reports/comparison';
+      } else if (mainType === 'ot-impact') {
+        endpoint = '/admin/reports/ot-impact';
+      } else if (mainType === 'late-penalty') {
+        endpoint = '/admin/reports/late-penalty-analysis';
       } else if (mainType === 'salary-register') {
         endpoint = '/admin/payroll/salary-register-excel-by-month';
       } else if (mainType === 'monthly-summary') {
@@ -685,6 +717,93 @@ const OrgReports = () => {
     { title: 'Department', key: 'department', render: (_, r) => r.creator?.profile?.department || 'N/A' },
     { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true }
   ];
+  
+  const getPerDaySalaryColumns = () => [
+    { title: 'S.N.', dataIndex: 'sn', key: 'sn', width: 60, fixed: 'left' },
+    { title: 'Staff Name', dataIndex: 'staffName', key: 'staffName', width: 150, fixed: 'left' },
+    { title: 'Staff ID', dataIndex: 'staffId', key: 'staffId', width: 100 },
+    { title: 'Department', dataIndex: 'department', key: 'department', width: 120 },
+    { title: 'Designation', dataIndex: 'designation', key: 'designation', width: 120 },
+    { title: 'Actual Earnings', dataIndex: 'actualEarnings', key: 'actualEarnings', width: 120, render: (v) => `₹${Number(v).toLocaleString()}` },
+    { title: 'OT Pay', dataIndex: 'overtimePay', key: 'overtimePay', width: 100, render: (v) => `₹${Number(v).toLocaleString()}` },
+    { title: 'Incentives', dataIndex: 'incentives', key: 'incentives', width: 100, render: (v) => `₹${Number(v).toLocaleString()}` },
+    { title: 'Payable Days', dataIndex: 'payableDays', key: 'payableDays', width: 100 },
+    { 
+      title: 'Per Day Avg', 
+      dataIndex: 'perDayAverage', 
+      key: 'perDayAverage', 
+      width: 120, 
+      render: (v) => <Text strong style={{ color: '#1890ff' }}>₹{Number(v).toLocaleString()}</Text>
+    }
+  ];
+
+  const getComparisonColumns = () => [
+    { 
+      title: 'Staff Details', 
+      fixed: 'left', 
+      children: [
+        { title: 'S.N.', dataIndex: 'sn', key: 'sn', width: 60 },
+        { title: 'Name', dataIndex: 'staffName', key: 'staffName', width: 150 },
+      ]
+    },
+    { 
+      title: 'Salary Comparison (Net)', 
+      align: 'center', 
+      children: [
+        { title: 'Last Month', dataIndex: ['salary', 'lastMonth'], key: 'salLast', width: 120, render: (v) => `₹${v?.toLocaleString() || '0'}` },
+        { title: 'Current Month', dataIndex: ['salary', 'currentMonth'], key: 'salCurr', width: 120, render: (v) => `₹${v?.toLocaleString() || '0'}` },
+        { 
+          title: 'Difference', dataIndex: ['salary', 'diff'], key: 'salDiff', width: 100, 
+          render: (v) => <Text style={{ color: v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#8c8c8c' }}>{v > 0 ? '+' : ''}{v?.toLocaleString() || '0'}</Text>
+        },
+      ]
+    },
+    { 
+      title: 'Attendance (Days)', 
+      align: 'center', 
+      children: [
+        { title: 'Last Month', dataIndex: ['attendance', 'lastMonth'], key: 'attLast', width: 110 },
+        { title: 'Current Month', dataIndex: ['attendance', 'currentMonth'], key: 'attCurr', width: 110 },
+        { 
+          title: 'Diff', dataIndex: ['attendance', 'diff'], key: 'attDiff', width: 80,
+          render: (v) => <Text style={{ color: v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#8c8c8c' }}>{v > 0 ? '+' : ''}{v}</Text>
+        },
+      ]
+    },
+    { 
+      title: 'Overtime Pay', 
+      align: 'center', 
+      children: [
+        { title: 'Last Month', dataIndex: ['ot', 'lastMonth'], key: 'otLast', width: 110, render: (v) => `₹${v?.toLocaleString() || '0'}` },
+        { title: 'Current Month', dataIndex: ['ot', 'currentMonth'], key: 'otCurr', width: 110, render: (v) => `₹${v?.toLocaleString() || '0'}` },
+        { 
+          title: 'Diff', dataIndex: ['ot', 'diff'], key: 'otDiff', width: 100,
+          render: (v) => <Text style={{ color: v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#8c8c8c' }}>{v > 0 ? '+' : ''}{v?.toLocaleString() || '0'}</Text>
+        },
+      ]
+    },
+  ];
+
+  const getLatePenaltyColumns = () => [
+    { title: 'S.N.', dataIndex: 'sn', key: 'sn', width: 60, fixed: 'left' },
+    { title: 'Staff Name', dataIndex: 'staffName', key: 'staffName', width: 150, fixed: 'left' },
+    { title: 'Department', dataIndex: 'department', key: 'department', width: 120 },
+    { title: 'Applied Rule', dataIndex: 'ruleName', key: 'ruleName', width: 150 },
+    { title: 'Type', dataIndex: 'penaltyType', key: 'penaltyType', width: 120 },
+    { title: 'Late Days', dataIndex: 'lateInstances', key: 'lateInstances', width: 100, align: 'center' },
+    { title: 'Total Late Min', dataIndex: 'totalLateMinutes', key: 'totalLateMinutes', width: 120, align: 'center' },
+    { title: 'Total Penalty', dataIndex: 'totalPenaltyAmount', key: 'totalPenaltyAmount', width: 130, render: (v) => <Text style={{ color: '#ff4d4f' }}>₹{v?.toLocaleString() || '0'}</Text> },
+  ];
+
+  const getOTImpactColumns = () => [
+    { title: 'S.N.', dataIndex: 'sn', key: 'sn', width: 60, fixed: 'left' },
+    { title: 'Staff Name', dataIndex: 'staffName', key: 'staffName', width: 150, fixed: 'left' },
+    { title: 'Department', dataIndex: 'department', key: 'department', width: 120 },
+    { title: 'Net (Without OT)', dataIndex: 'netWithoutOT', key: 'netWithoutOT', width: 140, render: (v) => `₹${v?.toLocaleString() || '0'}` },
+    { title: 'OT Pay', dataIndex: 'otPay', key: 'otPay', width: 120, render: (v) => <Text style={{ color: '#1890ff' }}>₹{v?.toLocaleString() || '0'}</Text> },
+    { title: 'Total Net (With OT)', dataIndex: 'totalNet', key: 'totalNet', width: 150, render: (v) => <Text strong style={{ color: '#52c41a' }}>₹{v?.toLocaleString() || '0'}</Text> },
+    { title: 'OT % of Base', dataIndex: 'otPercentage', key: 'otPercentage', width: 120, render: (v) => `${v}%` },
+  ];
 
   const renderTable = () => (
     <Table
@@ -699,7 +818,11 @@ const OrgReports = () => {
                       reportType[0] === 'activities' ? getActivitiesColumns() :
                         reportType[0] === 'tickets' ? getTicketsColumns() :
                           reportType[0] === 'meetings' ? getMeetingsColumns() :
-                            reportType[0] === 'salary-register' ? [] :
+                            reportType[0] === 'per-day-salary' ? getPerDaySalaryColumns() :
+                              reportType[0] === 'comparison' ? getComparisonColumns() :
+                              reportType[0] === 'ot-impact' ? getOTImpactColumns() :
+                                reportType[0] === 'late-penalty' ? getLatePenaltyColumns() :
+                                  reportType[0] === 'salary-register' ? [] :
                               reportType[0] === 'monthly-summary' ? [] :
                                 getSalesColumns()
       }
@@ -834,7 +957,11 @@ const OrgReports = () => {
                                   reportType[0] === 'meetings' ? 'Meetings Report' :
                                     reportType[0] === 'salary-register' ? 'Salary Register (Excel Only)' :
                                       reportType[0] === 'monthly-summary' ? `Monthly Summary (${(reportType[1] || 'designation').toUpperCase()} WISE)` :
-                                        'Sales Report'} - {moment(month).format('MMMM YYYY')}
+                                        reportType[0] === 'per-day-salary' ? 'Per Day Salary Average Report' :
+                                          reportType[0] === 'comparison' ? 'Month-over-Month Comparison Report' :
+                                            reportType[0] === 'ot-impact' ? 'Overtime Impact Analysis' :
+                                              reportType[0] === 'late-penalty' ? 'Late Penalty Analysis Report' :
+                                                'Visit Report'} - {moment(month).format('MMMM YYYY')}
               </Title>
 
               <Spin spinning={loading}>

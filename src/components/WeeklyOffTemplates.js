@@ -360,6 +360,21 @@ export default function WeeklyOffTemplates() {
         {/* Assign Modal */}
         <Modal title={assigningTpl ? `Assign Staff â€¢ ${assigningTpl.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
           <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button 
+                type="link" 
+                size="small" 
+                onClick={() => {
+                  if (selectedStaffIds.length === staffOptions.length) {
+                    setSelectedStaffIds([]);
+                  } else {
+                    setSelectedStaffIds(staffOptions.map(o => o.value));
+                  }
+                }}
+              >
+                {selectedStaffIds.length === staffOptions.length ? 'Deselect All' : 'Select All'}
+              </Button>
+            </div>
             <Select
               mode="multiple"
               options={staffOptions}

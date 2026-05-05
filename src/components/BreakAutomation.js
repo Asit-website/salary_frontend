@@ -1,5 +1,6 @@
 import { Layout, Typography, Card, Space, Table, Button, Modal, Form, Input, Select, InputNumber, Switch, message, Breadcrumb, Divider, Tag, Checkbox, Row, Col, Alert } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, HomeOutlined, ThunderboltOutlined, ArrowLeftOutlined, DeleteFilled, InfoCircleOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import React, { useState, useEffect } from 'react';
@@ -29,6 +30,7 @@ export default function BreakAutomation() {
     const [assignedListRule, setAssignedListRule] = useState(null);
     const [assignedListRows, setAssignedListRows] = useState([]);
     const [assignedListLoading, setAssignedListLoading] = useState(false);
+    const [assignedSearch, setAssignedSearch] = useState('');
 
     useEffect(() => {
         fetchRules();
@@ -60,7 +62,7 @@ export default function BreakAutomation() {
 
     const handleSave = async (formValues) => {
         const values = { ...formValues };
-        
+
         // Convert hh:mm to minutes for thresholds
         if (values.thresholds) {
             values.thresholds = values.thresholds.map(t => ({
@@ -138,7 +140,10 @@ export default function BreakAutomation() {
     const openAssignedList = async (rule, keepOpen = false) => {
         try {
             setAssignedListRule(rule);
-            if (!keepOpen) setAssignedListOpen(true);
+            if (!keepOpen) {
+                setAssignedListOpen(true);
+                setAssignedSearch('');
+            }
             setAssignedListLoading(true);
             const res = await api.get(`/admin/settings/break-rules/${rule.id}/assignments`);
             setAssignedListRows(res.data?.assignments || []);
@@ -162,9 +167,9 @@ export default function BreakAutomation() {
 
     const columns = [
         { title: 'Rule Name', dataIndex: 'name', key: 'name' },
-        { 
-            title: 'Status', 
-            dataIndex: 'active', 
+        {
+            title: 'Status',
+            dataIndex: 'active',
             key: 'active',
             render: (active) => active ? <Tag color="success">Active</Tag> : <Tag color="error">Inactive</Tag>
         },
@@ -177,8 +182,8 @@ export default function BreakAutomation() {
                 </Tag>
             )
         },
-        { 
-            title: 'Actions', 
+        {
+            title: 'Actions',
             key: 'actions',
             render: (_, record) => (
                 <Space>
@@ -188,11 +193,11 @@ export default function BreakAutomation() {
                         if (typeof rawThresholds === 'string') {
                             try { rawThresholds = JSON.parse(rawThresholds); } catch (e) { rawThresholds = []; }
                         }
-                        
+
                         const thresholds = rawThresholds.map(t => {
                             const { h, m } = minsToHHMM(t.minMinutes);
-                            return { 
-                                ...t, 
+                            return {
+                                ...t,
                                 h, m,
                                 rewardType: t.rewardType,
                                 rewardValue: t.rewardValue
@@ -294,7 +299,7 @@ export default function BreakAutomation() {
                                                         <Col span={8}>
                                                             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>Deduction Type</Text>
                                                             <Form.Item {...restField} name={[name, 'rewardType']} noStyle initialValue="FIXED_AMOUNT">
-                                                                <Select 
+                                                                <Select
                                                                     style={{ width: '100%' }}
                                                                     onChange={(val) => {
                                                                         if (val === 'SALARY_MULTIPLIER') {
@@ -309,9 +314,9 @@ export default function BreakAutomation() {
                                                             </Form.Item>
                                                         </Col>
                                                         <Col span={8}>
-                                                            <Form.Item 
-                                                                noStyle 
-                                                                shouldUpdate={(prevValues, curValues) => 
+                                                            <Form.Item
+                                                                noStyle
+                                                                shouldUpdate={(prevValues, curValues) =>
                                                                     prevValues.thresholds?.[name]?.rewardType !== curValues.thresholds?.[name]?.rewardType
                                                                 }
                                                             >
@@ -324,9 +329,9 @@ export default function BreakAutomation() {
                                                                                 {isMult ? 'Multiplier' : 'Amount'}
                                                                             </Text>
                                                                             <Form.Item {...restField} name={[name, 'rewardValue']} noStyle initialValue={0}>
-                                                                                <InputNumber 
-                                                                                    style={{ width: '100%' }} 
-                                                                                    prefix={isMult ? '' : '₹'} 
+                                                                                <InputNumber
+                                                                                    style={{ width: '100%' }}
+                                                                                    prefix={isMult ? '' : '₹'}
                                                                                     min={0}
                                                                                 />
                                                                             </Form.Item>
@@ -337,10 +342,10 @@ export default function BreakAutomation() {
                                                         </Col>
                                                         <Col span={2}>
                                                             {fields.length > 1 && (
-                                                                <Button 
-                                                                    type="text" 
-                                                                    danger 
-                                                                    icon={<DeleteFilled />} 
+                                                                <Button
+                                                                    type="text"
+                                                                    danger
+                                                                    icon={<DeleteFilled />}
                                                                     onClick={() => remove(name)}
                                                                 />
                                                             )}
@@ -357,7 +362,7 @@ export default function BreakAutomation() {
                             </div>
 
                             <Divider orientation="left">Major Attendance Overrides</Divider>
-                            
+
                             <div style={{ marginBottom: 24, padding: '12px', border: '1px solid #f0f0f0', borderRadius: '8px' }}>
                                 <Form.Item name="deductHalfDay" valuePropName="checked" noStyle initialValue={false}>
                                     <Checkbox><Text strong>Deduct half day salary if break more than or equal to</Text></Checkbox>
@@ -405,8 +410,8 @@ export default function BreakAutomation() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text strong>Multiplier</Text>
-                            <InputNumber 
-                                placeholder="e.g. 1.0, 1.5" 
+                            <InputNumber
+                                placeholder="e.g. 1.0, 1.5"
                                 style={{ marginTop: 8, width: '100%' }}
                                 min={0.1}
                                 step={0.1}
@@ -422,18 +427,33 @@ export default function BreakAutomation() {
                         <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
                             The fine will become X times the daily salary of the staff.
                         </Text>
-                        <Alert 
-                            message="Calculation: Gross Salary / (Days in Month). Fine amount scales with staff salary." 
-                            type="info" 
-                            showIcon 
+                        <Alert
+                            message="Calculation: Gross Salary / (Days in Month). Fine amount scales with staff salary."
+                            type="info"
+                            showIcon
                             style={{ background: '#f0f7ff', border: 'none' }}
                         />
                     </Modal>
 
                     {/* Assign Modal */}
                     <Modal title={assigningRule ? `Assign Staff • ${assigningRule.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
-                        <Space direction="vertical" style={{ width:'100%' }} size={12}>
-                            <Text type="secondary">Select staff members to apply this break rule to:</Text>
+                        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Text type="secondary">Select staff members to apply this break rule to:</Text>
+                                <Button
+                                    size="small"
+                                    type="link"
+                                    onClick={() => {
+                                        if (selectedStaffIds.length === staffOptions.length) {
+                                            setSelectedStaffIds([]);
+                                        } else {
+                                            setSelectedStaffIds(staffOptions.map(o => o.value));
+                                        }
+                                    }}
+                                >
+                                    {selectedStaffIds.length === staffOptions.length ? 'Deselect All' : 'Select All'}
+                                </Button>
+                            </div>
                             <Select
                                 mode="multiple"
                                 options={staffOptions}
@@ -455,15 +475,33 @@ export default function BreakAutomation() {
                         footer={null}
                         width={900}
                     >
+                        <div style={{ marginBottom: 16 }}>
+                            <Input.Search
+                                placeholder="Search staff by name, ID or phone..."
+                                allowClear
+                                value={assignedSearch}
+                                onChange={e => setAssignedSearch(e.target.value)}
+                                onSearch={setAssignedSearch}
+                                style={{ width: 350 }}
+                            />
+                        </div>
                         <Table
                             rowKey="id"
                             loading={assignedListLoading}
-                            dataSource={assignedListRows}
+                            dataSource={(assignedListRows || []).filter(r => {
+                                if (!assignedSearch) return true;
+                                const s = assignedSearch.toLowerCase();
+                                const name = (r.user?.profile?.name || '').toLowerCase();
+                                const sid = (r.user?.profile?.staffId || '').toLowerCase();
+                                const phone = (r.user?.phone || '').toLowerCase();
+                                return name.includes(s) || sid.includes(s) || phone.includes(s);
+                            })}
                             size="small"
                             pagination={{ pageSize: 8 }}
                             columns={[
                                 { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
                                 { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
+                                { title: 'Assigned Date', render: (_, r) => r.createdAt ? dayjs(r.createdAt).format('DD-MM-YYYY') : '-' },
                                 { title: 'Phone', render: (_, r) => r.user?.phone || '-' },
                                 { title: 'Department', render: (_, r) => r.user?.profile?.department || '-' },
                                 { title: 'Designation', render: (_, r) => r.user?.profile?.designation || '-' },

@@ -15,10 +15,10 @@ import {
   WalletOutlined,
   TrophyOutlined,
   RobotOutlined,
-  DollarOutlined,
   MailOutlined,
   TeamOutlined,
-  ShareAltOutlined
+  ShareAltOutlined,
+  ShopOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { API_BASE_URL } from '../api';
@@ -122,11 +122,14 @@ const Sidebar = ({ collapsed }) => {
       // Check sessionStorage first (for impersonated sessions), then localStorage
       const userStr = sessionStorage.getItem('impersonate_user') || localStorage.getItem('user');
       const user = JSON.parse(userStr);
+      const perms = typeof user?.permissions === 'string' ? JSON.parse(user.permissions) : (user?.permissions || {});
       return {
         role: user?.role || 'admin',
-        channelPartnerId: user?.channelPartnerId || null
+        channelPartnerId: user?.channelPartnerId || null,
+        permissions: perms,
+        isSuperadminPanel: !!user?.isSuperadminPanel
       };
-    } catch { return { role: 'admin', channelPartnerId: null }; }
+    } catch { return { role: 'admin', channelPartnerId: null, permissions: {}, isSuperadminPanel: false }; }
   })();
   const userRole = userInfo.role;
   const channelPartnerId = userInfo.channelPartnerId;
@@ -134,6 +137,7 @@ const Sidebar = ({ collapsed }) => {
 
   const hasSidebarModulePermission = (moduleKey) => {
     if (userRole === 'admin' || userRole === 'superadmin') return true;
+    if (moduleKey === 'switch_org') return true;
     const map = {
       dashboard: 'dashboard_tab',
       staff: 'staff_management_tab',
@@ -149,9 +153,11 @@ const Sidebar = ({ collapsed }) => {
       settings: 'settings_tab',
       performance: 'performance_tab',
       task_management: 'task_management_tab',
-      social: 'social_tab',
-      ai_reports: 'reports_tab',
-      ai_assistant: 'reports_tab',
+      social: 'community_tab',
+      roster: 'roster_tab',
+      ai_reports: 'ai_reports_tab',
+      ai_assistant: 'ai_assistant_tab',
+      recruitment: 'recruitment_tab',
     };
     const key = map[moduleKey];
     return !!key && sidebarPermissionKeys.includes(key);
@@ -166,6 +172,12 @@ const Sidebar = ({ collapsed }) => {
         label: 'Dashboard',
         module: 'dashboard'
       },
+      /* {
+        key: '/home',
+        icon: <ShopOutlined />,
+        label: 'Switch Organization',
+        module: 'switch_org'
+      }, */
       {
         key: '/staff-management',
         icon: <UserOutlined />,
@@ -218,7 +230,7 @@ const Sidebar = ({ collapsed }) => {
       },
       {
         key: '/advances',
-        icon: <DollarOutlined />,
+        icon: <span style={{ fontWeight: 'bold' }}>₹</span>,
         label: 'Advances',
         module: 'payroll'
       },
@@ -304,7 +316,7 @@ const Sidebar = ({ collapsed }) => {
         key: '/roster',
         icon: <CalendarOutlined />,
         label: 'Roster',
-        module: 'staff',
+        module: 'roster',
       },
       {
         key: '/recruitment',
@@ -367,7 +379,67 @@ const Sidebar = ({ collapsed }) => {
       icon: <MailOutlined />,
       label: 'Bulk Email',
     },
+    {
+      key: '/superadmin/leads',
+      icon: <TeamOutlined />,
+      label: 'Leads',
+    },
+    {
+      key: '/superadmin/staff',
+      icon: <UserOutlined />,
+      label: 'Staff',
+    },
   ];
+
+  const superadminStaffItems = (() => {
+    const perms = userInfo.permissions || {};
+    const items = [
+      {
+        key: '/superadmin/dashboard',
+        icon: <DashboardOutlined />,
+        label: 'Dashboard',
+      }
+    ];
+
+    // Always show leads if they have superadmin access? 
+    // Or check if they have leads perm explicitly.
+    // Based on user request, they have leads perm + want partners and clients.
+
+    if (perms.leads) {
+      items.push({
+        key: '/superadmin/leads',
+        icon: <TeamOutlined />,
+        label: 'Leads',
+      });
+    }
+
+    if (perms.partners) {
+      items.push({
+        key: '/superadmin/channel-partners',
+        icon: <UserOutlined />,
+        label: 'Channel Partners',
+      });
+    }
+
+    if (perms.clients) {
+      items.push({
+        key: '/superadmin/clients',
+        icon: <UserOutlined />,
+        label: 'Clients',
+      });
+    }
+
+    if (perms.mailing) {
+      items.push({
+        key: '/superadmin/mailing',
+        icon: <MailOutlined />,
+        label: 'Bulk Email',
+      });
+    }
+
+
+    return items;
+  })();
 
   const channelPartnerItems = [
     {
@@ -618,8 +690,9 @@ const Sidebar = ({ collapsed }) => {
         defaultOpenKeys={getOpenKeys()}
         items={
           userRole === 'superadmin' ? superadminItems :
-            userRole === 'channel_partner' ? channelPartnerItems :
-              getAdminItems()
+            userInfo.isSuperadminPanel ? superadminStaffItems :
+              userRole === 'channel_partner' ? channelPartnerItems :
+                getAdminItems()
         }
         onClick={handleMenuClick}
         style={{

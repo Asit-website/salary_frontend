@@ -5,10 +5,10 @@ import {
   InputNumber, Divider, Tabs, Upload, Popconfirm, Tooltip, Empty, Statistic
 } from 'antd';
 import {
-  ArrowLeftOutlined, MoreOutlined, UserOutlined, FileTextOutlined, CalendarOutlined, DollarOutlined,
+  ArrowLeftOutlined, MoreOutlined, UserOutlined, FileTextOutlined, CalendarOutlined,
   FileProtectOutlined, InboxOutlined, DownloadOutlined, PlusOutlined, MinusCircleOutlined, EditOutlined,
   SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ExclamationCircleOutlined,
-  CoffeeOutlined, ScheduleOutlined
+  CoffeeOutlined, ScheduleOutlined, ShopOutlined
 } from '@ant-design/icons';
 import jsPDF from 'jspdf';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -19,15 +19,25 @@ import dayjs from 'dayjs';
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 
+const categoryNames = {
+  'cl': 'Casual Leave',
+  'sl': 'Sick Leave',
+  'el': 'Earned Leave',
+  'ml': 'Maternity Leave',
+  'pt': 'Paternity Leave',
+  'unpaid': 'Unpaid Leave'
+};
+
 const sections = [
   { key: 'profile', label: 'Profile', icon: <UserOutlined /> },
   { key: 'attendance', label: 'Attendance', icon: <CalendarOutlined /> },
-  { key: 'salaryOverview', label: 'Salary Overview', icon: <DollarOutlined /> },
+  { key: 'salaryOverview', label: 'Salary Overview', icon: <span style={{ fontWeight: 'bold' }}>₹</span> },
   { key: 'salaryStructure', label: 'Salary Structure', icon: <FileTextOutlined /> },
   { key: 'background', label: 'Education & Experience', icon: <FileProtectOutlined /> },
   { key: 'leaves', label: "Leave(s)", icon: <CalendarOutlined /> },
   { key: 'expenseClaims', label: 'Expense Claims', icon: <InboxOutlined /> },
   { key: 'documents', label: 'Document Centre', icon: <FileTextOutlined /> },
+  { key: 'orgAccess', label: 'Organization Access', icon: <ShopOutlined /> },
 ];
 
 export default function StaffProfileView() {
@@ -80,6 +90,12 @@ export default function StaffProfileView() {
   const [salaryTemplates, setSalaryTemplates] = useState([]);
   const [manualSalaryOpen, setManualSalaryOpen] = useState(false);
   const [manualSalaryForm] = Form.useForm();
+  const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
+  const [selectedLeave, setSelectedLeave] = useState(null);
+  const [reviewAction, setReviewAction] = useState(null);
+  const [reviewNote, setReviewNote] = useState('');
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState('APPROVED');
 
   const staffStartMonth = React.useMemo(() => {
     const candidates = [
@@ -579,21 +595,50 @@ export default function StaffProfileView() {
   }, [activeKey, staff, id]);
 
   // Leaves data loader
+  const loadLeaves = async () => {
+    if (activeKey !== 'leaves' || !staff) return;
+    try {
+      setLeavesLoading(true);
+      const res = await api.get(`/admin/staff/${id}/leaves`, {
+        params: { status: leaveStatusFilter }
+      });
+      if (res.data?.success) setLeaves(res.data.data || []); else setLeaves([]);
+    } catch (_) {
+      setLeaves([]);
+    } finally {
+      setLeavesLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadLeaves = async () => {
-      if (activeKey !== 'leaves' || !staff) return;
-      try {
-        setLeavesLoading(true);
-        const res = await api.get(`/admin/staff/${id}/leaves`);
-        if (res.data?.success) setLeaves(res.data.data || []); else setLeaves([]);
-      } catch (_) {
-        setLeaves([]);
-      } finally {
-        setLeavesLoading(false);
-      }
-    };
     loadLeaves();
-  }, [activeKey, staff, id]);
+  }, [activeKey, staff, id, leaveStatusFilter]);
+
+  const handleReviewLeave = (leave, action) => {
+    setSelectedLeave(leave);
+    setReviewAction(action);
+    setReviewNote('');
+    setIsNoteModalVisible(true);
+  };
+
+  const submitReviewLeave = async () => {
+    setReviewLoading(true);
+    try {
+      const response = await api.patch(`/leave/${selectedLeave.id}/status`, {
+        status: reviewAction,
+        note: reviewNote
+      });
+      if (response.data?.success) {
+        message.success(`Leave request ${reviewAction.toLowerCase()} successfully`);
+        setIsNoteModalVisible(false);
+        loadLeaves();
+      }
+    } catch (error) {
+      message.error(error.response?.data?.message || 'Failed to process request');
+    } finally {
+      setReviewLoading(false);
+    }
+  };
 
   // Auto-open Salary Structure editor when that tab is selected
   useEffect(() => {
@@ -602,25 +647,74 @@ export default function StaffProfileView() {
     }
   }, [activeKey, staff]);
 
+  const [adminOrgs, setAdminOrgs] = useState([]);
+  const [orgsLoading, setOrgsLoading] = useState(false);
+  const [assigningOrg, setAssigningOrg] = useState(null);
+
   useEffect(() => {
-    const load = async () => {
+    const loadAdminOrgs = async () => {
+      if (activeKey !== 'orgAccess') return;
       try {
-        setLoading(true);
-        const res = await api.get(`/admin/staff/${id}`);
-        if (res.data?.success) {
-          setStaff(res.data.staff);
-        } else {
-          setStaff(null);
-        }
-      } catch (e) {
-        setStaff(null);
+        setOrgsLoading(true);
+        const res = await api.get('/admin/my-organizations');
+        if (res.data?.success) setAdminOrgs(res.data.organizations || []);
+      } catch (_) {
+        setAdminOrgs([]);
       } finally {
-        setLoading(false);
+        setOrgsLoading(false);
       }
     };
+    loadAdminOrgs();
+  }, [activeKey]);
 
+  const loadStaffProfile = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get(`/admin/staff/${id}`);
+      if (res.data?.success) {
+        setStaff(res.data.staff);
+      } else {
+        setStaff(null);
+      }
+    } catch (e) {
+      setStaff(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    load();
+  const handleAssignToOrg = async (targetOrgId) => {
+    try {
+      setAssigningOrg(targetOrgId);
+      const res = await api.post(`/admin/staff/${id}/assign-to-org`, { targetOrgId });
+      if (res.data?.success) {
+        message.success('Staff assigned to organization successfully');
+        loadStaffProfile(); // Refresh profile to update assigned status
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to assign staff');
+    } finally {
+      setAssigningOrg(null);
+    }
+  };
+
+  const handleUnassignToOrg = async (targetOrgId) => {
+    try {
+      setAssigningOrg(targetOrgId);
+      const res = await api.delete(`/admin/staff/${id}/unassign-from-org/${targetOrgId}`);
+      if (res.data?.success) {
+        message.success('Staff unassigned from organization successfully');
+        loadStaffProfile();
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to unassign staff');
+    } finally {
+      setAssigningOrg(null);
+    }
+  };
+
+  useEffect(() => {
+    loadStaffProfile();
   }, [id]);
 
   // Load effective attendance template for this staff
@@ -911,6 +1005,66 @@ export default function StaffProfileView() {
   };
 
   const renderSection = () => {
+    if (activeKey === 'orgAccess') {
+      const columns = [
+        { title: 'Organization Name', dataIndex: 'name', key: 'name' },
+        { title: 'Org ID', dataIndex: 'id', key: 'id' },
+        {
+          title: 'Action',
+          key: 'action',
+          render: (_, record) => {
+            const existingOrgs = staff?.existingOrgs || [];
+            // existingOrgs is now array of objects {id, name}
+            const isAssigned = (existingOrgs || []).some(o => Number(o.id) === Number(record.id));
+            const isCurrentOrg = Number(record.id) === Number(staff?.orgAccountId);
+
+            if (isCurrentOrg) return <Tag color="blue">Current Organization</Tag>;
+
+            if (isAssigned) {
+              return (
+                <Space>
+                  <Tag color="green">Assigned</Tag>
+                  <Popconfirm
+                    title="Unassign this staff from this organization?"
+                    onConfirm={() => handleUnassignToOrg(record.id)}
+                    okText="Yes"
+                    cancelText="No"
+                  >
+                    <Button type="link" danger loading={assigningOrg === record.id}>Unassign</Button>
+                  </Popconfirm>
+                </Space>
+              );
+            }
+
+            return (
+              <Button
+                type="primary"
+                loading={assigningOrg === record.id}
+                onClick={() => handleAssignToOrg(record.id)}
+              >
+                Assign Staff to this Org
+              </Button>
+            );
+          }
+        }
+      ];
+
+      return (
+        <Card title="Organization Access Management" loading={orgsLoading}>
+          <div style={{ marginBottom: 16 }}>
+            <Text type="secondary">
+              Assign this staff member to your other organizations. They will be able to switch between them using the same login credentials.
+            </Text>
+          </div>
+          <Table
+            rowKey="id"
+            dataSource={adminOrgs.filter(o => Number(o.id) !== Number(staff?.orgAccountId))}
+            columns={columns}
+            pagination={false}
+          />
+        </Card>
+      );
+    }
     if (activeKey === 'profile') {
       return (
         <>
@@ -1040,7 +1194,7 @@ export default function StaffProfileView() {
       );
     }
     if (activeKey === 'expenseClaims') {
-      const currency = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(n || 0));
+      const currency = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
       const columns = [
         { title: 'Expense Type', dataIndex: 'expenseType', key: 'expenseType', render: (t) => t || '-' },
         { title: 'Claim ID', dataIndex: 'claimId', key: 'claimId', render: (t) => t || '-' },
@@ -1370,7 +1524,7 @@ export default function StaffProfileView() {
                               </Col>
                             </Row>
                           ))}
-                          <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ name: '', amount: 0 })} block>Add More</Button>
+                          {/* <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ name: '', amount: 0 })} block>Add More</Button> */}
                         </>
                       )}
                     </Form.List>
@@ -1390,7 +1544,7 @@ export default function StaffProfileView() {
                               </Col>
                             </Row>
                           ))}
-                          <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ name: '', amount: 0 })} block>Add More</Button>
+                          {/* <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ name: '', amount: 0 })} block>Add More</Button> */}
                         </>
                       )}
                     </Form.List>
@@ -1404,7 +1558,7 @@ export default function StaffProfileView() {
     }
     if (activeKey === 'salaryOverview') {
 
-      const currency = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(n || 0));
+      const currency = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 
       const staffTplId = staff?.profile?.salaryTemplateId || staff?.salaryTemplateId;
       const tpl = salaryTemplates.find(t => t.id === staffTplId);
@@ -1621,7 +1775,7 @@ export default function StaffProfileView() {
 
           yPosition += 10;
           pdf.setFontSize(12);
-          pdf.text(`Net Pay: ${Number(totals.netSalary || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}`, pageWidth - margin, yPosition, { align: 'right' });
+          pdf.text(`Net Pay: ${Number(totals.netSalary || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, pageWidth - margin, yPosition, { align: 'right' });
 
           pdf.save(`payslip_${staff.id}_${cycleData.monthKey}.pdf`);
 
@@ -2153,6 +2307,185 @@ export default function StaffProfileView() {
         </Card>
       );
     }
+    if (activeKey === 'leaves') {
+      const columns = [
+        {
+          title: 'Duration',
+          key: 'duration',
+          render: (_, record) => (
+            <Space direction="vertical" size={0}>
+              <Text>{dayjs(record.startDate).format('DD MMM YYYY')} - {dayjs(record.endDate).format('DD MMM YYYY')}</Text>
+              <Text type="secondary" style={{ fontSize: '12px' }}>{record.days} Days ({record.leaveType})</Text>
+            </Space>
+          )
+        },
+        {
+          title: 'Leave Type',
+          dataIndex: 'categoryKey',
+          key: 'categoryKey',
+          render: (text) => {
+            const name = categoryNames[text?.toLowerCase()] || text?.toUpperCase() || 'UNPAID';
+            return <Tag color="blue">{name}</Tag>;
+          }
+        },
+        {
+          title: 'Reason',
+          dataIndex: 'reason',
+          key: 'reason',
+          ellipsis: true
+        },
+        {
+          title: 'Status',
+          dataIndex: 'status',
+          key: 'status',
+          render: (status) => {
+            let color = 'gold';
+            if (status === 'APPROVED') color = 'green';
+            if (status === 'REJECTED') color = 'red';
+            return <Tag color={color}>{status}</Tag>;
+          }
+        },
+        {
+          title: 'Actions',
+          key: 'actions',
+          width: 250,
+          render: (_, record) => record.status === 'PENDING' && (
+            <Space size="small">
+              <Button
+                type="primary"
+                ghost
+                size="small"
+                icon={<CheckCircleOutlined />}
+                onClick={() => handleReviewLeave(record, 'APPROVED')}
+              >
+                Approve
+              </Button>
+              <Button
+                danger
+                ghost
+                size="small"
+                icon={<CloseCircleOutlined />}
+                onClick={() => handleReviewLeave(record, 'REJECTED')}
+              >
+                Reject
+              </Button>
+            </Space>
+          )
+        }
+      ];
+
+      return (
+        <Card title="Leave Requests" extra={
+          <Space>
+            <Text>Filter by Status:</Text>
+            <Select value={leaveStatusFilter} onChange={setLeaveStatusFilter} style={{ width: 150 }}>
+              <Select.Option value="">All</Select.Option>
+              <Select.Option value="PENDING">Pending</Select.Option>
+              <Select.Option value="APPROVED">Approved</Select.Option>
+              <Select.Option value="REJECTED">Rejected</Select.Option>
+            </Select>
+            <Button type="primary" onClick={loadLeaves}>Refresh</Button>
+          </Space>
+        }>
+          <Table
+            columns={columns}
+            dataSource={leaves}
+            rowKey="id"
+            loading={leavesLoading}
+            pagination={{ pageSize: 10 }}
+            scroll={{ x: 'max-content' }}
+          />
+          <Modal
+            title={`${reviewAction === 'APPROVED' ? 'Approve' : 'Reject'} Leave Request`}
+            open={isNoteModalVisible}
+            onOk={submitReviewLeave}
+            confirmLoading={reviewLoading}
+            onCancel={() => setIsNoteModalVisible(false)}
+          >
+            <Text strong>Reason for {reviewAction?.toLowerCase()}:</Text>
+            <Input.TextArea
+              rows={4}
+              value={reviewNote}
+              onChange={(e) => setReviewNote(e.target.value)}
+              placeholder="Enter note..."
+              style={{ marginTop: '10px' }}
+            />
+          </Modal>
+        </Card>
+      );
+    }
+    if (activeKey === 'orgAccess') {
+      const currentOrgId = staff?.orgAccountId;
+      const filteredOrgs = (staff?.allOrgs || []).filter(o => o.id !== currentOrgId);
+
+      return (
+        <Card title={<Space><ShopOutlined /> Organization Access</Space>}>
+          <div style={{ marginBottom: 16 }}>
+            <Text type="secondary">Manage this staff member's administrative access across your organizations.</Text>
+          </div>
+          <div style={{ marginBottom: 20, padding: 12, background: '#f6ffed', borderRadius: 8, border: '1px solid #b7eb8f' }}>
+            <Text strong>Current Organization: </Text>
+            <Tag color="green">{(staff?.allOrgs || []).find(o => o.id === currentOrgId)?.name || 'Frinktech'}</Tag>
+            <Text type="secondary" style={{ marginLeft: 8 }}>(Primary access - cannot be unassigned here)</Text>
+          </div>
+          <Table
+            rowKey="id"
+            pagination={false}
+            dataSource={filteredOrgs}
+            columns={[
+              { title: 'Organization Name', dataIndex: 'name', key: 'name', render: (text) => <Text strong>{text}</Text> },
+              { title: 'Org ID', dataIndex: 'id', key: 'id' },
+              {
+                title: 'Status',
+                key: 'status',
+                render: (_, r) => {
+                  const isAssigned = (staff?.existingOrgs || []).some(o => o.id === r.id);
+                  return (
+                    <Tag color={isAssigned ? 'blue' : 'default'}>
+                      {isAssigned ? 'Assigned' : 'Not Assigned'}
+                    </Tag>
+                  );
+                }
+              },
+              {
+                title: 'Action',
+                key: 'action',
+                render: (_, r) => {
+                  const isAssigned = (staff?.existingOrgs || []).some(o => o.id === r.id);
+                  return isAssigned ? (
+                    <Button
+                      danger
+                      type="primary"
+                      ghost
+                      size="small"
+                      loading={assigningOrg === r.id}
+                      onClick={() => {
+                        Modal.confirm({
+                          title: 'Unassign Organization',
+                          content: `Are you sure you want to remove this staff member's access to ${r.name}?`,
+                          onOk: () => handleUnassignToOrg(r.id)
+                        });
+                      }}
+                    >
+                      Unassign
+                    </Button>
+                  ) : (
+                    <Button
+                      type="primary"
+                      size="small"
+                      loading={assigningOrg === r.id}
+                      onClick={() => handleAssignToOrg(r.id)}
+                    >
+                      Assign
+                    </Button>
+                  );
+                }
+              }
+            ]}
+          />
+        </Card>
+      );
+    }
     return (
       <Card title="Section" loading={loading}>
         <div>Coming soon</div>
@@ -2182,7 +2515,10 @@ export default function StaffProfileView() {
                     selectedKeys={[activeKey]}
                     onClick={(e) => setActiveKey(e.key)}
                     className="staff-profile-menu"
-                    items={sections.map(s => ({ key: s.key, icon: s.icon, label: s.label }))}
+                    items={sections
+                      .filter(s => s.key !== 'orgAccess' || staff?.canCreateOrg)
+                      .map(s => ({ key: s.key, icon: s.icon, label: s.label }))
+                    }
                   />
                 </Card>
               </Col>

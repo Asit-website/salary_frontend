@@ -14,12 +14,30 @@ const ImpersonateRedirect = () => {
     useEffect(() => {
         const token = searchParams.get('token');
         const user = searchParams.get('user');
+        const orgs = searchParams.get('orgs');
 
         if (token && user) {
             // Use sessionStorage so it's tab-specific and doesn't affect other tabs
             sessionStorage.setItem('impersonate_token', token);
             sessionStorage.setItem('impersonate_user', user);
-            navigate('/dashboard', { replace: true });
+            
+            if (orgs) {
+                try {
+                    const parsedUser = JSON.parse(decodeURIComponent(user));
+                    const parsedOrgs = JSON.parse(decodeURIComponent(orgs));
+                    const canCreateOrg = searchParams.get('canCreateOrg') === 'true';
+
+                    sessionStorage.setItem('selection_data', JSON.stringify({
+                        phone: parsedUser.phone,
+                        organizations: parsedOrgs,
+                        canCreateOrg: canCreateOrg
+                    }));
+                } catch (e) {
+                    console.error('Failed to parse impersonation data', e);
+                }
+            }
+
+            navigate('/home', { replace: true });
         } else {
             navigate('/', { replace: true });
         }
@@ -27,7 +45,7 @@ const ImpersonateRedirect = () => {
 
     return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-            <p>Redirecting to client dashboard...</p>
+            <p>Redirecting to client accounts...</p>
         </div>
     );
 };

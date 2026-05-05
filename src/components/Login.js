@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Form, Input, Button, Card, message, Layout, Typography, Space } from 'antd';
+import { Form, Input, Button, Card, message, Layout, Typography, Space, Tag, Row, Col } from 'antd';
 import { PhoneOutlined, SafetyCertificateOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 
 const { Header, Content } = Layout;
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 const Login = () => {
   const [sending, setSending] = useState(false);
@@ -57,7 +57,6 @@ const Login = () => {
       const arr = new Array(6).fill('');
       for (let i = 0; i < Math.min(6, digits.length); i++) arr[i] = digits[i];
       setOtp(arr);
-      // Do not auto-verify on paste; wait for user to click Verify
       e.preventDefault();
     }
   };
@@ -70,7 +69,9 @@ const Login = () => {
     if (d && idx < 5) inputsRef.current[idx + 1]?.focus?.();
   };
 
-  const verify = async (codeOverride) => {
+  const [organizations, setOrganizations] = useState([]);
+
+  const verify = async (codeOverride, orgIdOverride) => {
     const ph = normalizePhone(phone);
     const code = codeOverride || otp.join('');
     if (!ph || code.length !== 6) {
@@ -79,119 +80,260 @@ const Login = () => {
     }
     try {
       setVerifying(true);
-      const res = await api.post('/auth/verify-otp', { phone: ph, code });
+      const res = await api.post('/auth/verify-otp', { phone: ph, code, orgId: orgIdOverride });
       if (res.data?.requireSignup) {
         message.info('Not registered. Please complete signup.');
         setTimeout(() => navigate(`/signup-admin?phone=${ph}`), 500);
         return;
       }
+      if (res.data?.requireSelection) {
+        sessionStorage.clear(); 
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        
+        if (res.data.token) localStorage.setItem('token', res.data.token);
+        const selectionData = { organizations: res.data.organizations, phone: ph, code, canCreateOrg: res.data.canCreateOrg };
+        sessionStorage.setItem('selection_data', JSON.stringify(selectionData));
+        navigate('/home', { state: selectionData });
+        return;
+      }
       if (res.data?.success) {
-        sessionStorage.clear(); // Clear all impersonation data
+        sessionStorage.clear();
+        localStorage.removeItem('multi_account'); 
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('user', JSON.stringify(res.data.user));
         message.success('Login successful');
         const role = res.data?.user?.role || 'admin';
+        const isSuperadminPanel = !!res.data?.user?.isSuperadminPanel;
+        
         let dest = '/dashboard';
         if (role === 'superadmin') dest = '/superadmin/clients';
+        else if (isSuperadminPanel) dest = '/superadmin/dashboard';
         else if (role === 'channel_partner') dest = '/partner/clients';
         
         setTimeout(() => navigate(dest), 800);
       } else {
-        message.error('Login failed: Your account is not activated. Please contact support Team.');
+        message.error(res.data?.message || 'Login failed');
       }
     } catch (e) {
-      message.error('Login failed: Your account is not activated. Please contact support Team.');
+      message.error(e.response?.data?.message || 'Login failed');
     } finally {
       setVerifying(false);
     }
   };
 
   return (
-    <Layout
-      style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #f0f3ff 0%, #f8fbff 35%, #eff6ff 100%)',
-      }}
-    >
-      <Content
-        style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '48px' }}
-      >
-        <div style={{ width: 420 }}>
-
-          <Card
-            style={{
-              borderRadius: 12,
-              boxShadow: '0 8px 24px rgba(15,23,42,0.08)',
-              border: '1px solid #eef2ff',
+    <Layout style={{ minHeight: '100vh', background: '#fff' }}>
+      <Content style={{ padding: 0 }}>
+        <Row style={{ minHeight: '100vh' }}>
+          {/* Left Column - Design Illustration */}
+          <Col 
+            xs={0} 
+            md={10} 
+            lg={12} 
+            style={{ 
+              background: 'linear-gradient(135deg, #f8fbff 0%, #e0eaff 100%)',
+              position: 'relative',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              padding: '60px',
+              borderRight: '1px solid #f0f0f0'
             }}
-            bodyStyle={{ padding: 24 }}
           >
-            {step === 'phone' && (
-              <>
-                <Form layout="vertical" size="large" onFinish={sendOtp}>
-                  <Form.Item label="" required>
-                    <Title style={{ fontSize: 14 }} level={5}>start your
-                      hassle-free payroll management journey today!</Title>
-                    <p style={{ fontSize: 14 }} level={5}>Enter your mobile number to continue</p>
-                    <Input
-                      style={{ marginTop: 12 }}
-                      prefix={<PhoneOutlined />}
-                      placeholder="Enter 10-digit phone"
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      maxLength={10}
-                    />
-                  </Form.Item>
-                  <Form.Item>
-                    <Button type="primary" htmlType="submit" loading={sending} style={{ width: '100%', height: 40, fontWeight: 600 }}>
-                      Continue
-                    </Button>
-                  </Form.Item>
-                </Form>
-              </>
-            )}
+            {/* Background decorative elements with the theme colors */}
+            <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '400px', height: '400px', borderRadius: '50%', background: 'rgba(36,99,235,0.05)' }}></div>
+            <div style={{ position: 'absolute', bottom: '10%', left: '-5%', width: '250px', height: '250px', borderRadius: '50%', background: 'rgba(18,101,205,0.05)' }}></div>
+            
+            <div style={{ position: 'relative', zIndex: 2 }}>
+              <div style={{ marginBottom: 24 }}>
+                <Tag color="blue" style={{ borderRadius: 20, padding: '2px 12px', fontWeight: 600, background: 'rgba(36,99,235,0.1)', color: '#2463EB', border: 'none' }}>
+                  SYSTEM STATUS
+                </Tag>
+              </div>
+              <Title level={1} style={{ color: '#101828', fontSize: '3.5rem', fontWeight: 800, lineHeight: 1.1, marginBottom: 24 }}>
+                Advanced Intelligence for <span style={{ color: '#2463EB' }}>Modern Enterprise.</span>
+              </Title>
+              
+              <div style={{ marginTop: 48, position: 'relative' }}>
+                <div style={{ 
+                  maxWidth: 640
+                }}>
+                  <img 
+                    src="/pina.png" 
+                    alt="Dashboard Preview" 
+                    style={{ width: '100%' }} 
+                  />
+                </div>
+              </div>
+            </div>
+          </Col>
 
-            {step === 'otp' && (
-              <>
-                <div style={{ marginBottom: 8, color: '#475467' }}>Enter the 6-digit OTP sent to +91-{phone}</div>
-                <Space size={10} onPaste={onPasteOtp}>
-                  {otp.map((v, i) => (
-                    <Input
-                      key={i}
-                      ref={(el) => (inputsRef.current[i] = el)}
-                      value={v}
-                      onChange={(e) => setOtpAt(i, e.target.value)}
-                      maxLength={1}
-                      style={{
-                        width: 48,
-                        height: 48,
-                        textAlign: 'center',
-                        borderRadius: 10,
-                        fontSize: 18,
-                        boxShadow: '0 2px 6px rgba(2,6,23,0.06)'
-                      }}
-                      inputMode="numeric"
-                    />
-                  ))}
-                </Space>
-                <div style={{ marginTop: 14 }}>
-                  <Button type="primary" icon={<SafetyCertificateOutlined />} loading={verifying} onClick={() => verify()} style={{ width: '100%', height: 40, fontWeight: 600 }}>
-                    Verify & Login
-                  </Button>
+          {/* Right Column - Form */}
+          <Col xs={24} md={14} lg={12} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+            <div style={{ width: '100%', maxWidth: 460, padding: '40px' }}>
+              <div style={{ marginBottom: 48 }}>
+                <Title level={2} style={{ fontWeight: 800, marginBottom: 12, color: '#2564EB', fontSize: 32 }}>
+                  Welcome back
+                </Title>
+                <Text type="secondary" style={{ fontSize: 16, color: '#667085' }}>
+                  Enter your credentials to access your workspace.
+                </Text>
+              </div>
+
+              {step === 'phone' && (
+                <div className="login-form-container">
+                  <Form layout="vertical" size="large" onFinish={sendOtp}>
+                    <Form.Item 
+                      required
+                    >
+                      <Input
+                        prefix={<PhoneOutlined style={{ color: '#98a2b3' }} />}
+                        placeholder="Enter 10-digit phone"
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        maxLength={10}
+                        style={{ height: 52, borderRadius: 12, border: '1px solid #d0d5dd' }}
+                      />
+                    </Form.Item>
+                    <Form.Item style={{ marginTop: 32 }}>
+                      <Button 
+                        type="primary" 
+                        htmlType="submit" 
+                        loading={sending} 
+                        style={{ 
+                          width: '100%', 
+                          height: 52, 
+                          fontWeight: 600, 
+                          fontSize: 16, 
+                          borderRadius: 12, 
+                          background: '#2463EB', 
+                          border: 'none',
+                          boxShadow: '0 4px 14px rgba(36,99,235,0.25)' 
+                        }}
+                      >
+                        Continue
+                      </Button>
+                    </Form.Item>
+                  </Form>
                 </div>
-                <div style={{ marginTop: 10, textAlign: 'center' }}>
-                  <Button type="link" icon={<ReloadOutlined />} onClick={sendOtp} disabled={counter > 0}>
-                    Resend OTP {counter > 0 ? `(${counter}s)` : ''}
+              )}
+
+              {step === 'otp' && (
+                <div className="otp-form-container">
+                  <div style={{ marginBottom: 32 }}>
+                    <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 18, color: '#101828' }}>Confirm the OTP</Text>
+                    <Text style={{ color: '#667085', fontSize: 15 }}>Enter the 6-digit OTP sent to <span style={{ color: '#2463EB', fontWeight: 700 }}>+91-{phone}</span></Text>
+                  </div>
+                  
+                  <Space size={8} onPaste={onPasteOtp} style={{ display: 'flex', width: '100%', justifyContent: 'space-between', marginBottom: 32 }}>
+                    {otp.map((v, i) => (
+                      <Input
+                        key={i}
+                        ref={(el) => (inputsRef.current[i] = el)}
+                        value={v}
+                        onChange={(e) => setOtpAt(i, e.target.value)}
+                        maxLength={1}
+                        style={{
+                          width: 48,
+                          height: 52,
+                          textAlign: 'center',
+                          borderRadius: 12,
+                          fontSize: 20,
+                          fontWeight: 700,
+                          border: '2px solid #eaecf0',
+                          background: '#f9fafb',
+                          color: '#101828'
+                        }}
+                        inputMode="numeric"
+                      />
+                    ))}
+                  </Space>
+                  
+                  <Button 
+                    type="primary" 
+                    icon={<SafetyCertificateOutlined />} 
+                    loading={verifying} 
+                    onClick={() => verify()} 
+                    style={{ 
+                      width: '100%', 
+                      height: 52, 
+                      fontWeight: 600, 
+                      fontSize: 16, 
+                      borderRadius: 12, 
+                      background: '#2463EB', 
+                      border: 'none',
+                      boxShadow: '0 4px 14px rgba(36,99,235,0.25)', 
+                      marginBottom: 16 
+                    }}
+                  >
+                    Log In
                   </Button>
+                  
+                  <div style={{ textAlign: 'center' }}>
+                    <Button type="link" icon={<ReloadOutlined />} onClick={sendOtp} disabled={counter > 0} style={{ color: '#667085', fontWeight: 500 }}>
+                      Resend OTP {counter > 0 ? `(${counter}s)` : ''}
+                    </Button>
+                  </div>
                 </div>
-              </>
-            )}
-          </Card>
-          <div style={{ textAlign: 'center', marginTop: 14, color: '#98a2b3', fontSize: 12 }}>
-            By continuing you agree to our Terms & Privacy Policy
-          </div>
-        </div>
+              )}
+
+              {step === 'selection' && (
+                <div className="selection-form-container">
+                  <div style={{ marginBottom: 32, textAlign: 'center' }}>
+                    <Title level={3} style={{ margin: 0, fontWeight: 800, color: '#101828' }}>Select Account</Title>
+                    <Text style={{ color: '#667085' }}>Multiple accounts found for this number.</Text>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {organizations.map((org, idx) => (
+                      <div 
+                        key={idx}
+                        onClick={() => verify(null, org.id === null ? 'null' : org.id)}
+                        style={{
+                          padding: '18px',
+                          border: '2px solid #eaecf0',
+                          borderRadius: 14,
+                          cursor: 'pointer',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          background: '#fff'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = '#2463EB';
+                          e.currentTarget.style.background = '#f5f8ff';
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = '#eaecf0';
+                          e.currentTarget.style.background = '#fff';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: '#101828', fontSize: 16 }}>{org.name}</div>
+                        <Tag color="blue" style={{ borderRadius: 8, margin: 0, fontWeight: 700, padding: '2px 10px' }}>{org.role.toUpperCase()}</Tag>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 32, textAlign: 'center' }}>
+                    <Button type="link" onClick={() => setStep('phone')} style={{ color: '#667085', fontWeight: 500 }}>
+                      Use different number
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginTop: 64, textAlign: 'center' }}>
+                <Text type="secondary" style={{ fontSize: 14, color: '#667085' }}>
+                  By continuing you agree to our <a href="/terms" style={{ color: '#2463EB', fontWeight: 600 }}>Terms & Privacy Policy</a>
+                </Text>
+              </div>
+            </div>
+          </Col>
+        </Row>
       </Content>
     </Layout>
   );

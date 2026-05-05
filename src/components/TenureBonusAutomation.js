@@ -30,6 +30,7 @@ export default function TenureBonusAutomation() {
     const [staffList, setStaffList] = useState([]);
     const [assignForm] = Form.useForm();
     const [savingAssignment, setSavingAssignment] = useState(false);
+    const [assignmentSearch, setAssignmentSearch] = useState('');
 
     useEffect(() => {
         fetchRules();
@@ -271,14 +272,31 @@ export default function TenureBonusAutomation() {
                             >
                                 <div style={{ padding: '24px 0' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-                                        <Text type="secondary">Assign specific bonus rules to individual staff members.</Text>
+                                        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                                            <Text type="secondary">Assign specific bonus rules to individual staff members.</Text>
+                                            <Input.Search 
+                                                placeholder="Search assigned staff..." 
+                                                allowClear 
+                                                style={{ width: 250 }} 
+                                                value={assignmentSearch}
+                                                onChange={e => setAssignmentSearch(e.target.value)}
+                                                onSearch={setAssignmentSearch}
+                                            />
+                                        </div>
                                         <Button type="primary" icon={<PlusOutlined />} onClick={() => setAssignModalVisible(true)}>
                                             Assign Bonus Rule
                                         </Button>
                                     </div>
                                     <Table 
                                         columns={assignmentColumns} 
-                                        dataSource={assignments} 
+                                        dataSource={(assignments || []).filter(a => {
+                                            if (!assignmentSearch) return true;
+                                            const s = assignmentSearch.toLowerCase();
+                                            const name = (a.user?.profile?.name || a.user?.name || '').toLowerCase();
+                                            const phone = (a.user?.phone || '').toLowerCase();
+                                            const ruleName = (a.rule?.name || '').toLowerCase();
+                                            return name.includes(s) || phone.includes(s) || ruleName.includes(s);
+                                        })}
                                         rowKey="id" 
                                         loading={assignmentsLoading}
                                         pagination={{ pageSize: 10 }}

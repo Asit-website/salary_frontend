@@ -262,6 +262,126 @@ export default function AutomationRules() {
                         <Card
                             title={
                                 <Space>
+                                    <ThunderboltOutlined style={{ color: '#1677ff' }} />
+                                    <span>Overtime Automation</span>
+                                </Space>
+                            }
+                        >
+                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                                <Text type="secondary">
+                                    Automatically calculate and reward staff for working beyond their scheduled shift hours.
+                                </Text>
+                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
+                                    <Space direction="vertical" size={4}>
+                                        <Text strong><ThunderboltOutlined style={{ color: '#1890ff', marginRight: 8 }} />Flexible Overtime Rules</Text>
+                                        <Text size="small" type="secondary">Create and assign specific overtime rules (Fixed, Hourly, or Multipliers) to your team members.</Text>
+                                        <Button
+                                            type="primary"
+                                            size="small"
+                                            icon={<ThunderboltOutlined />}
+                                            style={{ marginTop: 8 }}
+                                            onClick={() => navigate('/settings/overtime-rules')}
+                                        >
+                                            Manage Overtime Rules
+                                        </Button>
+                                    </Space>
+                                </Card>
+                            </Space>
+                        </Card>
+
+                        <Card
+                            title={
+                                <Space>
+                                    <ThunderboltOutlined style={{ color: '#1677ff' }} />
+                                    <span>Early Overtime Automation</span>
+                                </Space>
+                            }
+                        >
+                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                                <Text type="secondary">
+                                    Set up rewards for staff members who start their work before the official shift start time.
+                                </Text>
+                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
+                                    <Space direction="vertical" size={4}>
+                                        <Text strong><ThunderboltOutlined style={{ color: '#1890ff', marginRight: 8 }} />Early Start Incentives</Text>
+                                        <Text size="small" type="secondary">Configure how early arrivals are compensated based on your organization's policies.</Text>
+                                        <Button
+                                            type="primary"
+                                            size="small"
+                                            icon={<ThunderboltOutlined />}
+                                            style={{ marginTop: 8 }}
+                                            onClick={() => navigate('/settings/early-overtime-rules')}
+                                        >
+                                            Manage Early Overtime
+                                        </Button>
+                                    </Space>
+                                </Card>
+                            </Space>
+                        </Card>
+
+                        <Card
+                            title={
+                                <Space>
+                                    <ThunderboltOutlined style={{ color: '#1677ff' }} />
+                                    <span>Early Exit Automation</span>
+                                </Space>
+                            }
+                        >
+                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                                <Text type="secondary">
+                                    Define deduction rules for employees who leave the workplace before their shift ends.
+                                </Text>
+                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
+                                    <Space direction="vertical" size={4}>
+                                        <Text strong><ThunderboltOutlined style={{ color: '#1890ff', marginRight: 8 }} />Early Departure Penalties</Text>
+                                        <Text size="small" type="secondary">Set up automated deductions for staff who punch out before completing their shifts.</Text>
+                                        <Button
+                                            type="primary"
+                                            size="small"
+                                            icon={<ThunderboltOutlined />}
+                                            style={{ marginTop: 8 }}
+                                            onClick={() => navigate('/settings/early-exit-rules')}
+                                        >
+                                            Manage Early Exit Rules
+                                        </Button>
+                                    </Space>
+                                </Card>
+                            </Space>
+                        </Card>
+
+                        <Card
+                            title={
+                                <Space>
+                                    <ThunderboltOutlined style={{ color: '#1677ff' }} />
+                                    <span>Break Automation</span>
+                                </Space>
+                            }
+                        >
+                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                                <Text type="secondary">
+                                    Monitor break durations and automatically apply penalties for exceeding allowed time limits.
+                                </Text>
+                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
+                                    <Space direction="vertical" size={4}>
+                                        <Text strong><ThunderboltOutlined style={{ color: '#1890ff', marginRight: 8 }} />Excessive Break Tracking</Text>
+                                        <Text size="small" type="secondary">Automate deductions for breaks that exceed the defined limits for each staff member.</Text>
+                                        <Button
+                                            type="primary"
+                                            size="small"
+                                            icon={<ThunderboltOutlined />}
+                                            style={{ marginTop: 8 }}
+                                            onClick={() => navigate('/settings/break-rules')}
+                                        >
+                                            Manage Break Rules
+                                        </Button>
+                                    </Space>
+                                </Card>
+                            </Space>
+                        </Card>
+
+                        <Card
+                            title={
+                                <Space>
                                     <ThunderboltOutlined style={{ color: '#faad14' }} />
                                     <span>ZKTeco Biometric Integration</span>
                                 </Space>

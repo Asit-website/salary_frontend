@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Card, Table, Button, Select, message, Space, Typography, Modal, Form, Input, InputNumber, Menu } from 'antd';
 import { 
-  DollarOutlined, 
   UserOutlined, 
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -117,14 +116,14 @@ const SalaryManagement = () => {
       title: 'Basic Salary',
       dataIndex: 'basicSalary',
       key: 'basicSalary',
-      render: (value) => `₹${value?.toLocaleString() || 0}`,
+      render: (value) => `₹${(Number(value) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     },
     {
       title: 'Total Earnings',
       key: 'totalEarnings',
       render: (_, record) => {
         const total = record.earnings?.reduce((sum, item) => sum + (item.valueNumber || 0), 0) || 0;
-        return `₹${total.toLocaleString()}`;
+        return `₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       },
     },
     {
@@ -132,7 +131,7 @@ const SalaryManagement = () => {
       key: 'totalDeductions',
       render: (_, record) => {
         const total = record.deductions?.reduce((sum, item) => sum + (item.valueNumber || 0), 0) || 0;
-        return `₹${total.toLocaleString()}`;
+        return `₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       },
     },
     {

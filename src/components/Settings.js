@@ -134,6 +134,11 @@ export default function Settings() {
     payslipGeneration: true,
     missingAttendance: true
   });
+  const [kioskOpen, setKioskOpen] = useState(false);
+  const [kioskSaving, setKioskSaving] = useState(false);
+  const [kioskUsername, setKioskUsername] = useState('');
+  const [kioskPassword, setKioskPassword] = useState('');
+  const [kioskPasswordSet, setKioskPasswordSet] = useState(false);
   const normalizeBrand = (value) => {
     const raw = String(value || '').trim();
     if (!raw) return DEFAULT_BRAND_TEXT;
@@ -175,6 +180,11 @@ export default function Settings() {
             missingAttendance: r4.data.config.smsNotificationSettings.missingAttendance !== false,
           });
         }
+      } catch (_) { }
+      try {
+        const r5 = await api.get('/admin/settings/kiosk');
+        setKioskUsername(r5.data?.username || '');
+        setKioskPasswordSet(!!r5.data?.passwordSet);
       } catch (_) { }
     };
     loadData();
@@ -585,6 +595,42 @@ export default function Settings() {
       setSmsSaving(false);
     }
   };
+
+  const openKioskModal = async () => {
+    try {
+      const resp = await api.get('/admin/settings/kiosk');
+      setKioskUsername(resp.data?.username || '');
+      setKioskPasswordSet(!!resp.data?.passwordSet);
+      setKioskPassword(''); // Don't show old password
+    } catch (_) { }
+    setKioskOpen(true);
+  };
+
+  const saveKiosk = async () => {
+    try {
+      if (!kioskUsername.trim()) {
+        message.warning('Please enter a kiosk username');
+        return;
+      }
+      setKioskSaving(true);
+      const resp = await api.put('/admin/settings/kiosk', { 
+        username: kioskUsername.trim(),
+        password: kioskPassword.trim() || undefined
+      });
+      if (resp?.data?.success) {
+        message.success('Kiosk credentials updated');
+        setKioskOpen(false);
+        setKioskPasswordSet(true);
+      } else {
+        message.error(resp?.data?.message || 'Failed to save');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to save');
+    } finally {
+      setKioskSaving(false);
+    }
+  };
+
   const tiles = useMemo(() => [
     {
       key: 'attendance',
@@ -593,11 +639,8 @@ export default function Settings() {
         { key: 'att-tpl', icon: <ProfileOutlined />, label: 'Attendance Templates', desc: 'Set standard baselines for attendance tracking', onClick: () => navigate('/settings/attendance-templates') },
         { key: 'att-geo', icon: <EnvironmentOutlined />, label: 'Attendance Geofence Settings', desc: 'Set up virtual boundaries for attendance tracking', onClick: () => navigate('/settings/geofence') },
         { key: 'shift', icon: <ScheduleOutlined />, label: 'Shift Settings', desc: 'Create and manage shifts for employees', onClick: () => navigate('/settings/shifts') },
-        { key: 'rules', icon: <ThunderboltOutlined />, label: 'Automation Rules', desc: 'Track late entry and biometric sync', onClick: () => navigate('/settings/automation-rules') },
-        { key: 'ot-rules', icon: <ThunderboltOutlined />, label: 'Overtime Automation', desc: 'Configure multipliers and rewards for extra work', onClick: () => navigate('/settings/overtime-rules') },
-        { key: 'eot-rules', icon: <ThunderboltOutlined />, label: 'Early Overtime Automation', desc: 'Configure rewards for work before shift start', onClick: () => navigate('/settings/early-overtime-rules') },
-        { key: 'ee-rules', icon: <ThunderboltOutlined />, label: 'Early Exit Automation', desc: 'Configure deductions for leaving before shift ends', onClick: () => navigate('/settings/early-exit-rules') },
-        { key: 'break-rules', icon: <ThunderboltOutlined />, label: 'Break Automation', desc: 'Configure deductions for excessive break duration', onClick: () => navigate('/settings/break-rules') },
+        { key: 'rules', icon: <ThunderboltOutlined />, label: 'Automation Rules', desc: 'Track late entry, overtime, early exit, breaks and biometric sync', onClick: () => navigate('/settings/automation-rules') },
+        { key: 'holiday-work-pay', icon: <ThunderboltOutlined />, label: 'Holiday Work Pay Rules', desc: 'Configure multipliers for working on holidays/off-days', onClick: () => navigate('/settings/holiday-work-pay') },
       ],
     },
     {
@@ -684,6 +727,7 @@ export default function Settings() {
       title: 'Device Management',
       items: [
         { key: 'device-mgmt', icon: <MobileOutlined />, label: 'Device Management', desc: 'Monitor and control devices used by employees', onClick: () => navigate('/settings/device-management') },
+        { key: 'kiosk-settings', icon: <SettingOutlined />, label: 'Kiosk Settings', desc: kioskUsername ? `User: ${kioskUsername}` : 'Set kiosk username/password', onClick: openKioskModal },
       ],
     },
     {
@@ -792,6 +836,43 @@ export default function Settings() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button onClick={() => setAccEmailOpen(false)}>Cancel</Button>
             <Button type="primary" loading={accEmailSaving} onClick={saveAccEmail}>Save</Button>
+          </div>
+        </Space>
+      </Modal>
+
+      <Modal
+        title="Kiosk Settings"
+        open={kioskOpen}
+        onCancel={() => setKioskOpen(false)}
+        footer={null}
+        destroyOnClose
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div style={{ color: '#6b7280', fontSize: 13 }}>Set organization-wide credentials for the Kiosk App.</div>
+          
+          <div style={{ marginTop: 8 }}>
+            <Text strong>Kiosk Username</Text>
+            <Input 
+              placeholder="e.g. thinktech_kiosk_01" 
+              value={kioskUsername} 
+              onChange={(e) => setKioskUsername(e.target.value)} 
+              style={{ marginTop: 4 }}
+            />
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            <Text strong>Kiosk Password</Text>
+            <Input.Password 
+              placeholder={kioskPasswordSet ? "Leave blank to keep current" : "Set password"} 
+              value={kioskPassword} 
+              onChange={(e) => setKioskPassword(e.target.value)} 
+              style={{ marginTop: 4 }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <Button onClick={() => setKioskOpen(false)}>Cancel</Button>
+            <Button type="primary" loading={kioskSaving} onClick={saveKiosk}>Save Credentials</Button>
           </div>
         </Space>
       </Modal>

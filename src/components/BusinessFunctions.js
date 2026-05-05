@@ -102,7 +102,7 @@ export default function BusinessFunctions() {
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
-    form.setFieldsValue({ name: '', active: true, values: [{ value: '', active: true, sortOrder: 0 }] });
+    form.setFieldsValue({ name: 'Department', active: true, values: [{ value: '', active: true, sortOrder: 0 }] });
     setOpen(true);
   };
 
@@ -302,7 +302,7 @@ export default function BusinessFunctions() {
             <Row gutter={16}>
               <Col span={16}>
                 <Form.Item name="name" label="Function Name" rules={[{ required: true, message: 'Enter name' }]}>
-                  <Input placeholder="e.g. Department" />
+                  <Input placeholder="e.g. Department" disabled />
                 </Form.Item>
               </Col>
               <Col span={8}>
@@ -349,7 +349,7 @@ export default function BusinessFunctions() {
                         </Row>
                       ))}
                       <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add({ value: '', active: true })} style={{ marginTop: 4 }}>
-                        Add Value
+                        Add Departments
                       </Button>
                     </>
                   )}

@@ -908,9 +908,25 @@ const AddRegularStaff = () => {
                       <Form.Item
                         name="phone"
                         label="Phone Number"
-                        rules={requiredRule('Please enter phone number')}
+                        validateTrigger="onChange"
+                        rules={[
+                          ...requiredRule('Please enter phone number'),
+                          { len: 10, message: 'Please enter exactly 10 digits' },
+                          { pattern: /^\d+$/, message: 'Please enter only digits' }
+                        ]}
                       >
-                        <Input placeholder="Enter phone number" style={{ height: '40px' }} />
+                        <Input 
+                          placeholder="Enter phone number" 
+                          style={{ height: '40px' }} 
+                          maxLength={10}
+                          onKeyDown={(e) => {
+                            if (e.key === ' ') e.preventDefault();
+                          }}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\s/g, '');
+                            form.setFieldsValue({ phone: value });
+                          }}
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
@@ -1122,11 +1138,11 @@ const AddRegularStaff = () => {
                     borderRadius: '8px',
                     background: '#fff'
                   }}
-                  extra={<Button type="link" size="small" style={{ padding: 0, color: '#125EC9' }} onClick={() => {
+                  /* extra={<Button type="link" size="small" style={{ padding: 0, color: '#125EC9' }} onClick={() => {
                     const id = Date.now() + Math.random();
                     setExtraEarnings(v => ([...v, { id, label: '', amount: '' }]));
                     setTimeout(() => setLastAddedEarningId(id), 0);
-                  }}>+ Add More</Button>}
+                  }}>+ Add More</Button>} */
                 >
                   <Row gutter={[16, 16]}>
                     {showE('BASIC SALARY') && (
@@ -1258,11 +1274,11 @@ const AddRegularStaff = () => {
                     borderRadius: '8px',
                     background: '#fff'
                   }}
-                  extra={<Button type="link" size="small" style={{ padding: 0, color: '#125EC9' }} onClick={() => {
+                  /* extra={<Button type="link" size="small" style={{ padding: 0, color: '#125EC9' }} onClick={() => {
                     const id = Date.now() + Math.random();
                     setExtraDeductions(v => ([...v, { id, label: '', amount: '' }]));
                     setTimeout(() => setLastAddedDeductionId(id), 0);
-                  }}>+ Add More</Button>}
+                  }}>+ Add More</Button>} */
                 >
                   <Row gutter={[16, 16]}>
                     {showD('PROVIDENT FUND') && (

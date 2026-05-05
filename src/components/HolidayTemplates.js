@@ -57,6 +57,7 @@ export default function HolidayTemplates(){
   const [assignedListTpl, setAssignedListTpl] = useState(null);
   const [assignedListRows, setAssignedListRows] = useState([]);
   const [assignedListLoading, setAssignedListLoading] = useState(false);
+  const [assignedSearch, setAssignedSearch] = useState('');
 
   const load = async () => {
     try {
@@ -159,7 +160,10 @@ export default function HolidayTemplates(){
   const openAssignedList = async (tpl, keepOpen = false) => {
     try {
       setAssignedListTpl(tpl);
-      if (!keepOpen) setAssignedListOpen(true);
+      if (!keepOpen) {
+        setAssignedListOpen(true);
+        setAssignedSearch('');
+      }
       setAssignedListLoading(true);
       const res = await api.get(`/admin/holidays/templates/${tpl.id}/assignments`);
       setAssignedListRows(res?.data?.assignments || []);
@@ -262,8 +266,25 @@ export default function HolidayTemplates(){
         {/* Assign Modal */}
         <Modal title={assigningTpl ? `Assign Staff • ${assigningTpl.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
           <Space direction="vertical" style={{ width:'100%' }} size={12}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button 
+                type="link" 
+                size="small" 
+                onClick={() => {
+                  if (selectedStaffIds.length === staffOptions.length) {
+                    setSelectedStaffIds([]);
+                  } else {
+                    setSelectedStaffIds(staffOptions.map(o => o.value));
+                  }
+                }}
+              >
+                {selectedStaffIds.length === staffOptions.length ? 'Deselect All' : 'Select All'}
+              </Button>
+            </div>
             <Select
               mode="multiple"
+              showSearch
+              optionFilterProp="label"
               options={staffOptions}
               value={selectedStaffIds}
               onChange={setSelectedStaffIds}
@@ -285,10 +306,27 @@ export default function HolidayTemplates(){
           footer={null}
           width={1000}
         >
+          <div style={{ marginBottom: 16 }}>
+            <Input.Search
+              placeholder="Search staff by name, ID or phone..."
+              allowClear
+              value={assignedSearch}
+              onChange={e => setAssignedSearch(e.target.value)}
+              onSearch={setAssignedSearch}
+              style={{ width: 350 }}
+            />
+          </div>
           <Table
             rowKey="id"
             loading={assignedListLoading}
-            dataSource={assignedListRows}
+            dataSource={(assignedListRows || []).filter(r => {
+              if (!assignedSearch) return true;
+              const s = assignedSearch.toLowerCase();
+              const name = (r.user?.profile?.name || '').toLowerCase();
+              const sid = (r.user?.profile?.staffId || '').toLowerCase();
+              const phone = (r.user?.phone || '').toLowerCase();
+              return name.includes(s) || sid.includes(s) || phone.includes(s);
+            })}
             size="small"
             pagination={{ pageSize: 8 }}
             columns={[

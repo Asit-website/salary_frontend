@@ -27,7 +27,6 @@ import {
   DeleteOutlined, 
   EyeOutlined,
   BankOutlined,
-  DollarOutlined,
   CalendarOutlined,
   UserOutlined,
   MenuUnfoldOutlined,
@@ -207,7 +206,7 @@ const Loans = () => {
       key: 'amount',
       render: (amount) => {
         const numAmount = parseFloat(amount);
-        return isNaN(numAmount) ? '0.00' : numAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return isNaN(numAmount) ? '₹0.00' : `₹${numAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       },
     },
     {
@@ -228,7 +227,7 @@ const Loans = () => {
       key: 'emiAmount',
       render: (emi) => {
         const numEmi = parseFloat(emi);
-        return isNaN(numEmi) ? '0.00' : numEmi.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return isNaN(numEmi) ? '₹0.00' : `₹${numEmi.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       },
     },
     {
@@ -342,7 +341,6 @@ const Loans = () => {
                     title="Active Loans"
                     value={loans.filter(l => l.status === 'active').length}
                     valueStyle={{ color: '#3f8600' }}
-                    prefix={<DollarOutlined />}
                   />
                 </Card>
               </Col>
@@ -351,7 +349,7 @@ const Loans = () => {
                   <Statistic
                     title="Total Amount"
                     value={loans.reduce((sum, loan) => sum + (parseFloat(loan.amount || 0)), 0)}
-                    prefix={<DollarOutlined />}
+                    prefix="₹"
                     formatter={(value) => value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   />
                 </Card>
@@ -361,7 +359,7 @@ const Loans = () => {
                   <Statistic
                     title="Monthly EMI"
                     value={loans.filter(l => l.status === 'active').reduce((sum, loan) => sum + (parseFloat(loan.emiAmount || 0)), 0)}
-                    prefix={<CalendarOutlined />}
+                    prefix="₹"
                     formatter={(value) => value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   />
                 </Card>
@@ -467,6 +465,7 @@ const Loans = () => {
                         placeholder="0.00"
                         min={0}
                         precision={2}
+                        prefix="₹"
                       />
                     </Form.Item>
                   </Col>
@@ -512,6 +511,7 @@ const Loans = () => {
                         disabled
                         precision={2}
                         placeholder="0.00"
+                        prefix="₹"
                       />
                     </Form.Item>
                   </Col>
@@ -612,7 +612,7 @@ const Loans = () => {
                       </Tag>
                     </Descriptions.Item>
                     <Descriptions.Item label="Loan Amount">
-                      {parseFloat(selectedLoan.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₹{parseFloat(selectedLoan.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Descriptions.Item>
                     <Descriptions.Item label="Interest Rate">
                       {parseFloat(selectedLoan.interestRate || 0).toFixed(2)}%
@@ -621,7 +621,7 @@ const Loans = () => {
                       {selectedLoan.tenure} months
                     </Descriptions.Item>
                     <Descriptions.Item label="EMI Amount">
-                      {parseFloat(selectedLoan.emiAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₹{parseFloat(selectedLoan.emiAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Descriptions.Item>
                     <Descriptions.Item label="Issue Date">
                       {moment(selectedLoan.issueDate).format('DD MMM YYYY')}

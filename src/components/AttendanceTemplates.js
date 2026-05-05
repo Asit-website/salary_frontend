@@ -85,14 +85,14 @@ export default function AttendanceTemplates() {
       // Backend expects snake_case fields
       const payload = {
         name: v.name,
-        attendance_mode: v.attendance_mode,
+        attendance_mode: v.attendance_mode || 'mark_present_by_default',
         holidays_rule: v.holidays_rule,
         track_in_out_enabled: !!v.track_in_out_enabled,
         require_punch_out: !!v.require_punch_out,
         allow_multiple_punches: !!v.allow_multiple_punches,
         mark_absent_prev_days_enabled: !!v.mark_absent_prev_days_enabled,
         mark_absent_rule: v.mark_absent_rule || null,
-        effective_hours_rule: v.effective_hours_rule || null,
+        effective_hours_rule: v.effective_hours_rule || 'none',
       };
       if (editingTpl) {
         await api.put(`/admin/settings/attendance-templates/${editingTpl.id}`, payload);
@@ -225,14 +225,6 @@ export default function AttendanceTemplates() {
               <Input placeholder="Enter Template Name" />
             </Form.Item>
             <Card title="Settings" size="small" style={{ marginBottom: 12 }}>
-              <Form.Item name="attendance_mode" label="Attendance Mode">
-                <Radio.Group style={{ display:'grid', gap:8 }}>
-                  <Radio value="mark_present_by_default">Mark Present by Default</Radio>
-                  <Radio value="manual">Manual Attendance</Radio>
-                  <Radio value="location_based">Location Based</Radio>
-                  <Radio value="selfie_location">Selfie & Location Based</Radio>
-                </Radio.Group>
-              </Form.Item>
               <Form.Item name="holidays_rule" label="Attendance on Holidays">
                 <Radio.Group style={{ display:'grid', gap:8 }}>
                   <Radio value="disallow">Do NOT Allow attendance on paid holidays</Radio>
@@ -253,29 +245,37 @@ export default function AttendanceTemplates() {
                 <Switch />
               </Form.Item>
               {/* Mark Absent Rule disabled as requested */}
-              <Form.Item name="effective_hours_rule" label="Effective Working Hours">
-                <Select options={[
-                  { value: 'none', label: 'Do not show' },
-                  { value: 'rule1', label: 'Rule 1 • Overtime and paid breaks will be deducted from the total time' },
-                  { value: 'rule2', label: 'Rule 2 • Total time only, no deductions' },
-                  { value: 'rule3', label: 'Rule 3 • Overtime will be deducted from total time' },
-                  { value: 'rule4', label: 'Rule 4 • All breaks will be deducted from total time' },
-                ]} />
-              </Form.Item>
             </Card>
           </Form>
         </Modal>
 
         {/* Assign Staff Modal */}
         <Modal title={assigningTpl ? `Assign Staff • ${assigningTpl.name || ''}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Save">
-          <Select
-            mode="multiple"
-            options={staffOptions}
-            value={assignedStaffIds}
-            onChange={setAssignedStaffIds}
-            style={{ width: '100%' }}
-            placeholder="Select staff to assign"
-          />
+          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button 
+                type="link" 
+                size="small" 
+                onClick={() => {
+                  if (assignedStaffIds.length === staffOptions.length) {
+                    setAssignedStaffIds([]);
+                  } else {
+                    setAssignedStaffIds(staffOptions.map(o => o.value));
+                  }
+                }}
+              >
+                {assignedStaffIds.length === staffOptions.length ? 'Deselect All' : 'Select All'}
+              </Button>
+            </div>
+            <Select
+              mode="multiple"
+              options={staffOptions}
+              value={assignedStaffIds}
+              onChange={setAssignedStaffIds}
+              style={{ width: '100%' }}
+              placeholder="Select staff to assign"
+            />
+          </Space>
         </Modal>
 
         {/* Assigned Staff List Modal */}

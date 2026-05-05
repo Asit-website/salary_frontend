@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Layout, Card, Button, Modal, Form, Input, Space, Table, Switch, InputNumber, message, Popconfirm, Typography, Select, DatePicker, Dropdown, Tag } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ArrowLeftOutlined, MoreOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -415,6 +415,22 @@ export default function GeofenceSettings() {
         width={1080}
       >
         <Form form={assignForm} layout="vertical">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <Button 
+              type="link" 
+              size="small" 
+              onClick={() => {
+                const currentSelection = assignForm.getFieldValue('userIds') || [];
+                if (currentSelection.length === staffOptions.length) {
+                  assignForm.setFieldsValue({ userIds: [] });
+                } else {
+                  assignForm.setFieldsValue({ userIds: staffOptions.map(o => o.value) });
+                }
+              }}
+            >
+              Select All
+            </Button>
+          </div>
           <Form.Item name="userIds" label="Select Staff" rules={[{ required: true, message: 'Select staff' }]}>
             <Select mode="multiple" placeholder="Search and select staff" options={staffOptions} showSearch optionFilterProp="label" />
           </Form.Item>

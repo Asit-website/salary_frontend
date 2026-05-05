@@ -99,6 +99,8 @@ export default function Sales() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('multi_account');
+    sessionStorage.removeItem('selection_data');
     navigate('/');
   };
 

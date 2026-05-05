@@ -3,16 +3,17 @@ import { Layout, Card, Row, Col, Statistic, Typography, Spin, Menu } from 'antd'
 import {
   UserOutlined,
   CalendarOutlined,
-  DollarOutlined,
   ShoppingCartOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
-  TeamOutlined
+  TeamOutlined,
+  HomeOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import dayjs from 'dayjs';
 import {
   LineChart,
@@ -357,6 +358,7 @@ const Dashboard = () => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('multi_account');
     navigate('/');
   };
 
@@ -373,28 +375,12 @@ const Dashboard = () => {
       <Sidebar collapsed={collapsed} />
 
       <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
-        <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
-              className: 'trigger',
-              onClick: () => setCollapsed(!collapsed),
-              style: { fontSize: '18px', padding: '0 24px' }
-            })}
-            <Title level={4} style={{ margin: 0 }}>Dashboard</Title>
-          </div>
-          <Menu
-            theme="light"
-            mode="horizontal"
-            items={[
-              {
-                key: 'logout',
-                icon: <LogoutOutlined />,
-                label: 'Logout',
-                onClick: handleLogout
-              }
-            ]}
-          />
-        </Header>
+        <MainHeader
+          collapsed={collapsed}
+          setCollapsed={setCollapsed}
+          title="Dashboard"
+          showHome={true}
+        />
 
         <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
           <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
@@ -520,7 +506,9 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ color: '#fa8c16', fontSize: '11px', fontWeight: '500' }}>9% absenteeism</div>
+                  <div style={{ color: '#fa8c16', fontSize: '11px', fontWeight: '500' }}>
+                    {stats.totalStaff > 0 ? Math.round((stats.absentToday / stats.totalStaff) * 100) : 0}% absenteeism
+                  </div>
                   <div style={{
                     width: '50px',
                     height: '3px',
@@ -529,7 +517,7 @@ const Dashboard = () => {
                     overflow: 'hidden'
                   }}>
                     <div style={{
-                      width: '9%',
+                      width: `${stats.totalStaff > 0 ? Math.round((stats.absentToday / stats.totalStaff) * 100) : 0}%`,
                       height: '100%',
                       background: '#fa8c16',
                       borderRadius: '2px'
@@ -672,6 +660,92 @@ const Dashboard = () => {
                       background: '#ff4d4f',
                       borderRadius: '2px'
                     }}></div>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e8e8e8',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+                  borderRadius: '4px'
+                }}
+                bodyStyle={{ padding: '16px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>Expected Monthly Payout</div>
+                    <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>
+                      ₹{Number(stats.expectedMonthlyPayout || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: '#f6ffed',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <span style={{ color: '#52c41a', fontSize: '18px', fontWeight: '700', lineHeight: 1 }}>₹</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#52c41a', fontSize: '11px', fontWeight: '500' }}>Total Monthly Forecast</div>
+                  <div style={{
+                    width: '50px',
+                    height: '3px',
+                    background: '#f0f0f0',
+                    borderRadius: '2px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{ width: '100%', height: '100%', background: '#52c41a', borderRadius: '2px' }}></div>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e8e8e8',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+                  borderRadius: '4px'
+                }}
+                bodyStyle={{ padding: '16px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>Daily Wages Payout</div>
+                    <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>
+                      ₹{Number(stats.dailyWagesPayout || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: '#e6f7ff',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <span style={{ color: '#1890ff', fontSize: '18px', fontWeight: '700', lineHeight: 1 }}>₹</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#1890ff', fontSize: '11px', fontWeight: '500' }}>Today's Wage Cost</div>
+                  <div style={{
+                    width: '50px',
+                    height: '3px',
+                    background: '#f0f0f0',
+                    borderRadius: '2px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{ width: '100%', height: '100%', background: '#1890ff', borderRadius: '2px' }}></div>
                   </div>
                 </div>
               </Card>
@@ -1020,7 +1094,7 @@ const Dashboard = () => {
                 title={
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '15px', fontWeight: '500', color: '#262626' }}>
-                      <DollarOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                      <span style={{ marginRight: '8px', color: '#1890ff', fontWeight: 'bold' }}>₹</span>
                       Loan Overview
                     </span>
                     <div style={{ display: 'flex', gap: '16px' }}>

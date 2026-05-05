@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from 'antd';
 import Login from './components/Login';
+import Home from './components/Home';
 import SignupAdmin from './components/SignupAdmin';
 import Dashboard from './components/Dashboard';
 import StaffManagement from './components/StaffManagement';
@@ -65,9 +66,13 @@ import BreakAutomation from './components/BreakAutomation';
 import EarlyOvertimeAutomation from './components/EarlyOvertimeAutomation';
 import LatePunchInAutomation from './components/LatePunchInAutomation';
 import TenureBonusAutomation from './components/TenureBonusAutomation';
+import HolidayWorkPaySettings from './components/HolidayWorkPaySettings';
 import Advances from './components/Advances';
 import Recruitment from './components/Recruitment';
 import CommunityFeed from './components/CommunityFeed';
+import SuperadminLeads from './components/SuperadminLeads';
+import SuperadminStaff from './components/SuperadminStaff';
+
 
 const { Content } = Layout;
 
@@ -75,6 +80,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Login />} />
+      <Route path="/home" element={<Home />} />
       <Route path="/signup-admin" element={<SignupAdmin />} />
       <Route path="/impersonate" element={<ImpersonateRedirect />} />
       <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
@@ -117,12 +123,15 @@ function App() {
       <Route path="/employee-salary" element={<PrivateRoute><EmployeeSalaryList /></PrivateRoute>} />
       <Route path="/payroll" element={<PrivateRoute><PayrollList /></PrivateRoute>} />
       <Route path="/payroll/:cycleId" element={<PrivateRoute><PayrollCycle /></PrivateRoute>} />
-      <Route path="/superadmin/plans" element={<PrivateRoute><SuperadminPlans /></PrivateRoute>} />
-      <Route path="/superadmin/dashboard" element={<PrivateRoute><SuperadminDashboard /></PrivateRoute>} />
-      <Route path="/superadmin/clients" element={<PrivateRoute><SuperadminClients /></PrivateRoute>} />
-      <Route path="/superadmin/channel-partners" element={<PrivateRoute><SuperadminChannelPartners /></PrivateRoute>} />
-      <Route path="/superadmin/mailing" element={<PrivateRoute><SuperadminMailing /></PrivateRoute>} />
-      <Route path="/superadmin/mailing/report/:id" element={<PrivateRoute><SuperadminMailReport /></PrivateRoute>} />
+      <Route path="/superadmin/plans" element={<PrivateRoute allowedRoles={['superadmin']}><SuperadminPlans /></PrivateRoute>} />
+      <Route path="/superadmin/dashboard" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminDashboard /></PrivateRoute>} />
+      <Route path="/superadmin/clients" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminClients /></PrivateRoute>} />
+      <Route path="/superadmin/channel-partners" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminChannelPartners /></PrivateRoute>} />
+      <Route path="/superadmin/mailing" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminMailing /></PrivateRoute>} />
+      <Route path="/superadmin/mailing/report/:id" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminMailReport /></PrivateRoute>} />
+      <Route path="/superadmin/leads" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminLeads /></PrivateRoute>} />
+      <Route path="/superadmin/staff" element={<PrivateRoute allowedRoles={['superadmin']}><SuperadminStaff /></PrivateRoute>} />
+
       <Route path="/partner/clients" element={<PrivateRoute><ChannelPartnerClients /></PrivateRoute>} />
       <Route path="/roles-permissions" element={<PrivateRoute><RolesPermissions /></PrivateRoute>} />
       <Route path="/expense-management" element={<PrivateRoute><ExpenseManagement /></PrivateRoute>} />
@@ -133,6 +142,7 @@ function App() {
       <Route path="/settings/automation-rules" element={<PrivateRoute><AutomationRules /></PrivateRoute>} />
       <Route path="/settings/overtime-rules" element={<PrivateRoute><OvertimeAutomation /></PrivateRoute>} />
       <Route path="/settings/early-exit-rules" element={<PrivateRoute><EarlyExitAutomation /></PrivateRoute>} />
+      <Route path="/settings/holiday-work-pay" element={<PrivateRoute><HolidayWorkPaySettings /></PrivateRoute>} />
       <Route path="/settings/early-overtime-rules" element={<PrivateRoute><EarlyOvertimeAutomation /></PrivateRoute>} />
       <Route path="/settings/break-rules" element={<PrivateRoute><BreakAutomation /></PrivateRoute>} />
       <Route path="/settings/late-punchin-rules" element={<PrivateRoute><LatePunchInAutomation /></PrivateRoute>} />

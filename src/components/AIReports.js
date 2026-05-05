@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Layout, Typography, Card, Table, Button, Space, Tag, Modal, Spin, message, Row, Col, Statistic, Tooltip, Descriptions, Progress, Slider, InputNumber, Alert, Divider, Badge } from 'antd';
-import { BarChartOutlined, RobotOutlined, ReloadOutlined, InfoCircleOutlined, WalletOutlined, ArrowUpOutlined, ArrowDownOutlined, TeamOutlined, ClockCircleOutlined, WarningOutlined, CheckCircleOutlined, ExclamationCircleOutlined, ThunderboltOutlined, ExperimentOutlined, DollarOutlined, CalendarOutlined, FundOutlined } from '@ant-design/icons';
+import { BarChartOutlined, RobotOutlined, ReloadOutlined, InfoCircleOutlined, WalletOutlined, ArrowUpOutlined, ArrowDownOutlined, TeamOutlined, ClockCircleOutlined, WarningOutlined, CheckCircleOutlined, ExclamationCircleOutlined, ThunderboltOutlined, ExperimentOutlined, CalendarOutlined, FundOutlined } from '@ant-design/icons';
 import api from '../api';
 import Sidebar from './Sidebar';
 
@@ -82,7 +82,7 @@ const AIReports = () => {
     const payRatio = summary.totalBaseSalary > 0 ? Math.round(summary.totalForecastedPay / summary.totalBaseSalary * 100) : 100;
     return [
       { title: 'Payroll Efficiency', value: `${payRatio}%`, desc: 'Forecasted vs Configured base', icon: <FundOutlined />, color: payRatio >= 90 ? '#52c41a' : payRatio >= 70 ? '#faad14' : '#ff4d4f' },
-      { title: 'Top Earner', value: topEarner?.userName || '-', desc: `₹${(topEarner?.forecastNetPay || 0).toLocaleString()} forecasted`, icon: <DollarOutlined />, color: '#1890ff' },
+      { title: 'Top Earner', value: topEarner?.userName || '-', desc: `₹${(topEarner?.forecastNetPay || 0).toLocaleString()} forecasted`, icon: <span style={{ fontWeight: 'bold' }}>₹</span>, color: '#1890ff' },
       { title: 'Most Absent', value: mostAbsent?.userName || '-', desc: `${mostAbsent?.attendance?.absent || 0} absent days`, icon: <CalendarOutlined />, color: '#ff4d4f' },
       { title: 'Best Attendance', value: bestAttendance?.userName || '-', desc: `${bestAttendance?.attendance?.present || 0} present days`, icon: <CheckCircleOutlined />, color: '#52c41a' },
     ];

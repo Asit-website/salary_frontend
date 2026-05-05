@@ -25,7 +25,6 @@ import {
   PlusOutlined, 
   DeleteOutlined, 
   EyeOutlined,
-  DollarOutlined,
   CalendarOutlined,
   UserOutlined,
   MenuUnfoldOutlined,
@@ -172,7 +171,7 @@ const Advances = () => {
       title: 'Amount',
       dataIndex: 'amount',
       key: 'amount',
-      render: (amount) => `₹${parseFloat(amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+      render: (amount) => `₹${(Number(amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     },
     {
       title: 'Advance Date',
@@ -284,7 +283,7 @@ const Advances = () => {
                     value={advances.filter(a => a.deductionMonth > dayjs().format('YYYY-MM')).reduce((sum, a) => sum + parseFloat(a.amount), 0)}
                     valueStyle={{ color: '#cf1322' }}
                     prefix={<CalendarOutlined />}
-                    formatter={(val) => `₹${val.toLocaleString('en-IN')}`}
+                    formatter={(val) => `₹${(Number(val) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   />
                 </Card>
               </Col>
@@ -295,7 +294,7 @@ const Advances = () => {
                     value={advances.filter(a => a.deductionMonth <= dayjs().format('YYYY-MM')).reduce((sum, a) => sum + parseFloat(a.amount), 0)}
                     valueStyle={{ color: '#3f8600' }}
                     prefix={<CheckCircleOutlined />}
-                    formatter={(val) => `₹${val.toLocaleString('en-IN')}`}
+                    formatter={(val) => `₹${(Number(val) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   />
                 </Card>
               </Col>
@@ -377,7 +376,7 @@ const Advances = () => {
                       label="Advance Amount"
                       rules={[{ required: true, message: 'Please enter amount' }]}
                     >
-                      <InputNumber style={{ width: '100%' }} min={1} placeholder="0.00" />
+                      <InputNumber style={{ width: '100%' }} min={1} placeholder="0.00" prefix="₹" />
                     </Form.Item>
                   </Col>
                 </Row>
@@ -435,7 +434,7 @@ const Advances = () => {
               {selectedAdvance && (
                 <Descriptions bordered column={1}>
                   <Descriptions.Item label="Staff Member">{selectedAdvance.staffMember?.profile?.name}</Descriptions.Item>
-                  <Descriptions.Item label="Amount">₹{parseFloat(selectedAdvance.amount).toLocaleString('en-IN')}</Descriptions.Item>
+                  <Descriptions.Item label="Amount">₹{(Number(selectedAdvance.amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
                   <Descriptions.Item label="Date Given">{dayjs(selectedAdvance.advanceDate).format('DD MMM YYYY')}</Descriptions.Item>
                   <Descriptions.Item label="Deduction Month">{dayjs(selectedAdvance.deductionMonth, 'YYYY-MM').format('MMMM YYYY')}</Descriptions.Item>
                   <Descriptions.Item label="Notes">{selectedAdvance.notes || '-'}</Descriptions.Item>

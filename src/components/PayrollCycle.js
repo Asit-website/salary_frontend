@@ -189,11 +189,11 @@ export default function PayrollCycle() {
     try {
       setLoading(true);
       const resp = await api.get(`/admin/payroll/${cycle.id}/export`, { responseType: 'blob' });
-      const blob = new Blob([resp.data], { type: 'text/csv' });
+      const blob = new Blob([resp.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `payroll-${cycle.monthKey}.csv`;
+      a.download = `payroll-${cycle.monthKey}.xlsx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -720,7 +720,7 @@ export default function PayrollCycle() {
             <div />
             <Space>
               <Button onClick={() => navigate('/payroll')}>Back</Button>
-              <Button onClick={onExportCSV} disabled={!cycle} loading={loading}>Export CSV</Button>
+              <Button onClick={onExportCSV} disabled={!cycle} loading={loading}>Export Excel</Button>
               <Button type="primary" onClick={onCompute} loading={loading} disabled={!cycle || cycle?.status === 'LOCKED' || cycle?.status === 'PAID'}>Compute</Button>
               {cycle?.status === 'DRAFT' && (
                 <Button onClick={onLock} disabled={!cycle} loading={loading}>Lock</Button>

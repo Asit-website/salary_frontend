@@ -79,6 +79,8 @@ const AttendanceManagement = () => {
   const [locationData, setLocationData] = useState(null);
   const [logsModalOpen, setLogsModalOpen] = useState(false);
   const [logsData, setLogsData] = useState(null);
+  const [staffOnLeave, setStaffOnLeave] = useState(false);
+  const [staffOffMsg, setStaffOffMsg] = useState(null);
 
   const navigate = useNavigate();
 
@@ -142,13 +144,24 @@ const AttendanceManagement = () => {
       const items = values
         .filter((v) => v && v.value)
         .map((v) => ({ id: v.id, name: v.value }));
-      console.log('Fetched departments:', items);
-      console.log('Setting departments state:', items.length, 'items'); // Debug log
       setDepartments(items);
     } catch (error) {
       console.error('Failed to fetch departments:', error);
       setDepartments([]);
     }
+  };
+
+  const fetchSpecialDayStatus = (uid, dateStr) => {
+    if (!uid || !dateStr) return;
+    api.get(`/admin/attendance/check-special-day?userId=${uid}&date=${dateStr}`)
+      .then(res => {
+        if (res.data?.success && res.data.isSpecial) {
+          setStaffOffMsg(res.data.message);
+        } else {
+          setStaffOffMsg(null);
+        }
+      })
+      .catch(() => setStaffOffMsg(null));
   };
 
   const openMarkModal = (staffRow = null) => {
@@ -170,12 +183,31 @@ const AttendanceManagement = () => {
       checkOut: parseTimeValue(existingRecord?.checkOut) || parseTimeValue('18:00'),
       overtimeMinutes: null,
     });
+
+    // If staff is selected and no record, try to fetch shift to update times
+    if (staffId && !existingRecord) {
+      api.get(`/admin/shifts/effective/${staffId}`).then(res => {
+        const shift = res.data?.shift;
+        if (shift) {
+          markForm.setFieldsValue({
+            checkIn: parseTimeValue(shift.startTime) || parseTimeValue('09:30'),
+            checkOut: parseTimeValue(shift.endTime) || parseTimeValue('18:00'),
+          });
+        }
+      }).catch(() => {});
+    }
     setMarkOpen(true);
+    setStaffOnLeave(false);
+    setStaffOffMsg(null);
   };
 
   const submitMark = async () => {
     try {
       const values = await markForm.validateFields();
+      if (values.checkIn && values.checkOut && values.checkOut.isBefore(values.checkIn)) {
+        message.error('Check-out time cannot be earlier than check-in time');
+        return;
+      }
       const payload = {
         staffId: values.staffId,
         date: values.date?.format('YYYY-MM-DD'),
@@ -208,9 +240,11 @@ const AttendanceManagement = () => {
     );
 
     let hasAutoOT = false;
+    let shiftData = null;
     try {
       const sRes = await api.get(`/admin/shifts/effective/${uid}`);
-      if (sRes.data?.shift && Number(sRes.data.shift.overtimeStartMinutes) > 0) {
+      shiftData = sRes.data?.shift;
+      if (shiftData && Number(shiftData.overtimeStartMinutes) > 0) {
         hasAutoOT = true;
       }
     } catch (_) { }
@@ -221,8 +255,8 @@ const AttendanceManagement = () => {
         userId: uid,
         name: staffInfo ? `${staffInfo.name} (${staffInfo.staffId || 'N/A'})` : `Staff ${uid}`,
         status: rec?.status || 'present',
-        checkIn: parseTimeValue(rec?.checkIn) || parseTimeValue('09:30'),
-        checkOut: parseTimeValue(rec?.checkOut) || parseTimeValue('18:00'),
+        checkIn: parseTimeValue(rec?.checkIn) || parseTimeValue(shiftData?.startTime) || parseTimeValue('09:30'),
+        checkOut: parseTimeValue(rec?.checkOut) || parseTimeValue(shiftData?.endTime) || parseTimeValue('18:00'),
         hasAutoOT,
       }
     ]);
@@ -243,6 +277,11 @@ const AttendanceManagement = () => {
   const submitBulkMark = async () => {
     if (bulkRows.length === 0) { message.warning('Please select at least one staff'); return; }
     try {
+      const invalidRow = bulkRows.find(r => r.checkIn && r.checkOut && r.checkOut.isBefore(r.checkIn));
+      if (invalidRow) {
+        message.error(`Invalid times for ${invalidRow.name}: Check-out cannot be earlier than check-in`);
+        return;
+      }
       const dateStr = bulkDate.format('YYYY-MM-DD');
       // Send individual attendance for each staff row
       await Promise.all(bulkRows.map(row =>
@@ -327,20 +366,11 @@ const AttendanceManagement = () => {
   };
 
   const openNoteModal = (record) => {
-    console.log('Record keys:', Object.keys(record));
-    console.log('Record values:', {
-      user_id: record.user_id,
-      userId: record.userId,
-      user: record.user,
-      id: record.id
-    });
-
     setSelectedRecord(record);
     noteForm.resetFields();
 
     // Ensure we have the correct staff ID
     const staffId = record.userId || record.user?.id || record.id;
-    console.log('Extracted staffId:', staffId);
 
     noteForm.setFieldsValue({
       staffId: staffId,
@@ -359,7 +389,6 @@ const AttendanceManagement = () => {
   const submitNote = async () => {
     try {
       const values = await noteForm.validateFields();
-      console.log('Submitting note with values:', values);
 
       if (!values.staffId) {
         message.error('Staff ID is missing');
@@ -368,19 +397,16 @@ const AttendanceManagement = () => {
 
       const payload = {
         staffId: values.staffId,
-        date: values.date.format('YYYY-MM-DD'), // Format dayjs date to string
+        date: values.date.format('YYYY-MM-DD'),
         note: values.note,
       };
-
-      console.log('Sending payload:', payload);
 
       await api.post('/admin/attendance/note', payload);
       message.success('Note saved successfully');
       closeNoteModal();
-      fetchAttendance(); // Refresh data
+      fetchAttendance();
     } catch (err) {
-      console.error('Submit note error:', err);
-      if (err?.errorFields) return; // validation error
+      if (err?.errorFields) return;
       message.error(err?.response?.data?.message || 'Failed to save note');
     }
   };
@@ -396,7 +422,6 @@ const AttendanceManagement = () => {
     }
   };
 
-  // Summary counts reflect current search and department filters (not the status filter)
   const baseForCounts = attendance.filter(row => {
     const q = search.trim().toLowerCase();
     const matchesSearch = q
@@ -407,9 +432,21 @@ const AttendanceManagement = () => {
     const matchesDate = dateFilter ? row.date === dateFilter.format('YYYY-MM-DD') : true;
     return matchesSearch && matchesDept && matchesDate;
   });
+  const filteredActiveStaff = staffList.filter(s => {
+    if (!s.active) return false;
+    const q = search.trim().toLowerCase();
+    const matchesSearch = q
+      ? (s.name || '').toLowerCase().includes(q) ||
+        (s.staffId || '').toString().toLowerCase().includes(q)
+      : true;
+    const matchesDept = departmentFilter === 'all' ? true : (s.department || '') === departmentFilter;
+    return matchesSearch && matchesDept;
+  });
+  const activeStaffCount = filteredActiveStaff.length;
+
   const presentCount = baseForCounts.filter(a => ['present', 'overtime', 'half_day'].includes(a.status?.toLowerCase())).length;
-  const absentCount = baseForCounts.filter(a => a.status?.toLowerCase() === 'absent').length;
   const leaveCount = baseForCounts.filter(a => a.status?.toLowerCase() === 'leave').length;
+  const absentCount = Math.max(0, activeStaffCount - presentCount);
 
   const filtered = attendance.filter(row => {
     const q = search.trim().toLowerCase();
@@ -511,11 +548,13 @@ const AttendanceManagement = () => {
           {record.isLate && record.latePenaltyText && (
             <Tag color="error" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
               Late: {record.latePenaltyText}
+              {record.bufferMinutes > 0 && ` (Buffer: ${record.bufferMinutes}m applied)`}
             </Tag>
           )}
           {!record.latePenaltyText && record.latePunchInMinutes > 0 && (
             <Tag color="error" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
               Late by {record.latePunchInMinutes} min
+              {record.bufferMinutes > 0 && ` (Buffer: ${record.bufferMinutes}m applicable)`}
             </Tag>
           )}
           {record.earlyExitMinutes > 0 && (
@@ -564,10 +603,6 @@ const AttendanceManagement = () => {
     },
   ];
 
-  console.log('Departments state:', departments); // Debug log
-  console.log('Departments length:', departments.length); // Debug log
-  console.log('Department filter:', departmentFilter); // Debug log
-
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} />
@@ -613,13 +648,6 @@ const AttendanceManagement = () => {
                   format="DD MMM YYYY"
                   placeholder="Select date"
                 />
-                {/* <DatePicker
-                  value={dateFilter}
-                  onChange={(date) => setDateFilter(date)}
-                  format="DD MMM YYYY"
-                  placeholder="Filter by date"
-                  allowClear
-                /> */}
                 <Button type="primary" onClick={openMarkModal}>Mark Attendance</Button>
                 <Button type="primary" onClick={openBulkMarkModal}>Bulk Mark Attendance</Button>
                 <Button icon={<ExportOutlined />} onClick={handleExport}>Export</Button>
@@ -638,7 +666,6 @@ const AttendanceManagement = () => {
                 </Space>
               </div>
             )}
-            {/* Stats row below header (under date/mark/export) */}
             <div className="att-stats" style={{ marginBottom: 12 }}>
               <div className="att-stat">
                 <span className="att-stat-icon present"><img src="https://res.cloudinary.com/dgif730br/image/upload/v1768896898/Container_tcew9a.png" alt="Present" /></span>
@@ -747,9 +774,24 @@ const AttendanceManagement = () => {
                   filterOption={(input, option) =>
                     String(option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                   }
-                  onSelect={(uid) => {
+                  onSelect={async (uid) => {
+                    const dateStr = selectedDate.format('YYYY-MM-DD');
+                    try {
+                      const res = await api.get(`/admin/attendance/check-leave?userId=${uid}&date=${dateStr}`);
+                      if (res.data.onLeave) {
+                        setStaffOnLeave(true);
+                        message.warning('today this staff is on paid leave');
+                      } else {
+                        setStaffOnLeave(false);
+                      }
+                    } catch (_) {
+                      setStaffOnLeave(false);
+                    }
+
+                    fetchSpecialDayStatus(uid, dateStr);
+
                     const rec = attendance.find(
-                      a => (a.userId === uid || a.userId === Number(uid)) && a.date === selectedDate.format('YYYY-MM-DD')
+                      a => (a.userId === uid || a.userId === Number(uid)) && a.date === dateStr
                     );
                     if (rec) {
                       markForm.setFieldsValue({
@@ -764,9 +806,16 @@ const AttendanceManagement = () => {
                         checkOut: parseTimeValue('18:00'),
                       });
                     }
-                    // Fetch shift for this specific user to check OT rules
+                    // Fetch shift for this specific user to check OT rules and update times
                     api.get(`/admin/shifts/effective/${uid}`).then(res => {
-                      setEffectiveShift(res.data?.shift || null);
+                      const shift = res.data?.shift;
+                      setEffectiveShift(shift || null);
+                      if (!rec && shift) {
+                        markForm.setFieldsValue({
+                          checkIn: parseTimeValue(shift.startTime) || parseTimeValue('09:30'),
+                          checkOut: parseTimeValue(shift.endTime) || parseTimeValue('18:00'),
+                        });
+                      }
                     }).catch(() => setEffectiveShift(null));
                   }}
                 >
@@ -775,8 +824,21 @@ const AttendanceManagement = () => {
                   ))}
                 </Select>
               </Form.Item>
-              <Form.Item name="date" label="Month" rules={[{ required: true, message: 'Please choose month' }]} >
-                <DatePicker style={{ width: '100%' }} picker="month" format="MMM YYYY" />
+
+              {staffOnLeave && (
+                <div style={{ marginBottom: 16, padding: '8px 12px', background: '#fff1f0', border: '1px solid #ffa39e', borderRadius: 4, color: '#cf1322', fontWeight: 500 }}>
+                  today this staff is on paid leave
+                </div>
+              )}
+
+              {staffOffMsg && (
+                <div style={{ marginBottom: 16, padding: '8px 12px', background: '#fff7e6', border: '1px solid #ffe58f', borderRadius: 4, color: '#d46b08', fontWeight: 500 }}>
+                  {staffOffMsg}
+                </div>
+              )}
+
+              <Form.Item name="date" label="Date" rules={[{ required: true, message: 'Please choose date' }]} >
+                <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
               </Form.Item>
               <Form.Item name="status" label="Status" rules={[{ required: true }]}>
                 <Radio.Group>
@@ -1019,10 +1081,10 @@ const AttendanceManagement = () => {
                         </div>
                       </div>
                     )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
           </Modal>
           <Modal
             title={`Attendance Logs - ${logsData?.user?.name || 'Staff'}`}

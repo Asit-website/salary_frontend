@@ -35,7 +35,6 @@ import {
   ClockCircleOutlined,
   ExclamationCircleOutlined,
   CalendarOutlined,
-  DollarOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined
@@ -875,7 +874,7 @@ const AssetMaintenance = () => {
                       }
                     </Descriptions.Item>
                     <Descriptions.Item label="Estimated Cost">
-                      {selectedMaintenance.cost ? `$${parseFloat(selectedMaintenance.cost).toFixed(2)}` : '-'}
+                      {selectedMaintenance.cost ? `₹${parseFloat(selectedMaintenance.cost).toFixed(2)}` : '-'}
                     </Descriptions.Item>
                     <Descriptions.Item label="Vendor">
                       {selectedMaintenance.vendor || '-'}

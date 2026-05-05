@@ -196,14 +196,14 @@ const RosterManagement = () => {
           >
             Weekly Off
           </Button>
-          <Button 
+          {/* <Button 
             type={entry?.status === 'HOLIDAY' ? 'primary' : 'default'} 
             block 
             icon={<CalendarOutlined />}
             onClick={() => updateRoster(userId, date, 'HOLIDAY', null)}
           >
             Holiday
-          </Button>
+          </Button> */}
           
           {entry && (
             <Button 
@@ -452,7 +452,7 @@ const RosterManagement = () => {
               <Select>
                 <Option value="SHIFT">Assign Shift</Option>
                 <Option value="WEEKLY_OFF">Weekly Off</Option>
-                <Option value="HOLIDAY">Holiday</Option>
+                {/* <Option value="HOLIDAY">Holiday</Option> */}
                 <Option value="DELETE">Clear Assignment</Option>
               </Select>
             </Form.Item>

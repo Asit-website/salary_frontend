@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Card, Table, Button, Select, DatePicker, Tag, Space, Typography, Row, Col, Statistic, message, Modal, Form, Input, InputNumber, Upload, Popconfirm } from 'antd';
 import {
-    DollarOutlined,
     CheckCircleOutlined,
     CloseCircleOutlined,
     ClockCircleOutlined,
@@ -14,7 +13,8 @@ import {
     UploadOutlined,
     WalletOutlined,
     FilterOutlined,
-    EyeOutlined
+    EyeOutlined,
+    DownloadOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api, { API_BASE_URL } from '../api';
@@ -137,6 +137,35 @@ const ExpenseManagement = () => {
             message.error('Failed to create expense claim');
         } finally {
             setAddLoading(false);
+        }
+    };
+
+    const handleExport = async () => {
+        try {
+            const params = {};
+            if (filterStatus && filterStatus !== 'all') params.status = filterStatus;
+            if (filterStaff) params.staffId = filterStaff;
+            if (filterType && filterType !== 'all') params.expenseType = filterType;
+            if (filterDates && filterDates.length === 2) {
+                params.startDate = filterDates[0].format('YYYY-MM-DD');
+                params.endDate = filterDates[1].format('YYYY-MM-DD');
+            }
+
+            const response = await api.get('/admin/expenses/export', {
+                params,
+                responseType: 'blob'
+            });
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `expenses_export_${dayjs().format('YYYY-MM-DD')}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            message.success('Expenses exported successfully');
+        } catch (e) {
+            message.error('Failed to export expenses');
         }
     };
 
@@ -324,7 +353,7 @@ const ExpenseManagement = () => {
                     {/* Filters & Actions */}
                     <Card style={{ marginBottom: 16, borderRadius: 12 }}>
                         <Row gutter={[16, 12]} align="middle">
-                            <Col span={4}>
+                            <Col span={3}>
                                 <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#666' }}>Status</label>
                                 <Select value={filterStatus} onChange={setFilterStatus} style={{ width: '100%' }} placeholder="Status">
                                     <Option value="all">All Status</Option>
@@ -334,7 +363,7 @@ const ExpenseManagement = () => {
                                     <Option value="settled">Settled</Option>
                                 </Select>
                             </Col>
-                            <Col span={5}>
+                            <Col span={4}>
                                 <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#666' }}>Staff</label>
                                 <Select
                                     value={filterStaff}
@@ -350,7 +379,7 @@ const ExpenseManagement = () => {
                                     ))}
                                 </Select>
                             </Col>
-                            <Col span={4}>
+                            <Col span={3}>
                                 <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#666' }}>Type</label>
                                 <Select value={filterType} onChange={setFilterType} style={{ width: '100%' }} placeholder="Type">
                                     <Option value="all">All Types</Option>
@@ -359,7 +388,7 @@ const ExpenseManagement = () => {
                                     ))}
                                 </Select>
                             </Col>
-                            <Col span={6}>
+                            <Col span={5}>
                                 <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#666' }}>Date Range</label>
                                 <RangePicker
                                     value={filterDates}
@@ -369,11 +398,17 @@ const ExpenseManagement = () => {
                             </Col>
                             <Col span={2}>
                                 <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'transparent' }}>.</label>
-                                <Button icon={<ReloadOutlined />} onClick={() => { setFilterStatus('all'); setFilterStaff(null); setFilterType('all'); setFilterDates(null); setPage(1); }}>
+                                <Button icon={<ReloadOutlined />} onClick={() => { setFilterStatus('all'); setFilterStaff(null); setFilterType('all'); setFilterDates(null); setPage(1); }} style={{ width: '100%' }}>
                                     Reset
                                 </Button>
                             </Col>
                             <Col span={3}>
+                                <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'transparent' }}>.</label>
+                                <Button icon={<DownloadOutlined />} onClick={handleExport} style={{ width: '100%' }}>
+                                    Export
+                                </Button>
+                            </Col>
+                            <Col span={4}>
                                 <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'transparent' }}>.</label>
                                 <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddVisible(true)} style={{ width: '100%' }}>
                                     Add Claim

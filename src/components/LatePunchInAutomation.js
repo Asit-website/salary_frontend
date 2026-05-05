@@ -1,5 +1,6 @@
 import { Layout, Typography, Card, Space, Table, Button, Modal, Form, Input, Select, InputNumber, Switch, message, Breadcrumb, Divider, Tag, Checkbox, Row, Col } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, HomeOutlined, ThunderboltOutlined, ArrowLeftOutlined, DeleteFilled, InfoCircleOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import React, { useState, useEffect } from 'react';
@@ -29,6 +30,7 @@ export default function LatePunchInAutomation() {
     const [assignedListRule, setAssignedListRule] = useState(null);
     const [assignedListRows, setAssignedListRows] = useState([]);
     const [assignedListLoading, setAssignedListLoading] = useState(false);
+    const [assignedSearch, setAssignedSearch] = useState('');
 
     useEffect(() => {
         fetchRules();
@@ -50,7 +52,7 @@ export default function LatePunchInAutomation() {
 
     const handleSave = async (formValues) => {
         const values = { ...formValues };
-        
+
         try {
             if (editingRule) {
                 await api.put(`/admin/settings/late-punchin-rules/${editingRule.id}`, values);
@@ -114,7 +116,10 @@ export default function LatePunchInAutomation() {
     const openAssignedList = async (rule, keepOpen = false) => {
         try {
             setAssignedListRule(rule);
-            if (!keepOpen) setAssignedListOpen(true);
+            if (!keepOpen) {
+                setAssignedListOpen(true);
+                setAssignedSearch('');
+            }
             setAssignedListLoading(true);
             const res = await api.get(`/admin/settings/late-punchin-rules/${rule.id}/assignments`);
             setAssignedListRows(res.data?.assignments || []);
@@ -138,15 +143,15 @@ export default function LatePunchInAutomation() {
 
     const columns = [
         { title: 'Rule Name', dataIndex: 'name', key: 'name' },
-        { 
-            title: 'Penalty Type', 
-            dataIndex: 'penaltyType', 
+        {
+            title: 'Penalty Type',
+            dataIndex: 'penaltyType',
             key: 'penaltyType',
             render: (type) => <Tag color="orange">{type.replace(/_/g, ' ')}</Tag>
         },
-        { 
-            title: 'Status', 
-            dataIndex: 'active', 
+        {
+            title: 'Status',
+            dataIndex: 'active',
             key: 'active',
             render: (active) => active ? <Tag color="success">Active</Tag> : <Tag color="error">Inactive</Tag>
         },
@@ -159,8 +164,8 @@ export default function LatePunchInAutomation() {
                 </Tag>
             )
         },
-        { 
-            title: 'Actions', 
+        {
+            title: 'Actions',
             key: 'actions',
             render: (_, record) => (
                 <Space>
@@ -169,9 +174,9 @@ export default function LatePunchInAutomation() {
                         setEditingRule(record);
                         let thresholds = record.thresholds || [];
                         if (typeof thresholds === 'string') {
-                            try { thresholds = JSON.parse(thresholds); } catch(e) { thresholds = []; }
+                            try { thresholds = JSON.parse(thresholds); } catch (e) { thresholds = []; }
                         }
-                        
+
                         form.setFieldsValue({
                             ...record,
                             thresholds: Array.isArray(thresholds) ? thresholds : []
@@ -223,7 +228,7 @@ export default function LatePunchInAutomation() {
                     >
                         <Form form={form} layout="vertical" onFinish={handleSave}>
                             <Row gutter={24}>
-                                <Col span={16}>
+                                <Col span={10}>
                                     <Form.Item name="name" label={<Text strong>Rule Name <span style={{ color: 'red' }}>*</span></Text>} rules={[{ required: true }]}>
                                         <Input placeholder="e.g. Standard 15m Late Penalty" />
                                     </Form.Item>
@@ -239,22 +244,28 @@ export default function LatePunchInAutomation() {
                                         </Select>
                                     </Form.Item>
                                 </Col>
+                                <Col span={3}>
+                                    <Form.Item name="bufferMinutes" label={<Text strong>Buffer (min)</Text>} initialValue={0}>
+                                        <InputNumber style={{ width: '100%' }} min={0} />
+                                    </Form.Item>
+                                </Col>
+                                <Col span={3}>
+                                    <Form.Item name="active" valuePropName="checked" initialValue={true} style={{ marginTop: 30 }}>
+                                        <Checkbox><Text strong>Active</Text></Checkbox>
+                                    </Form.Item>
+                                </Col>
                             </Row>
-
-                            <Form.Item name="active" valuePropName="checked" initialValue={true}>
-                                <Checkbox><Text strong>Rule is active</Text></Checkbox>
-                            </Form.Item>
 
                             <Divider orientation="left">Penalty Logic</Divider>
 
                             <div style={{ background: '#f9f9f9', padding: '16px', borderRadius: '8px' }}>
-                                <Form.Item 
-                                    noStyle 
+                                <Form.Item
+                                    noStyle
                                     shouldUpdate={(prev, curr) => prev.penaltyType !== curr.penaltyType}
                                 >
                                     {({ getFieldValue }) => {
                                         const pType = getFieldValue('penaltyType');
-                                        
+
                                         if (pType === 'SLABS') {
                                             return (
                                                 <Form.List name="thresholds" initialValue={[{ minMinutes: 15, maxMinutes: 60, deduction: 0.5, frequency: 1 }]}>
@@ -298,26 +309,26 @@ export default function LatePunchInAutomation() {
                                         return (
                                             <Form.List name="thresholds" initialValue={[{ minMinutes: 15, value: 0 }]}>
                                                 {(fields, { add, remove }) => (
-                                                  <>
-                                                    {fields.map(({ key, name, ...restField }) => (
-                                                      <Row key={key} gutter={16} align="bottom">
-                                                        <Col span={10}>
-                                                          <Form.Item {...restField} name={[name, 'minMinutes']} label="If Late more than (minutes)" rules={[{ required: true }]}>
-                                                            <InputNumber style={{ width: '100%' }} min={1} />
-                                                          </Form.Item>
-                                                        </Col>
-                                                        <Col span={10}>
-                                                          <Form.Item {...restField} name={[name, 'value']} label={pType.includes('AMOUNT') ? "Penalty Amount (₹)" : "Status Only"} rules={[{ required: pType.includes('AMOUNT') }]}>
-                                                            <InputNumber style={{ width: '100%' }} prefix={pType.includes('AMOUNT') ? '₹' : ''} min={0} disabled={!pType.includes('AMOUNT')} />
-                                                          </Form.Item>
-                                                        </Col>
-                                                        <Col span={4}>
-                                                          {fields.length > 1 && <Button type="text" danger icon={<DeleteFilled />} onClick={() => remove(name)} style={{ marginBottom: 5 }} />}
-                                                        </Col>
-                                                      </Row>
-                                                    ))}
-                                                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Condition</Button>
-                                                  </>
+                                                    <>
+                                                        {fields.map(({ key, name, ...restField }) => (
+                                                            <Row key={key} gutter={16} align="bottom">
+                                                                <Col span={10}>
+                                                                    <Form.Item {...restField} name={[name, 'minMinutes']} label="If Late more than (minutes)" rules={[{ required: true }]}>
+                                                                        <InputNumber style={{ width: '100%' }} min={1} />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                                <Col span={10}>
+                                                                    <Form.Item {...restField} name={[name, 'value']} label={pType.includes('AMOUNT') ? "Penalty Amount (₹)" : "Status Only"} rules={[{ required: pType.includes('AMOUNT') }]}>
+                                                                        <InputNumber style={{ width: '100%' }} prefix={pType.includes('AMOUNT') ? '₹' : ''} min={0} disabled={!pType.includes('AMOUNT')} />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                                <Col span={4}>
+                                                                    {fields.length > 1 && <Button type="text" danger icon={<DeleteFilled />} onClick={() => remove(name)} style={{ marginBottom: 5 }} />}
+                                                                </Col>
+                                                            </Row>
+                                                        ))}
+                                                        <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Condition</Button>
+                                                    </>
                                                 )}
                                             </Form.List>
                                         );
@@ -329,8 +340,23 @@ export default function LatePunchInAutomation() {
 
                     {/* Assign Modal */}
                     <Modal title={assigningRule ? `Assign Staff • ${assigningRule.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
-                        <Space direction="vertical" style={{ width:'100%' }} size={12}>
-                            <Text type="secondary">Select staff members to apply this penalty rule to:</Text>
+                        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Text type="secondary">Select staff members to apply this penalty rule to:</Text>
+                                <Button
+                                    size="small"
+                                    type="link"
+                                    onClick={() => {
+                                        if (selectedStaffIds.length === staffOptions.length) {
+                                            setSelectedStaffIds([]);
+                                        } else {
+                                            setSelectedStaffIds(staffOptions.map(o => o.value));
+                                        }
+                                    }}
+                                >
+                                    {selectedStaffIds.length === staffOptions.length ? 'Deselect All' : 'Select All'}
+                                </Button>
+                            </div>
                             <Select
                                 mode="multiple"
                                 options={staffOptions}
@@ -352,15 +378,33 @@ export default function LatePunchInAutomation() {
                         footer={null}
                         width={900}
                     >
+                        <div style={{ marginBottom: 16 }}>
+                            <Input.Search
+                                placeholder="Search staff by name, ID or phone..."
+                                allowClear
+                                value={assignedSearch}
+                                onChange={e => setAssignedSearch(e.target.value)}
+                                onSearch={setAssignedSearch}
+                                style={{ width: 350 }}
+                            />
+                        </div>
                         <Table
                             rowKey="id"
                             loading={assignedListLoading}
-                            dataSource={assignedListRows}
+                            dataSource={(assignedListRows || []).filter(r => {
+                                if (!assignedSearch) return true;
+                                const s = assignedSearch.toLowerCase();
+                                const name = (r.user?.profile?.name || '').toLowerCase();
+                                const sid = (r.user?.profile?.staffId || '').toLowerCase();
+                                const phone = (r.user?.phone || '').toLowerCase();
+                                return name.includes(s) || sid.includes(s) || phone.includes(s);
+                            })}
                             size="small"
                             pagination={{ pageSize: 8 }}
                             columns={[
                                 { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
                                 { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
+                                { title: 'Assigned Date', render: (_, r) => r.createdAt ? dayjs(r.createdAt).format('DD-MM-YYYY') : '-' },
                                 { title: 'Department', render: (_, r) => r.user?.profile?.department || '-' },
                                 { title: 'Designation', render: (_, r) => r.user?.profile?.designation || '-' },
                                 {

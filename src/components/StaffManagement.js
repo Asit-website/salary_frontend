@@ -16,11 +16,13 @@ import {
   MenuUnfoldOutlined,
   FileTextOutlined,
   UploadOutlined,
-  CloseCircleOutlined
+  CloseCircleOutlined,
+  HomeOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -181,7 +183,7 @@ const StaffManagement = () => {
   // Calculate stats
   const totalEmployees = filteredStaff.length;
   const activeEmployees = filteredStaff.filter(s => s.status === 'active').length;
-  const onLeaveEmployees = filteredStaff.filter(s => s.status === 'inactive').length;
+  const inactiveEmployees = filteredStaff.filter(s => s.status === 'inactive').length;
 
   // Get unique departments for filter
   const uniqueDepartments = [...new Set(staff.map(s => s.department).filter(Boolean))].sort();
@@ -198,6 +200,7 @@ const StaffManagement = () => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('multi_account');
     navigate('/');
   };
 
@@ -490,6 +493,16 @@ const StaffManagement = () => {
       ),
     },
     {
+      title: 'Org Access',
+      dataIndex: 'canCreateOrg',
+      key: 'canCreateOrg',
+      render: (canCreateOrg) => (
+        <Tag color={canCreateOrg ? 'green' : 'default'} style={{ fontSize: '12px' }}>
+          {canCreateOrg ? 'Allowed' : 'Denied'}
+        </Tag>
+      ),
+    },
+    {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
@@ -545,28 +558,11 @@ const StaffManagement = () => {
       <Sidebar collapsed={collapsed} />
 
       <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
-        <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
-              className: 'trigger',
-              onClick: () => setCollapsed(!collapsed),
-              style: { fontSize: '18px', padding: '0 24px' }
-            })}
-            <Title level={4} style={{ margin: 0 }}>Staff Management</Title>
-          </div>
-          <Menu
-            theme="light"
-            mode="horizontal"
-            items={[
-              {
-                key: 'logout',
-                icon: <LogoutOutlined />,
-                label: 'Logout',
-                onClick: handleLogout
-              }
-            ]}
-          />
-        </Header>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Staff Management" 
+        />
 
         <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
           <Modal
@@ -767,26 +763,22 @@ const StaffManagement = () => {
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                   <div>
-                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>On Leave</div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>Inactive Employees</div>
                     <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>
-                      {onLeaveEmployees}
+                      {inactiveEmployees}
                     </div>
                   </div>
                   <div style={{
                     width: '40px',
                     height: '40px',
-                    background: '#fff2e8',
+                    background: '#fff1f0',
                     borderRadius: '6px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}>
-                    <CalendarOutlined style={{ color: '#fa8c16', fontSize: '18px' }} />
+                    <UserOutlined style={{ color: '#ff4d4f', fontSize: '18px' }} />
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-
-
                 </div>
               </Card>
             </Col>
@@ -1197,7 +1189,14 @@ const StaffManagement = () => {
                 multiple={false}
                 action={`${api.defaults.baseURL}/admin/staff/import`}
                 headers={{
-                  Authorization: `Bearer ${localStorage.getItem('token')}`
+                  Authorization: `Bearer ${sessionStorage.getItem('impersonate_token') || localStorage.getItem('token')}`,
+                  'X-Org-Id': (() => {
+                    const userStr = sessionStorage.getItem('impersonate_user') || localStorage.getItem('user');
+                    if (userStr) {
+                      try { return JSON.parse(userStr)?.orgAccountId || ''; } catch (_) { return ''; }
+                    }
+                    return '';
+                  })()
                 }}
                 onChange={(info) => {
                   const { status } = info.file;

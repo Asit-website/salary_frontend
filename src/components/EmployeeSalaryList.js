@@ -3,7 +3,6 @@ import { Layout, Card, Table, Button, Typography, Tag, Space, Input, message, Me
 import {
     UserOutlined,
     SearchOutlined,
-    DollarOutlined,
     EyeOutlined,
     MenuFoldOutlined,
     MenuUnfoldOutlined,
@@ -139,13 +138,13 @@ const EmployeeSalaryList = () => {
             title: 'Package Gross',
             dataIndex: 'grossSalary',
             key: 'grossSalary',
-            render: (val) => <Text strong>₹ {(Number(val) || 0).toLocaleString('en-IN')}</Text>
+            render: (val) => <Text strong>₹ {(Number(val) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
         },
         {
             title: 'Package Net',
             dataIndex: 'netSalary',
             key: 'netSalary',
-            render: (val) => <Text strong style={{ color: '#52c41a' }}>₹ {(Number(val) || 0).toLocaleString('en-IN')}</Text>
+            render: (val) => <Text strong style={{ color: '#52c41a' }}>₹ {(Number(val) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
         },
         {
             title: 'Actions',
@@ -172,7 +171,7 @@ const EmployeeSalaryList = () => {
                     {rows.map(([key, value]) => (
                         <tr key={key} style={{ borderBottom: '1px solid #f0f0f0' }}>
                             <td style={{ padding: '8px 0', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</td>
-                            <td style={{ padding: '8px 0', textAlign: 'right' }}>₹ {Number(value).toLocaleString('en-IN')}</td>
+                            <td style={{ padding: '8px 0', textAlign: 'right' }}>₹ {Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -281,12 +280,12 @@ const EmployeeSalaryList = () => {
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, padding: '15px', background: '#f9f9f9', borderRadius: '8px', border: '1px solid #e8e8e8' }}>
                                     <Space direction="vertical" size={0}>
-                                        <Text type="secondary">Gross Total: <Text strong>₹ {(Number(selectedStaff.grossSalary) || 0).toLocaleString('en-IN')}</Text></Text>
-                                        <Text type="secondary">Total Deductions: <Text strong style={{ color: '#ff4d4f' }}>₹ {(Number(selectedStaff.grossSalary - selectedStaff.netSalary) || 0).toLocaleString('en-IN')}</Text></Text>
+                                        <Text type="secondary">Gross Total: <Text strong>₹ {(Number(selectedStaff.grossSalary) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text></Text>
+                                        <Text type="secondary">Total Deductions: <Text strong style={{ color: '#ff4d4f' }}>₹ {(Number(selectedStaff.grossSalary - selectedStaff.netSalary) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text></Text>
                                     </Space>
                                     <div style={{ textAlign: 'right' }}>
                                         <Text strong style={{ fontSize: '14px', display: 'block', color: '#8c8c8c' }}>Final Package Net</Text>
-                                        <Title level={2} style={{ margin: 0, color: '#52c41a' }}>₹ {(Number(selectedStaff.netSalary) || 0).toLocaleString('en-IN')}</Title>
+                                        <Title level={2} style={{ margin: 0, color: '#52c41a' }}>₹ {(Number(selectedStaff.netSalary) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Title>
                                     </div>
                                 </div>
                             </div>

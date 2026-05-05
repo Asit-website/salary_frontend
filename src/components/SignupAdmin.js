@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Layout, Card, Form, Input, Button, Typography, message, Select, DatePicker } from 'antd';
+import { Layout, Card, Form, Input, Button, Typography, message, Select, DatePicker, Tag, Row, Col, Space } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { PhoneOutlined, UserOutlined, MailOutlined, ShopOutlined, EnvironmentOutlined, IdcardOutlined, TeamOutlined, HomeOutlined, CalendarOutlined, SafetyCertificateOutlined, ArrowRightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../api';
 
 const { Header, Content } = Layout;
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 export default function SignupAdmin() {
   const [params] = useSearchParams();
@@ -62,86 +63,207 @@ export default function SignupAdmin() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-      {/* <Header style={{ background: '#001529', textAlign: 'center' }}>
-        <div style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>
-          ThinkTech Attendance Admin
-        </div>
-      </Header> */}
-      <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '50px' }}>
-        <Card title={submitted ? "Signup Received" : "Admin Signup"} style={{ width: 480, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-          {submitted ? (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <Typography.Title level={4} style={{ color: '#52c41a', marginBottom: 24 }}>
-                Thank you for reaching out to us.
-              </Typography.Title>
-              <Typography.Paragraph style={{ fontSize: '16px', lineHeight: '1.6' }}>
-                Your message has been received and one of our team members will respond within 24–48 hours.
-              </Typography.Paragraph>
-              <Button type="primary" size="large" onClick={() => navigate('/')} style={{ marginTop: 24 }}>
-                Go to Login
-              </Button>
-            </div>
-          ) : (
-            <Form layout="vertical" size="large" onFinish={onFinish} initialValues={{ phone: phonePrefill }}>
-              {/* Form items remain same */}
-              <Form.Item label="Phone" name="phone" required>
-                <Input maxLength={10} placeholder="10-digit phone" />
-              </Form.Item>
-              <Form.Item label="Your Name" name="name" required>
-                <Input placeholder="Enter your name" />
-              </Form.Item>
-              <Form.Item label="Business Email" name="businessEmail">
-                <Input placeholder="name@company.com" type="email" />
-              </Form.Item>
-              <Form.Item label="Business Name" name="businessName" required>
-                <Input placeholder="Your company / shop name" />
-              </Form.Item>
-              <Form.Item label="State" name="state">
-                <Input placeholder="State" />
-              </Form.Item>
-              <Form.Item label="City" name="city">
-                <Input placeholder="City" />
-              </Form.Item>
-              <Form.Item label="Channel Partner Id" name="channelPartnerId">
-                <Input placeholder="Channel Partner Id" />
-              </Form.Item>
-              <Form.Item label="Describe your role in the organization" name="roleDescription">
-                <Input.TextArea rows={3} placeholder="e.g. Owner/HR/Manager" />
-              </Form.Item>
-              <Form.Item label="How many employees are there in your business?" name="employeeCount">
-                <Select options={[
-                  { value: 'Less than 20', label: 'Less than 20' },
-                  { value: '20-100', label: '20-100' },
-                  { value: '100-500', label: '100-500' },
-                  { value: 'More than 500', label: 'More than 500' },
-                ]} placeholder="Select" />
-              </Form.Item>
-              <Form.Item label="Contact Person Name" name="contactPersonName">
-                <Input placeholder="Full Name" />
-              </Form.Item>
-              <Form.Item label="Detailed Address" name="address">
-                <Input.TextArea rows={2} placeholder="Building, Street, Area..." />
-              </Form.Item>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <Form.Item label="Birth Date" name="birthDate">
-                  <DatePicker style={{ width: '100%' }} />
-                </Form.Item>
-                <Form.Item label="Anniversary Date" name="anniversaryDate">
-                  <DatePicker style={{ width: '100%' }} />
-                </Form.Item>
+    <Layout style={{ minHeight: '100vh', background: '#fff' }}>
+      <Content style={{ padding: 0 }}>
+        <Row style={{ minHeight: '100vh' }}>
+          {/* Left Column - Design Illustration */}
+          <Col 
+            xs={0} 
+            md={10} 
+            lg={12} 
+            style={{ 
+              background: 'linear-gradient(135deg, #f8fbff 0%, #e0eaff 100%)',
+              position: 'relative',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'flex-start',
+              padding: '100px 60px',
+              borderRight: '1px solid #f0f0f0'
+            }}
+          >
+            <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '400px', height: '400px', borderRadius: '50%', background: 'rgba(36,99,235,0.05)' }}></div>
+            <div style={{ position: 'absolute', bottom: '10%', left: '-5%', width: '250px', height: '250px', borderRadius: '50%', background: 'rgba(18,101,205,0.05)' }}></div>
+            
+            <div style={{ position: 'relative', zIndex: 2 }}>
+              <div style={{ marginBottom: 24 }}>
+                <Tag color="blue" style={{ borderRadius: 20, padding: '2px 12px', fontWeight: 600, background: 'rgba(36,99,235,0.1)', color: '#2463EB', border: 'none' }}>
+                  SYSTEM STATUS
+                </Tag>
               </div>
-              <Form.Item label="GST Number" name="gstNumber">
-                <Input placeholder="22AAAAA0000A1Z5" />
-              </Form.Item>
-              <Form.Item>
-                <Button type="primary" htmlType="submit" loading={loading} style={{ width: '100%' }}>
-                  Create Account
-                </Button>
-              </Form.Item>
-            </Form>
-          )}
-        </Card>
+              <Title level={1} style={{ color: '#101828', fontSize: '3.5rem', fontWeight: 800, lineHeight: 1.1, marginBottom: 24 }}>
+                Advanced Intelligence for <span style={{ color: '#2463EB' }}>Modern Enterprise.</span>
+              </Title>
+              
+              <div style={{ marginTop: 48, position: 'relative' }}>
+                <div style={{ maxWidth: 640 }}>
+                  <img 
+                    src="/pina.png" 
+                    alt="Dashboard Illustration" 
+                    style={{ width: '100%' }} 
+                  />
+                </div>
+              </div>
+            </div>
+          </Col>
+
+          {/* Right Column - Form */}
+          <Col xs={24} md={14} lg={12} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', overflowY: 'auto' }}>
+            <div style={{ width: '100%', maxWidth: 540, padding: '60px 40px' }}>
+              
+              {submitted ? (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ marginBottom: 24, fontSize: 64 }}>✅</div>
+                  <Title level={2} style={{ fontWeight: 800, marginBottom: 16, color: '#2564EB' }}>Signup Received</Title>
+                  <Text type="secondary" style={{ fontSize: 18, color: '#667085', display: 'block', marginBottom: 32 }}>
+                    Thank you for reaching out to us. Your message has been received and one of our team members will respond within 24–48 hours.
+                  </Text>
+                  <Button 
+                    type="primary" 
+                    size="large" 
+                    onClick={() => navigate('/')}
+                    style={{ 
+                      height: 52, 
+                      padding: '0 40px', 
+                      borderRadius: 12, 
+                      background: '#2463EB', 
+                      fontWeight: 600,
+                      border: 'none',
+                      boxShadow: '0 4px 14px rgba(36,99,235,0.25)'
+                    }}
+                  >
+                    Go to Login
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ marginBottom: 40 }}>
+                    <Title level={2} style={{ fontWeight: 800, marginBottom: 12, color: '#2564EB', fontSize: 32 }}>
+                      Claim your spot in the future
+                    </Title>
+                    <Text type="secondary" style={{ fontSize: 16, color: '#667085' }}>
+                      Start your journey with full attendance and payroll support.
+                    </Text>
+                  </div>
+
+                  <Form 
+                    layout="vertical" 
+                    size="large" 
+                    onFinish={onFinish} 
+                    initialValues={{ phone: phonePrefill }}
+                    requiredMark={false}
+                  >
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item label={<Text strong>Your Name</Text>} name="name" rules={[{ required: true, message: 'Please enter your name' }]}>
+                          <Input prefix={<UserOutlined style={{ color: '#98a2b3' }} />} placeholder="Full Name" style={{ borderRadius: 10 }} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item label={<Text strong>Phone Number</Text>} name="phone" rules={[{ required: true, message: 'Please enter your phone' }]}>
+                          <Input prefix={<PhoneOutlined style={{ color: '#98a2b3' }} />} maxLength={10} placeholder="10-digit phone" style={{ borderRadius: 10 }} />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Form.Item label={<Text strong>Business Name</Text>} name="businessName" rules={[{ required: true, message: 'Please enter business name' }]}>
+                      <Input prefix={<ShopOutlined style={{ color: '#98a2b3' }} />} placeholder="Company / Shop name" style={{ borderRadius: 10 }} />
+                    </Form.Item>
+
+                    <Form.Item label={<Text strong>Business Email</Text>} name="businessEmail">
+                      <Input prefix={<MailOutlined style={{ color: '#98a2b3' }} />} placeholder="name@company.com" type="email" style={{ borderRadius: 10 }} />
+                    </Form.Item>
+
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item label={<Text strong>State</Text>} name="state">
+                          <Input placeholder="State" style={{ borderRadius: 10 }} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item label={<Text strong>City</Text>} name="city">
+                          <Input placeholder="City" style={{ borderRadius: 10 }} />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Form.Item label={<Text strong>GST Number</Text>} name="gstNumber">
+                      <Input prefix={<SafetyCertificateOutlined style={{ color: '#98a2b3' }} />} placeholder="22AAAAA0000A1Z5" style={{ borderRadius: 10 }} />
+                    </Form.Item>
+
+                    <Form.Item label={<Text strong>Employee Count</Text>} name="employeeCount">
+                      <Select placeholder="How many employees?" style={{ borderRadius: 10 }}>
+                        <Select.Option value="Less than 20">Less than 20</Select.Option>
+                        <Select.Option value="20-100">20-100</Select.Option>
+                        <Select.Option value="100-500">100-500</Select.Option>
+                        <Select.Option value="More than 500">More than 500</Select.Option>
+                      </Select>
+                    </Form.Item>
+
+                    <Form.Item label={<Text strong>Role Description</Text>} name="roleDescription">
+                      <Input.TextArea rows={2} placeholder="e.g. Owner/HR/Manager" style={{ borderRadius: 10 }} />
+                    </Form.Item>
+
+                    <Form.Item label={<Text strong>Detailed Address</Text>} name="address">
+                      <Input.TextArea rows={2} placeholder="Building, Street, Area..." style={{ borderRadius: 10 }} />
+                    </Form.Item>
+
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item label={<Text strong>Birth Date</Text>} name="birthDate">
+                          <DatePicker style={{ width: '100%', borderRadius: 10 }} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item label={<Text strong>Anniversary Date</Text>} name="anniversaryDate">
+                          <DatePicker style={{ width: '100%', borderRadius: 10 }} />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Form.Item label={<Text strong>Channel Partner Id</Text>} name="channelPartnerId">
+                      <Input prefix={<IdcardOutlined style={{ color: '#98a2b3' }} />} placeholder="Optional" style={{ borderRadius: 10 }} />
+                    </Form.Item>
+
+                    <Form.Item style={{ marginTop: 24 }}>
+                      <Button 
+                        type="primary" 
+                        htmlType="submit" 
+                        loading={loading} 
+                        icon={<ArrowRightOutlined />}
+                        style={{ 
+                          width: '100%', 
+                          height: 52, 
+                          fontWeight: 600, 
+                          fontSize: 16, 
+                          borderRadius: 12, 
+                          background: '#2463EB', 
+                          border: 'none',
+                          boxShadow: '0 4px 14px rgba(36,99,235,0.25)' 
+                        }}
+                      >
+                        Onboard Now
+                      </Button>
+                    </Form.Item>
+
+                    <div style={{ textAlign: 'center', marginTop: 16 }}>
+                      <Text type="secondary">Already part of the ecosystem? </Text>
+                      <Button type="link" onClick={() => navigate('/')} style={{ padding: 0, fontWeight: 700, color: '#2463EB' }}>
+                        Log In
+                      </Button>
+                    </div>
+                  </Form>
+                </>
+              )}
+
+              <div style={{ marginTop: 48, textAlign: 'center' }}>
+                <Text type="secondary" style={{ fontSize: 14, color: '#667085' }}>
+                  By continuing you agree to our <a href="/terms" style={{ color: '#2463EB', fontWeight: 600 }}>Privacy Policy</a> and <a href="/terms" style={{ color: '#2463EB', fontWeight: 600 }}>Terms of Use</a>
+                </Text>
+              </div>
+            </div>
+          </Col>
+        </Row>
       </Content>
     </Layout>
   );

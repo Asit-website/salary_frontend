@@ -1,5 +1,6 @@
 import { Layout, Typography, Card, Space, Table, Button, Modal, Form, Input, Select, InputNumber, Switch, message, Breadcrumb, Divider, Tag, Checkbox, Row, Col } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, HomeOutlined, ThunderboltOutlined, ArrowLeftOutlined, DeleteFilled } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import React, { useState, useEffect } from 'react';
@@ -29,6 +30,7 @@ export default function EarlyOvertimeAutomation() {
     const [assignedListRule, setAssignedListRule] = useState(null);
     const [assignedListRows, setAssignedListRows] = useState([]);
     const [assignedListLoading, setAssignedListLoading] = useState(false);
+    const [assignedSearch, setAssignedSearch] = useState('');
 
     useEffect(() => {
         fetchRules();
@@ -60,7 +62,7 @@ export default function EarlyOvertimeAutomation() {
 
     const handleSave = async (formValues) => {
         const values = { ...formValues };
-        
+
         // Convert hh:mm to minutes for thresholds
         if (values.thresholds) {
             values.thresholds = values.thresholds.map(t => ({
@@ -136,7 +138,10 @@ export default function EarlyOvertimeAutomation() {
     const openAssignedList = async (rule, keepOpen = false) => {
         try {
             setAssignedListRule(rule);
-            if (!keepOpen) setAssignedListOpen(true);
+            if (!keepOpen) {
+                setAssignedListOpen(true);
+                setAssignedSearch('');
+            }
             setAssignedListLoading(true);
             const res = await api.get(`/admin/settings/early-overtime-rules/${rule.id}/assignments`);
             setAssignedListRows(res.data?.assignments || []);
@@ -160,9 +165,9 @@ export default function EarlyOvertimeAutomation() {
 
     const columns = [
         { title: 'Rule Name', dataIndex: 'name', key: 'name' },
-        { 
-            title: 'Status', 
-            dataIndex: 'active', 
+        {
+            title: 'Status',
+            dataIndex: 'active',
             key: 'active',
             render: (active) => active ? <Tag color="success">Active</Tag> : <Tag color="error">Inactive</Tag>
         },
@@ -175,8 +180,8 @@ export default function EarlyOvertimeAutomation() {
                 </Tag>
             )
         },
-        { 
-            title: 'Actions', 
+        {
+            title: 'Actions',
             key: 'actions',
             render: (_, record) => (
                 <Space>
@@ -186,7 +191,7 @@ export default function EarlyOvertimeAutomation() {
                         if (typeof rawThresholds === 'string') {
                             try { rawThresholds = JSON.parse(rawThresholds); } catch (e) { rawThresholds = []; }
                         }
-                        
+
                         const thresholds = rawThresholds.map(t => {
                             const { h, m } = minsToHHMM(t.minMinutes);
                             return { ...t, h, m };
@@ -286,7 +291,7 @@ export default function EarlyOvertimeAutomation() {
                                                         <Col span={7}>
                                                             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>Reward type</Text>
                                                             <Form.Item {...restField} name={[name, 'rewardType']} noStyle initialValue="FIXED_AMOUNT">
-                                                                <Select 
+                                                                <Select
                                                                     style={{ width: '100%' }}
                                                                     onChange={(val) => {
                                                                         if (val === 'SALARY_MULTIPLIER') {
@@ -302,9 +307,9 @@ export default function EarlyOvertimeAutomation() {
                                                             </Form.Item>
                                                         </Col>
                                                         <Col span={7}>
-                                                            <Form.Item 
-                                                                noStyle 
-                                                                shouldUpdate={(prevValues, curValues) => 
+                                                            <Form.Item
+                                                                noStyle
+                                                                shouldUpdate={(prevValues, curValues) =>
                                                                     prevValues.thresholds?.[name]?.rewardType !== curValues.thresholds?.[name]?.rewardType
                                                                 }
                                                             >
@@ -317,9 +322,9 @@ export default function EarlyOvertimeAutomation() {
                                                                                 {isMultiplier ? 'Multiplier' : 'Amount'}
                                                                             </Text>
                                                                             <Form.Item {...restField} name={[name, 'value']} noStyle initialValue={0}>
-                                                                                <InputNumber 
-                                                                                    style={{ width: '100%' }} 
-                                                                                    prefix={isMultiplier ? '' : '₹'} 
+                                                                                <InputNumber
+                                                                                    style={{ width: '100%' }}
+                                                                                    prefix={isMultiplier ? '' : '₹'}
                                                                                     min={0}
                                                                                 />
                                                                             </Form.Item>
@@ -330,10 +335,10 @@ export default function EarlyOvertimeAutomation() {
                                                         </Col>
                                                         <Col span={2}>
                                                             {fields.length > 1 && (
-                                                                <Button 
-                                                                    type="text" 
-                                                                    danger 
-                                                                    icon={<DeleteFilled />} 
+                                                                <Button
+                                                                    type="text"
+                                                                    danger
+                                                                    icon={<DeleteFilled />}
                                                                     onClick={() => remove(name)}
                                                                     style={{ marginBottom: 4 }}
                                                                 />
@@ -393,8 +398,8 @@ export default function EarlyOvertimeAutomation() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text strong>Multiplier</Text>
-                            <Input 
-                                placeholder="e.g. 1.5 or 2.0" 
+                            <Input
+                                placeholder="e.g. 1.5 or 2.0"
                                 style={{ marginTop: 8 }}
                                 type="number"
                                 step="0.1"
@@ -413,8 +418,23 @@ export default function EarlyOvertimeAutomation() {
 
                     {/* Assign Modal */}
                     <Modal title={assigningRule ? `Assign Staff • ${assigningRule.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
-                        <Space direction="vertical" style={{ width:'100%' }} size={12}>
-                            <Text type="secondary">Select staff members to apply this early overtime rule to:</Text>
+                        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Text type="secondary">Select staff members to apply this early overtime rule to:</Text>
+                                <Button
+                                    size="small"
+                                    type="link"
+                                    onClick={() => {
+                                        if (selectedStaffIds.length === staffOptions.length) {
+                                            setSelectedStaffIds([]);
+                                        } else {
+                                            setSelectedStaffIds(staffOptions.map(o => o.value));
+                                        }
+                                    }}
+                                >
+                                    {selectedStaffIds.length === staffOptions.length ? 'Deselect All' : 'Select All'}
+                                </Button>
+                            </div>
                             <Select
                                 mode="multiple"
                                 options={staffOptions}
@@ -436,15 +456,33 @@ export default function EarlyOvertimeAutomation() {
                         footer={null}
                         width={900}
                     >
+                        <div style={{ marginBottom: 16 }}>
+                            <Input.Search
+                                placeholder="Search staff by name, ID or phone..."
+                                allowClear
+                                value={assignedSearch}
+                                onChange={e => setAssignedSearch(e.target.value)}
+                                onSearch={setAssignedSearch}
+                                style={{ width: 350 }}
+                            />
+                        </div>
                         <Table
                             rowKey="id"
                             loading={assignedListLoading}
-                            dataSource={assignedListRows}
+                            dataSource={(assignedListRows || []).filter(r => {
+                                if (!assignedSearch) return true;
+                                const s = assignedSearch.toLowerCase();
+                                const name = (r.user?.profile?.name || '').toLowerCase();
+                                const sid = (r.user?.profile?.staffId || '').toLowerCase();
+                                const phone = (r.user?.phone || '').toLowerCase();
+                                return name.includes(s) || sid.includes(s) || phone.includes(s);
+                            })}
                             size="small"
                             pagination={{ pageSize: 8 }}
                             columns={[
                                 { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
                                 { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
+                                { title: 'Assigned Date', render: (_, r) => r.createdAt ? dayjs(r.createdAt).format('DD-MM-YYYY') : '-' },
                                 { title: 'Department', render: (_, r) => r.user?.profile?.department || '-' },
                                 { title: 'Designation', render: (_, r) => r.user?.profile?.designation || '-' },
                                 {

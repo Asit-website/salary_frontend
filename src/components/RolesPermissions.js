@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Card, Table, Button, Modal, Form, Input, Select, Space, message, Tag, Tooltip, Popconfirm, Row, Col, Statistic, Checkbox } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined, TeamOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined, TeamOutlined, SearchOutlined } from '@ant-design/icons';
 import api from '../api';
 import Sidebar from './Sidebar';
 import './RolesPermissions.css';
@@ -20,6 +20,7 @@ const RolesPermissions = () => {
   const [assignOpen, setAssignOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [assigningUser, setAssigningUser] = useState(null);
+  const [staffSearch, setStaffSearch] = useState('');
   const [form] = Form.useForm();
   const [assignForm] = Form.useForm();
 
@@ -205,6 +206,11 @@ const RolesPermissions = () => {
     }
   ];
 
+  const filteredStaff = staff.filter(s => 
+    (s.profile?.name || '').toLowerCase().includes(staffSearch.toLowerCase()) ||
+    (s.phone || '').toLowerCase().includes(staffSearch.toLowerCase())
+  );
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} />
@@ -248,8 +254,17 @@ const RolesPermissions = () => {
           </Row>
 
           <Card title="Roles" style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-              <h3>Manage Roles</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <h3 style={{ margin: 0 }}>Manage Roles</h3>
+                <Input 
+                  placeholder="Search staff..." 
+                  style={{ width: 250 }} 
+                  prefix={<SearchOutlined />} 
+                  onChange={e => setStaffSearch(e.target.value)}
+                  allowClear
+                />
+              </div>
               <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
                 Create Role
               </Button>
@@ -263,12 +278,14 @@ const RolesPermissions = () => {
             />
           </Card>
 
-          <Card title="Staff Role Assignment">
+          <Card 
+            title="Staff Role Assignment"
+          >
             <Table
               rowKey="id"
               loading={loading}
               columns={staffColumns}
-              dataSource={staff}
+              dataSource={filteredStaff}
               pagination={{ pageSize: 10 }}
             />
           </Card>

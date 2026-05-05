@@ -16,8 +16,7 @@ const categoryNames = {
     'sl': 'Sick Leave',
     'el': 'Earned Leave',
     'ml': 'Maternity Leave',
-    'pt': 'Paternity Leave',
-    'unpaid': 'Unpaid Leave'
+    'pt': 'Paternity Leave'
 };
 
 const LeaveRequests = () => {
@@ -30,6 +29,8 @@ const LeaveRequests = () => {
     const [reviewAction, setReviewAction] = useState(null);
     const [reviewNote, setReviewNote] = useState('');
     const [reviewLoading, setReviewLoading] = useState(false);
+    const [staffList, setStaffList] = useState([]);
+    const [selectedUserId, setSelectedUserId] = useState(null);
 
     const navigate = useNavigate();
 
@@ -42,7 +43,9 @@ const LeaveRequests = () => {
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const response = await api.get('/leave', { params: { status: statusFilter } });
+            const params = { status: statusFilter };
+            if (selectedUserId) params.userId = selectedUserId;
+            const response = await api.get('/leave', { params });
             if (response.data.success) {
                 setRequests(response.data.leaves || []);
             }
@@ -55,7 +58,17 @@ const LeaveRequests = () => {
 
     useEffect(() => {
         fetchRequests();
-    }, [statusFilter]);
+    }, [statusFilter, selectedUserId]);
+
+    useEffect(() => {
+        const fetchStaff = async () => {
+            try {
+                const res = await api.get('/admin/staff');
+                if (res.data?.success) setStaffList(res.data.staff || []);
+            } catch (e) { /* ignore */ }
+        };
+        fetchStaff();
+    }, []);
 
     const handleReview = (request, action) => {
         setSelectedRequest(request);
@@ -177,13 +190,37 @@ const LeaveRequests = () => {
                     </div>
                 </Header>
                 <Content style={{ margin: '24px', background: '#fff', padding: '24px' }}>
-                    <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between' }}>
-                        <Space>
+                    <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                        <Space wrap>
                             <Typography.Text>Filter by Status:</Typography.Text>
                             <Select value={statusFilter} onChange={setStatusFilter} style={{ width: 150 }}>
                                 <Option value="PENDING">Pending</Option>
                                 <Option value="APPROVED">Approved</Option>
                                 <Option value="REJECTED">Rejected</Option>
+                                <Option value="ALL">All</Option>
+                            </Select>
+
+                            <Typography.Text style={{ marginLeft: '16px' }}>Filter by Employee:</Typography.Text>
+                            <Select
+                                showSearch
+                                placeholder="Search by Name"
+                                optionFilterProp="children"
+                                style={{ width: 220 }}
+                                value={selectedUserId}
+                                onChange={setSelectedUserId}
+                                allowClear
+                                filterOption={(input, option) =>
+                                    (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                                }
+                            >
+                                {staffList
+                                    .filter(s => s.name && !s.name.startsWith('Staff '))
+                                    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                                    .map(s => (
+                                    <Option key={s.id} value={s.id}>
+                                        {s.name}
+                                    </Option>
+                                ))}
                             </Select>
                         </Space>
                         <Button type="primary" onClick={fetchRequests}>Refresh</Button>

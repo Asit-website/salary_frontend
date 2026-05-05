@@ -14,7 +14,7 @@ function toHHmmss(v) { return v ? dayjs(v).format('HH:mm:ss') : null; }
 const TemplateCard = ({ tpl, onEdit, onAssign }) => (
   <Card bordered hoverable>
     <Space direction="vertical" size={4} style={{ width: '100%' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text strong>{tpl.name}</Text>
         <Space>
           <Tag color={tpl.shiftType === 'open' ? 'blue' : 'green'}>{(tpl.shiftType || '').toUpperCase()}</Tag>
@@ -197,7 +197,7 @@ export default function ShiftSettings() {
       <Sidebar />
       <Layout style={{ marginLeft: 200, background: '#f5f7fb' }}>
         <Header style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <Button icon={<ArrowLeftOutlined />} onClick={() => window.history.back()} />
             <Title level={4} style={{ margin: 0, lineHeight: 1 }}>Shift Settings</Title>
           </div>
@@ -218,161 +218,178 @@ export default function ShiftSettings() {
           </Row>
         </Content>
 
-       <Modal 
-  title={editing ? 'Edit Shift Template' : 'Create Shift Template'} 
-  open={open} 
-  onCancel={() => { setOpen(false); setEditing(null); }} 
-  onOk={save} 
-  okText="Save"
-  width={800}
->
-  <Form layout="vertical" form={form}>
-    
-    <Form.Item name="shiftType" label="Shift Type" rules={[{ required: true }]}>
-      <Select options={[
-        { value: 'fixed', label: 'Fixed Shift' },
-        { value: 'open', label: 'Open Shift' },
-      ]} />
-    </Form.Item>
+        <Modal
+          title={editing ? 'Edit Shift Template' : 'Create Shift Template'}
+          open={open}
+          onCancel={() => { setOpen(false); setEditing(null); }}
+          onOk={save}
+          okText="Save"
+          width={800}
+        >
+          <Form layout="vertical" form={form}>
 
-    <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-      <Input placeholder="Shift Name" />
-    </Form.Item>
-
-    <Form.Item shouldUpdate noStyle>
-      {() =>
-        form.getFieldValue('shiftType') !== 'open' && (
-          <Form.Item name="code" label="Shift Code">
-            <Input placeholder="Code" />
-          </Form.Item>
-        )
-      }
-    </Form.Item>
-
-    {/* SHIFT TIME */}
-    <Card title="Shift Time" size="small" style={{ marginBottom: 12 }}>
-      <Form.Item shouldUpdate noStyle>
-        {() =>
-          form.getFieldValue('shiftType') !== 'open' ? (
-            <Space size={12} style={{ display: 'flex' }}>
-              <Form.Item name="startTime" label="Start Time" style={{ flex: 1 }}>
-                <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
-              </Form.Item>
-              <Form.Item name="endTime" label="End Time" style={{ flex: 1 }}>
-                <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
-              </Form.Item>
-            </Space>
-          ) : (
-            <>
-              <div style={{ marginBottom: 8, fontSize: 12, color: '#8c8c8c' }}>
-                Work hours
-              </div>
-              <Space size={12}>
-                <Form.Item name="workHours" noStyle>
-                  <InputNumber min={0} max={23} addonAfter="hh" style={{ width: 120 }} />
-                </Form.Item>
-                <Form.Item name="workMins" noStyle>
-                  <InputNumber min={0} max={59} addonAfter="mm" style={{ width: 120 }} />
-                </Form.Item>
-              </Space>
-            </>
-          )
-        }
-      </Form.Item>
-    </Card>
-
-    {/* BUFFER AND PUNCH TIME RESTRICTIONS */}
-    <Form.Item shouldUpdate noStyle>
-      {() =>
-        form.getFieldValue('shiftType') !== 'open' && (
-          <Card title="Punch Time Restrictions" size="small" style={{ marginBottom: 12 }}>
-            <Form.Item name="bufferMinutes" label="Buffer Minutes" rules={[{ type: 'number', transform: (v)=>Number(v) }]}>
-              <InputNumber min={0} max={1440} style={{ width: '100%' }} />
+            <Form.Item name="shiftType" label="Shift Type" rules={[{ required: true }]}>
+              <Select options={[
+                { value: 'fixed', label: 'Fixed Shift' },
+                { value: 'open', label: 'Open Shift' },
+              ]} />
             </Form.Item>
-            
-            <Form.Item name="autoPunchoutAfterShiftEnd" label="Auto Punchout After Shift End (hours)" tooltip="Hours after shift end when auto-punchout should occur">
-              <InputNumber min={0} max={24} step={0.5} style={{ width: '100%' }} placeholder="e.g. 2.5 for 2.5 hours after shift end" />
-            </Form.Item>
-            
-            <Space size={12} style={{ display: 'flex' }}>
-              <Form.Item name="earliestPunchInTime" label="Earliest Punch-in Time" style={{ flex: 1 }}>
-                <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
-              </Form.Item>
-              <Form.Item name="latestPunchOutTime" label="Latest Punch-out Time" style={{ flex: 1 }}>
-                <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
-              </Form.Item>
-            </Space>
-          </Card>
-        )
-      }
-    </Form.Item>
 
-    {/* ATTENDANCE RULES */}
-    <Card title="Attendance Rules" size="small">
-      <Row gutter={16}>
-        <Col span={12}>
-          <Form.Item name="halfDayThresholdMinutes" label="Half-day Threshold (minutes)">
-            <InputNumber min={0} style={{ width: '100%' }} />
-          </Form.Item>
-        </Col>
-        {/* <Col span={12}>
+            <Form.Item name="name" label="Name" rules={[{ required: true }]}>
+              <Input placeholder="Shift Name" />
+            </Form.Item>
+
+            <Form.Item shouldUpdate noStyle>
+              {() =>
+                form.getFieldValue('shiftType') !== 'open' && (
+                  <Form.Item name="code" label="Shift Code">
+                    <Input placeholder="Code" />
+                  </Form.Item>
+                )
+              }
+            </Form.Item>
+
+            {/* SHIFT TIME */}
+            <Card title="Shift Time" size="small" style={{ marginBottom: 12 }}>
+              <Form.Item shouldUpdate noStyle>
+                {() =>
+                  form.getFieldValue('shiftType') !== 'open' ? (
+                    <Space size={12} style={{ display: 'flex' }}>
+                      <Form.Item name="startTime" label="Start Time" style={{ flex: 1 }}>
+                        <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
+                      </Form.Item>
+                      <Form.Item
+                        name="endTime"
+                        label="End Time"
+                        style={{ flex: 1 }}
+                        dependencies={['startTime']}
+                        rules={[
+                          { required: true, message: 'Please select end time' },
+                          ({ getFieldValue }) => ({
+                            validator(_, value) {
+                              const start = getFieldValue('startTime');
+                              if (!value || !start || value.isAfter(start)) {
+                                return Promise.resolve();
+                              }
+                              return Promise.reject(new Error('shift end not be few than start'));
+                            },
+                          }),
+                        ]}
+                      >
+                        <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
+                      </Form.Item>
+                    </Space>
+                  ) : (
+                    <>
+                      <div style={{ marginBottom: 8, fontSize: 12, color: '#8c8c8c' }}>
+                        Work hours
+                      </div>
+                      <Space size={12}>
+                        <Form.Item name="workHours" noStyle>
+                          <InputNumber min={0} max={23} addonAfter="hh" style={{ width: 120 }} />
+                        </Form.Item>
+                        <Form.Item name="workMins" noStyle>
+                          <InputNumber min={0} max={59} addonAfter="mm" style={{ width: 120 }} />
+                        </Form.Item>
+                      </Space>
+                    </>
+                  )
+                }
+              </Form.Item>
+            </Card>
+
+            {/* BUFFER AND PUNCH TIME RESTRICTIONS */}
+            <Form.Item shouldUpdate noStyle>
+              {() =>
+                form.getFieldValue('shiftType') !== 'open' && (
+                  <Card title="Punch Time Restrictions" size="small" style={{ marginBottom: 12 }}>
+                    <Form.Item name="bufferMinutes" label="Buffer Minutes" rules={[{ type: 'number', transform: (v) => Number(v) }]}>
+                      <InputNumber min={0} max={1440} style={{ width: '100%' }} />
+                    </Form.Item>
+
+                    <Form.Item name="autoPunchoutAfterShiftEnd" label="Auto Punchout After Shift End (hours)" tooltip="Hours after shift end when auto-punchout should occur">
+                      <InputNumber min={0} max={24} step={0.5} style={{ width: '100%' }} placeholder="e.g. 2.5 for 2.5 hours after shift end" />
+                    </Form.Item>
+
+                    <Space size={12} style={{ display: 'flex' }}>
+                      <Form.Item name="earliestPunchInTime" label="Earliest Punch-in Time" style={{ flex: 1 }}>
+                        <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
+                      </Form.Item>
+                      <Form.Item name="latestPunchOutTime" label="Latest Punch-out Time" style={{ flex: 1 }}>
+                        <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
+                      </Form.Item>
+                    </Space>
+                  </Card>
+                )
+              }
+            </Form.Item>
+
+            {/* ATTENDANCE RULES */}
+            <Card title="Attendance Rules" size="small">
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item name="halfDayThresholdMinutes" label="Half-day Threshold (minutes)">
+                    <InputNumber min={0} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                {/* <Col span={12}>
           <Form.Item name="overtimeStartMinutes" label="Overtime Starts After (minutes)">
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
         </Col> */}
-      </Row>
-    </Card>
+              </Row>
+            </Card>
 
-    {/* BREAKS */}
-    <Form.Item shouldUpdate noStyle>
-      {() =>
-        form.getFieldValue('shiftType') !== 'open' && (
-          <Card title="Breaks" size="small" style={{ marginTop: 16 }}>
-            <Form.List name="breaks">
-              {(fields, { add, remove }) => (
-                <>
-                  {fields.map(({ key, name, ...rest }) => (
-                    <Card key={key} size="small" style={{ marginBottom: 12 }}>
-                      <Row gutter={12}>
-                        <Col span={12}>
-                          <Form.Item {...rest} name={[name, 'category']} label="Category">
-                            <Select options={[
-                              { value: 'Casual Break', label: 'Casual Break' },
-                              { value: 'Lunch', label: 'Lunch' },
-                              { value: 'Tea', label: 'Tea' },
-                            ]} />
-                          </Form.Item>
-                        </Col>
-                        <Col span={12}>
-                          <Form.Item {...rest} name={[name, 'durationMinutes']} label="Duration (mins)">
-                            <InputNumber min={1} style={{ width: '100%' }} />
-                          </Form.Item>
-                        </Col>
-                      </Row>
+            {/* BREAKS */}
+            <Form.Item shouldUpdate noStyle>
+              {() =>
+                form.getFieldValue('shiftType') !== 'open' && (
+                  <Card title="Breaks" size="small" style={{ marginTop: 16 }}>
+                    <Form.List name="breaks">
+                      {(fields, { add, remove }) => (
+                        <>
+                          {fields.map(({ key, name, ...rest }) => (
+                            <Card key={key} size="small" style={{ marginBottom: 12 }}>
+                              <Row gutter={12}>
+                                <Col span={12}>
+                                  <Form.Item {...rest} name={[name, 'category']} label="Category">
+                                    <Select options={[
+                                      { value: 'Casual Break', label: 'Casual Break' },
+                                      { value: 'Lunch', label: 'Lunch' },
+                                      { value: 'Tea', label: 'Tea' },
+                                    ]} />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={12}>
+                                  <Form.Item {...rest} name={[name, 'durationMinutes']} label="Duration (mins)">
+                                    <InputNumber min={1} style={{ width: '100%' }} />
+                                  </Form.Item>
+                                </Col>
+                              </Row>
 
-                      <div style={{ textAlign: 'right' }}>
-                        <Button danger onClick={() => remove(name)}>Remove</Button>
-                      </div>
-                    </Card>
-                  ))}
+                              <div style={{ textAlign: 'right' }}>
+                                <Button danger onClick={() => remove(name)}>Remove</Button>
+                              </div>
+                            </Card>
+                          ))}
 
-                  <Button type="dashed" onClick={() => add()} block>
-                    + Add Break
-                  </Button>
-                </>
-              )}
-            </Form.List>
-          </Card>
-        )
-      }
-    </Form.Item>
+                          <Button type="dashed" onClick={() => add()} block>
+                            + Add Break
+                          </Button>
+                        </>
+                      )}
+                    </Form.List>
+                  </Card>
+                )
+              }
+            </Form.Item>
 
-  </Form>
-</Modal>
+          </Form>
+        </Modal>
 
 
         <Modal title={assigningTpl ? `Assign Staff • ${assigningTpl.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
-          <Space direction="vertical" style={{ width:'100%' }} size={12}>
+          <Space direction="vertical" style={{ width: '100%' }} size={12}>
             <Select
               mode="multiple"
               options={staffOptions}
@@ -386,6 +403,6 @@ export default function ShiftSettings() {
         </Modal>
       </Layout>
     </Layout>
-    
+
   );
 }

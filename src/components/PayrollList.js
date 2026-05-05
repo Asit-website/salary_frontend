@@ -18,9 +18,11 @@ import {
   InputNumber,
   Tag,
   Row,
-  Col
+  Col,
+  Popover,
+  Tooltip
 } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, PlusOutlined, MinusCircleOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, PlusOutlined, MinusCircleOutlined, InfoCircleOutlined, SearchOutlined } from '@ant-design/icons';
 // import { jsPDF } from 'jspdf'; // Removed client-side generation
 import moment from 'moment';
 import Sidebar from './Sidebar';
@@ -34,8 +36,7 @@ const categoryNames = {
   'sl': 'Sick Leave',
   'el': 'Earned Leave',
   'ml': 'Maternity Leave',
-  'pt': 'Paternity Leave',
-  'unpaid': 'Unpaid Leave'
+  'pt': 'Paternity Leave'
 };
 
 const getDaysInMonthFromMonthKey = (monthKey) => {
@@ -49,8 +50,7 @@ const normalizeAttendanceSummary = (summary, monthKey) => {
   const present = Number(s.present || 0);
   const half = Number(s.half || 0);
   const paidLeave = Number(s.paidLeave || 0);
-  const unpaidLeave = Number(s.unpaidLeave || 0);
-  const leave = Number(s.leave != null ? s.leave : (paidLeave + unpaidLeave));
+  const leave = Number(s.leave != null ? s.leave : (paidLeave));
   const weeklyOff = Number(s.weeklyOff || 0);
   const holidays = Number(s.holidays || 0);
   const daysInMonth = getDaysInMonthFromMonthKey(monthKey);
@@ -74,27 +74,26 @@ const normalizeAttendanceSummary = (summary, monthKey) => {
     absent = Math.max(0, referenceDays - (present + half + leave + weeklyOff + holidays));
   }
 
-    const latePenaltyDays = Number(s.latePenaltyDays || s.latePenalty || 0);
-    const pUnits = present + (half * 0.5) + paidLeave + weeklyOff + holidays;
-    const payableDays = Math.max(0, pUnits - (s.latePenaltyDays || 0)); // Keep logic for days if present
+  const latePenaltyDays = Number(s.latePenaltyDays || s.latePenalty || 0);
+  const pUnits = present + (half * 0.5) + paidLeave + weeklyOff + holidays;
+  const payableDays = Math.max(0, pUnits - (s.latePenaltyDays || 0)); // Keep logic for days if present
 
-    return {
-      ...s,
-      present,
-      half,
-      leave,
-      paidLeave,
-      unpaidLeave,
-      absent,
-      weeklyOff,
-      holidays,
-      payableDays,
-      latePenaltyDays,
-      lateCount: Number(s.lateCount || 0),
-      latePenalty: Number(s.latePunchInPenalty || s.latePenalty || 0),
-      breakPenalty: Number(s.breakPenalty || 0),
-      excessBreakMinutes: Number(s.excessBreakMinutes || 0)
-    };
+  return {
+    ...s,
+    present,
+    half,
+    leave,
+    paidLeave,
+    absent,
+    weeklyOff,
+    holidays,
+    payableDays,
+    latePenaltyDays,
+    lateCount: Number(s.lateCount || 0),
+    latePenalty: Number(s.latePunchInPenalty || s.latePenalty || 0),
+    breakPenalty: Number(s.breakPenalty || 0),
+    excessBreakMinutes: Number(s.excessBreakMinutes || 0)
+  };
 };
 
 const PayrollList = () => {
@@ -120,13 +119,14 @@ const PayrollList = () => {
   const [viewRow, setViewRow] = useState(null);
   const [editRow, setEditRow] = useState(null);
   const [baseData, setBaseData] = useState({ earnings: {}, incentives: {}, deductions: {} });
+  const [selectedStaffId, setSelectedStaffId] = useState(null);
 
   // Attendance Drill-down State
   const [drilldownModalVisible, setDrilldownModalVisible] = useState(false);
   const [drilldownRecords, setDrilldownRecords] = useState([]);
   const [drilldownType, setDrilldownType] = useState(''); // 'Late' | 'Early Exit' | 'Break' | 'Overtime' | 'Early Overtime'
   const [drilldownLoading, setDrilldownLoading] = useState(false);
-  
+
   // Tenure Bonus Breakdown State
   const [bonusModalVisible, setBonusModalVisible] = useState(false);
   const [bonusData, setBonusData] = useState(null);
@@ -170,7 +170,6 @@ const PayrollList = () => {
     const [y, m] = value.split('-').map(Number);
     return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
   }, [value]);
-
   // Load Staff Map
   const loadStaffMap = useCallback(async () => {
     try {
@@ -191,17 +190,20 @@ const PayrollList = () => {
     }
   }, []);
 
+
   const loadTemplates = useCallback(async () => {
     try {
       const res = await api.get('/admin/salary-templates');
       if (res?.data?.success) setSalaryTemplates(res.data.data || []);
-    } catch(e){}
+    } catch (e) { }
   }, []);
 
   // Load Cycle Data
   const loadCycle = useCallback(async () => {
     try {
       setLoading(true);
+      setCycle(null);
+      setLines([]);
       // Use 'value' (YYYY-MM) as monthKey
       const res = await api.get('/admin/payroll', { params: { monthKey: value } });
       if (res?.data?.success) {
@@ -241,9 +243,12 @@ const PayrollList = () => {
 
   useEffect(() => {
     loadStaffMap();
-    loadCycle();
     loadTemplates();
-  }, [loadCycle, loadStaffMap, loadTemplates]);
+  }, [loadStaffMap, loadTemplates]);
+
+  useEffect(() => {
+    loadCycle();
+  }, [loadCycle]);
 
   // Actions
   const onOpenCycle = async () => {
@@ -409,11 +414,11 @@ const PayrollList = () => {
     try {
       setLoading(true);
       const resp = await api.get(`/admin/payroll/${cycle.id}/export`, { responseType: 'blob' });
-      const blob = new Blob([resp.data], { type: 'text/csv' });
+      const blob = new Blob([resp.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `payroll-${cycle.monthKey}.csv`;
+      a.download = `payroll-${cycle.monthKey}.xlsx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -494,7 +499,7 @@ const PayrollList = () => {
     const tpl = salaryTemplates.find(t => t.id === staffTplId);
 
     const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
-    
+
     let tplEarnKeys = null;
     let tplDedKeys = null;
     if (tpl) {
@@ -508,7 +513,7 @@ const PayrollList = () => {
           if (nk === 'professionaltax') return 'professional_tax';
           return k;
         });
-      } catch(e){}
+      } catch (e) { }
     }
 
     const prefEarn = ['basic_salary', 'hra', 'da', 'special_allowance', 'conveyance_allowance', 'medical_allowance', 'telephone_allowance', 'other_allowances'];
@@ -609,13 +614,12 @@ const PayrollList = () => {
       status: row?.status || 'INCLUDED',
       remarks: row?.remarks || '',
       earnings: toArrRaw(earningsEntries, tplEarnKeys),
-      incentives: incentiveEntries.map(([k,v]) => ({ name: k, amount: Number(v||0) })),
+      incentives: incentiveEntries.map(([k, v]) => ({ name: k, amount: Number(v || 0) })),
       deductions: toArrRaw(deductionEntries, tplDedKeys),
       present: att.present || 0,
       half: att.half || 0,
       leave: att.leave || 0,
       paidLeave: att.paidLeave || 0,
-      unpaidLeave: att.unpaidLeave || 0,
       absent: att.absent || 0,
       weeklyOff: att.weeklyOff || 0,
       holidays: att.holidays || 0,
@@ -647,7 +651,6 @@ const PayrollList = () => {
         half: Number(vals.half || 0),
         leave: Number(vals.leave || 0),
         paidLeave: Number(vals.paidLeave || 0),
-        unpaidLeave: Number(vals.unpaidLeave || 0),
         absent: Number(vals.absent || 0),
         weeklyOff: Number(vals.weeklyOff || 0),
         holidays: Number(vals.holidays || 0),
@@ -746,6 +749,11 @@ const PayrollList = () => {
     // Create rows for all active staff
     const rows = [];
     Object.entries(staffMap).forEach(([id, name]) => {
+      // Filter by selected staff if any
+      if (selectedStaffId && Number(id) !== selectedStaffId) {
+        return;
+      }
+
       const line = lineMap[id];
       if (line) {
         rows.push({ ...line, _status: 'GENERATED' }); // Existing line
@@ -759,21 +767,21 @@ const PayrollList = () => {
       }
     });
     return rows;
-  }, [cycle, lines, staffMap]);
+  }, [cycle, lines, staffMap, selectedStaffId]);
 
 
 
   const columns = [
     { title: 'Employee', key: 'emp', render: (_, r) => staffMap[r.userId || r.user_id] || (r.userId || r.user_id) },
-    { title: 'Gross', dataIndex: ['totals', 'grossSalary'], key: 'gross', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` },
+    { title: 'Gross', dataIndex: ['totals', 'grossSalary'], key: 'gross', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
     {
       title: 'Earnings',
       dataIndex: ['totals', 'totalEarnings'],
       key: 'earnings',
-      render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}`
+      render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     },
-    { title: 'Deductions', dataIndex: ['totals', 'totalDeductions'], key: 'deductions', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` },
-    { title: 'Net', dataIndex: ['totals', 'netSalary'], key: 'net', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` },
+    { title: 'Deductions', dataIndex: ['totals', 'totalDeductions'], key: 'deductions', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+    { title: 'Net', dataIndex: ['totals', 'netSalary'], key: 'net', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
     {
       title: 'Actions', key: 'actions', render: (_, r) => {
         if (r._status === 'NOT_GENERATED') {
@@ -825,7 +833,7 @@ const PayrollList = () => {
             items={[{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout }]}
           />
         </Header>
-        <Content style={{ margin: '24px 16px', padding: 24, background: '#fff' }}>
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', overflow: 'auto' }}>
 
           {/* New Selection Header */}
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 24, justifyContent: 'space-between' }}>
@@ -837,11 +845,24 @@ const PayrollList = () => {
                 onChange={(e) => setValue(e.target.value)}
                 style={{ padding: 6, border: '1px solid #E5E7EB', borderRadius: 6 }}
               />
+              <Select
+                showSearch
+                placeholder="Search or Select Staff"
+                optionFilterProp="children"
+                value={selectedStaffId}
+                onChange={setSelectedStaffId}
+                style={{ width: 300 }}
+                allowClear
+              >
+                {Object.entries(staffMap).map(([id, name]) => (
+                  <Select.Option key={id} value={Number(id)}>{name}</Select.Option>
+                ))}
+              </Select>
             </div>
 
             {/* Actions for Cycle */}
             <Space>
-              <Button onClick={onExportCSV} disabled={!cycle || lines.length === 0} loading={loading}>Export CSV</Button>
+              <Button onClick={onExportCSV} disabled={!cycle || lines.length === 0} loading={loading}>Export Excel</Button>
               <Button
                 type="primary"
                 onClick={onGeneratePayroll}
@@ -885,7 +906,14 @@ const PayrollList = () => {
                 rowKey={(r) => r.id || `${r.cycleId}-${r.userId}`}
                 rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys) }}
                 loading={loading}
-                pagination={{ pageSize: 20 }}
+                pagination={{
+                  pageSize: 10,
+                  showSizeChanger: true,
+                  showQuickJumper: true,
+                  pageSizeOptions: ['10', '20', '50', '100'],
+                  showTotal: (total) => `Total ${total} items`,
+                  hideOnSinglePage: false
+                }}
                 scroll={{ y: 'calc(100vh - 250px)' }}
               />
             </Card>
@@ -936,7 +964,7 @@ const PayrollList = () => {
           form={editForm}
           layout="vertical"
           onValuesChange={(changed, all) => {
-            const attKeys = ['present', 'half', 'leave', 'paidLeave', 'unpaidLeave', 'holidays', 'weeklyOff'];
+            const attKeys = ['present', 'half', 'leave', 'paidLeave', 'holidays', 'weeklyOff'];
             const isAttChange = Object.keys(changed).some(k => attKeys.includes(k));
 
             if (isAttChange && cycle && cycle.monthKey) {
@@ -946,23 +974,21 @@ const PayrollList = () => {
               let p = Number(all.present || 0);
               let h = Number(all.half || 0);
               let pl = Number(all.paidLeave || 0);
-              let ul = Number(all.unpaidLeave || 0);
               let wo = Number(all.weeklyOff || 0);
               let ho = Number(all.holidays || 0);
               let totalLeave = Number(all.leave || 0);
               const existingAbsent = Number(all.absent || 0);
 
-              // Auto-sync Total Leave if Paid/Unpaid changed
-              if (changed.paidLeave !== undefined || changed.unpaidLeave !== undefined) {
-                totalLeave = pl + ul;
+              // Auto-sync Total Leave if Paid changed
+              if (changed.paidLeave !== undefined) {
+                totalLeave = pl;
                 editForm.setFieldsValue({ leave: totalLeave });
               }
-              // Auto-sync Paid/Unpaid if Total Leave changed (assume all paid by default)
+              // Auto-sync Paid if Total Leave changed (assume all paid by default)
               if (changed.leave !== undefined) {
                 totalLeave = Number(all.leave || 0);
                 pl = totalLeave;
-                ul = 0;
-                editForm.setFieldsValue({ paidLeave: pl, unpaidLeave: ul });
+                editForm.setFieldsValue({ paidLeave: pl });
               }
 
               const classifiedDays = p + h + totalLeave + wo + ho + existingAbsent;
@@ -1001,7 +1027,7 @@ const PayrollList = () => {
                     if (nk === 'professionaltax') return 'professional_tax';
                     return k;
                   });
-                } catch(e){}
+                } catch (e) { }
               }
 
               const prefEarn = ['basic_salary', 'hra', 'da', 'special_allowance', 'conveyance_allowance', 'medical_allowance', 'telephone_allowance', 'other_allowances'];
@@ -1057,15 +1083,14 @@ const PayrollList = () => {
               <Col span={6}><Form.Item name="leave" label="Total Leave"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
               <Col span={6}><Form.Item name="absent" label="Absent"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
               <Col span={6}><Form.Item name="paidLeave" label="Paid Leave"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="unpaidLeave" label="Unpaid Leave"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
               <Col span={6}><Form.Item name="weeklyOff" label="Weekly Off"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
               <Col span={6}><Form.Item name="holidays" label="Holidays"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Late Count"><InputNumber value={editRow?.attendanceSummary?.lateCount || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Late Penalty"><InputNumber value={editRow?.attendanceSummary?.latePunchInPenalty || editRow?.attendanceSummary?.latePenalty || 0} disabled style={{ width: '100%' }} precision={2} prefix="₹" /></Form.Item></Col>
               <Col span={6}><Form.Item label="Early Exit (Min)"><InputNumber value={editRow?.attendanceSummary?.earlyExitMinutes || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="EE Penalty"><InputNumber value={editRow?.attendanceSummary?.earlyExitPenalty || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="EE Penalty"><InputNumber value={editRow?.attendanceSummary?.earlyExitPenalty || 0} disabled style={{ width: '100%' }} precision={2} prefix="₹" /></Form.Item></Col>
               <Col span={6}><Form.Item label="Excess Break (Min)"><InputNumber value={editRow?.attendanceSummary?.excessBreakMinutes || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Break Penalty"><InputNumber value={editRow?.attendanceSummary?.breakPenalty || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Break Penalty"><InputNumber value={editRow?.attendanceSummary?.breakPenalty || 0} disabled style={{ width: '100%' }} precision={2} prefix="₹" /></Form.Item></Col>
             </Row>
           </Card>
           <div style={{ marginBottom: 16 }}>
@@ -1076,11 +1101,11 @@ const PayrollList = () => {
                     {fields.map(({ key, name, ...rest }) => (
                       <Row key={key} gutter={8} style={{ marginBottom: 8 }} align="middle">
                         <Col span={12}><Form.Item {...rest} name={[name, 'name']} noStyle><Input placeholder="Name" /></Form.Item></Col>
-                        <Col span={9}><Form.Item {...rest} name={[name, 'amount']} noStyle><InputNumber style={{ width: '100%' }} placeholder="Amount" /></Form.Item></Col>
+                        <Col span={9}><Form.Item {...rest} name={[name, 'amount']} noStyle><InputNumber style={{ width: '100%' }} placeholder="Amount" precision={2} prefix="₹" /></Form.Item></Col>
                         <Col span={3}><MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer' }} /></Col>
                       </Row>
                     ))}
-                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Earning</Button>
+                    {/* <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Earning</Button> */}
                   </>
                 )}
               </Form.List>
@@ -1095,11 +1120,11 @@ const PayrollList = () => {
                     {fields.map(({ key, name, ...rest }) => (
                       <Row key={key} gutter={8} style={{ marginBottom: 8 }} align="middle">
                         <Col span={12}><Form.Item {...rest} name={[name, 'name']} noStyle><Input placeholder="Name" /></Form.Item></Col>
-                        <Col span={9}><Form.Item {...rest} name={[name, 'amount']} noStyle><InputNumber style={{ width: '100%' }} placeholder="Amount" /></Form.Item></Col>
+                        <Col span={9}><Form.Item {...rest} name={[name, 'amount']} noStyle><InputNumber style={{ width: '100%' }} placeholder="Amount" precision={2} prefix="₹" /></Form.Item></Col>
                         <Col span={3}><MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer' }} /></Col>
                       </Row>
                     ))}
-                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Incentive</Button>
+                    {/* <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Incentive</Button> */}
                   </>
                 )}
               </Form.List>
@@ -1114,11 +1139,11 @@ const PayrollList = () => {
                     {fields.map(({ key, name, ...rest }) => (
                       <Row key={key} gutter={8} style={{ marginBottom: 8 }} align="middle">
                         <Col span={12}><Form.Item {...rest} name={[name, 'name']} noStyle><Input placeholder="Name" /></Form.Item></Col>
-                        <Col span={9}><Form.Item {...rest} name={[name, 'amount']} noStyle><InputNumber style={{ width: '100%' }} placeholder="Amount" /></Form.Item></Col>
+                        <Col span={9}><Form.Item {...rest} name={[name, 'amount']} noStyle><InputNumber style={{ width: '100%' }} placeholder="Amount" precision={2} prefix="₹" /></Form.Item></Col>
                         <Col span={3}><MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer' }} /></Col>
                       </Row>
                     ))}
-                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Deduction</Button>
+                    {/* <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Deduction</Button> */}
                   </>
                 )}
               </Form.List>
@@ -1139,137 +1164,222 @@ const PayrollList = () => {
           (() => {
             const normalizedAtt = normalizeAttendanceSummary(viewRow?.attendanceSummary || {}, cycle?.monthKey);
             return (
-          <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="Gross">₹{Number(viewRow?.totals?.grossSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</Descriptions.Item>
-            <Descriptions.Item label="Net">₹{Number(viewRow?.totals?.netSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</Descriptions.Item>
-            <Descriptions.Item label="Earnings">₹{Number(viewRow?.totals?.totalEarnings || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</Descriptions.Item>
-            <Descriptions.Item label="Deductions">₹{Number(viewRow?.totals?.totalDeductions || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</Descriptions.Item>
-            <Descriptions.Item label="Ratio" span={2}>{Number(viewRow?.totals?.ratio ?? 1).toFixed(4)}</Descriptions.Item>
-            <Descriptions.Item label="Present">{normalizedAtt.present || 0}</Descriptions.Item>
-            <Descriptions.Item label="Half">{normalizedAtt.half || 0}</Descriptions.Item>
-            <Descriptions.Item label="Paid Leave">{normalizedAtt.paidLeave || 0}</Descriptions.Item>
-            <Descriptions.Item label="Unpaid Leave">{normalizedAtt.unpaidLeave || 0}</Descriptions.Item>
-            <Descriptions.Item label="Total Leave">{normalizedAtt.leave || 0}</Descriptions.Item>
-            <Descriptions.Item label="Absent">{normalizedAtt.absent || 0}</Descriptions.Item>
-            <Descriptions.Item label="Weekly Off">{normalizedAtt.weeklyOff || 0}</Descriptions.Item>
-            <Descriptions.Item label="Holiday">{normalizedAtt.holidays || 0}</Descriptions.Item>
-            <Descriptions.Item label="Late Count">{normalizedAtt.lateCount || 0}</Descriptions.Item>
-            <Descriptions.Item label="Late Penalty">
-              {normalizedAtt.latePenalty > 0 ? (
-                <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Late')}>
-                  ₹{normalizedAtt.latePenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
-                </Button>
-              ) : (
-                <Text>{normalizedAtt.latePenaltyDays || 0} days</Text>
-              )}
-            </Descriptions.Item>
-            <Descriptions.Item label="Tenure Bonus">
-              {viewRow?.attendanceSummary?.tenureBonus ? (
-                <Space>
-                  <Text strong style={{ color: '#722ed1' }}>
-                    ₹{Number(viewRow.attendanceSummary.tenureBonus.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
-                  </Text>
-                  <Button 
-                    type="link" 
-                    icon={<InfoCircleOutlined />} 
-                    style={{ padding: 0, height: 'auto' }} 
-                    onClick={() => {
-                        setBonusData(viewRow.attendanceSummary.tenureBonus);
-                        setBonusModalVisible(true);
-                    }}
-                  />
-                </Space>
-              ) : (
-                <Text type="secondary">N/A</Text>
-              )}
-            </Descriptions.Item>
-            {Object.entries(viewRow?.earnings || {}).some(([k]) => k.startsWith('LEAVE_ENCASHMENT:')) && (
-              <Descriptions.Item label="Leave Encashment" span={2}>
-                <Space direction="vertical" size={2} style={{ width: '100%' }}>
-                  {Object.entries(viewRow.earnings)
-                    .filter(([k]) => k.startsWith('LEAVE_ENCASHMENT:'))
-                    .map(([k, v]) => (
-                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #f0f0f0' }}>
-                        <Text type="secondary">{k.replace('LEAVE_ENCASHMENT:', '').trim()}</Text>
-                        <Text>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</Text>
-                      </div>
-                    ))}
-                </Space>
-              </Descriptions.Item>
-            )}
-            <Descriptions.Item label="Payable Days" span={2}>
-              <Text strong style={{ color: '#52c41a', fontSize: '16px' }}>
-                {normalizedAtt.payableDays || 0} days
-              </Text>
-            </Descriptions.Item>
-            {(Number(viewRow?.attendanceSummary?.overtimeMinutes || 0) > 0 ||
-              Number(viewRow?.attendanceSummary?.overtimePay || viewRow?.earnings?.overtime_pay || 0) > 0) ? (
-              <>
-                <Descriptions.Item label="OT Time">
-                  {Number(viewRow?.attendanceSummary?.overtimeHours || 0).toFixed(2)}h
-                  {` (${Number(viewRow?.attendanceSummary?.overtimeMinutes || 0)}m)`}
+              <Descriptions column={2} bordered size="small">
+                <Descriptions.Item label="Gross">₹{Number(viewRow?.totals?.grossSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
+                <Descriptions.Item label="Net">₹{Number(viewRow?.totals?.netSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
+                <Descriptions.Item label="Earnings">₹{Number(viewRow?.totals?.totalEarnings || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
+                <Descriptions.Item label="Deductions">₹{Number(viewRow?.totals?.totalDeductions || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
+                <Descriptions.Item label="Ratio" span={2}>{Number(viewRow?.totals?.ratio ?? 1).toFixed(2)}</Descriptions.Item>
+                <Descriptions.Item label="Present">{normalizedAtt.present || 0}</Descriptions.Item>
+                <Descriptions.Item label="Half">{normalizedAtt.half || 0}</Descriptions.Item>
+                <Descriptions.Item label="Paid Leave">
+                  {normalizedAtt.paidLeave > 0 && viewRow?.attendanceSummary?.paidLeaveDates?.length > 0 ? (
+                    <Popover
+                      title="Paid Leave Dates"
+                      content={
+                        <div style={{ maxWidth: 200 }}>
+                          {(viewRow.attendanceSummary.paidLeaveDates || []).map(date => (
+                            <Tag key={date} color="blue" style={{ marginBottom: 4 }}>
+                              {moment(date).format('DD MMM YYYY')}
+                            </Tag>
+                          ))}
+                        </div>
+                      }
+                    >
+                      <Button type="link" style={{ padding: 0, height: 'auto', fontWeight: 'inherit' }}>
+                        {normalizedAtt.paidLeave || 0}
+                      </Button>
+                    </Popover>
+                  ) : (
+                    <Text>{normalizedAtt.paidLeave || 0}</Text>
+                  )}
                 </Descriptions.Item>
-                <Descriptions.Item label="OT Pay">
-                  <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Overtime')}>
-                    ₹{Number(
-                      viewRow?.attendanceSummary?.overtimePay
-                      || viewRow?.earnings?.overtime_pay
-                      || 0
-                    ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
-                  </Button>
+                <Descriptions.Item label="Total Leave">{normalizedAtt.leave || 0}</Descriptions.Item>
+                <Descriptions.Item label="Absent">{normalizedAtt.absent || 0}</Descriptions.Item>
+                <Descriptions.Item label="Weekly Off">
+                  {(() => {
+                    const val = Number(normalizedAtt.weeklyOff || 0);
+                    const extra = (normalizedAtt.multiplierBreakdown || [])
+                      .filter(b => b.type === 'Weekly Off')
+                      .reduce((sum, b) => sum + Number(b.addedUnits || 0), 0);
+                    if (extra > 0) {
+                      return (
+                        <Space size={4}>
+                          <Text>{val}</Text>
+                          <Tooltip title={`${(val - extra).toFixed(2)} Base + ${extra.toFixed(2)} Extra Credit`}>
+                            <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'help' }} />
+                          </Tooltip>
+                        </Space>
+                      );
+                    }
+                    return val;
+                  })()}
                 </Descriptions.Item>
-              </>
-            ) : null}
-            {(Number(viewRow?.attendanceSummary?.earlyOvertimeMinutes || 0) > 0 ||
-              Number(viewRow?.attendanceSummary?.earlyOvertimePay || viewRow?.earnings?.early_overtime_pay || 0) > 0) ? (
-              <>
-                <Descriptions.Item label="Early OT (Min)">
-                  {Number(viewRow?.attendanceSummary?.earlyOvertimeMinutes || 0)}m
+                <Descriptions.Item label="Holiday">
+                  {(() => {
+                    const val = Number(normalizedAtt.holidays || 0);
+                    const extra = (normalizedAtt.multiplierBreakdown || [])
+                      .filter(b => b.type === 'Holiday')
+                      .reduce((sum, b) => sum + Number(b.addedUnits || 0), 0);
+                    if (extra > 0) {
+                      return (
+                        <Space size={4}>
+                          <Text>{val}</Text>
+                          <Tooltip title={`${(val - extra).toFixed(2)} Base + ${extra.toFixed(2)} Extra Credit`}>
+                            <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'help' }} />
+                          </Tooltip>
+                        </Space>
+                      );
+                    }
+                    return val;
+                  })()}
                 </Descriptions.Item>
-                <Descriptions.Item label="Early OT Pay">
-                  <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Early Overtime')}>
-                    ₹{Number(
-                      viewRow?.attendanceSummary?.earlyOvertimePay
-                      || viewRow?.earnings?.early_overtime_pay
-                      || 0
-                    ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
-                  </Button>
+                <Descriptions.Item label="Late Count">{normalizedAtt.lateCount || 0}</Descriptions.Item>
+                <Descriptions.Item label="Late Penalty">
+                  {normalizedAtt.latePenalty > 0 ? (
+                    <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Late')}>
+                      ₹{normalizedAtt.latePenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Button>
+                  ) : (
+                    <Text>{normalizedAtt.latePenaltyDays || 0} days</Text>
+                  )}
                 </Descriptions.Item>
-              </>
-            ) : null}
-            {(Number(viewRow?.attendanceSummary?.earlyExitMinutes || 0) > 0 ||
-              Number(viewRow?.attendanceSummary?.earlyExitPenalty || viewRow?.deductions?.early_exit_penalty || 0) > 0) ? (
-              <>
-                <Descriptions.Item label="Early Exit">
-                  {Number(viewRow?.attendanceSummary?.earlyExitMinutes || 0)}m
+                <Descriptions.Item label="Tenure Bonus">
+                  {viewRow?.attendanceSummary?.tenureBonus ? (
+                    <Space>
+                      <Text strong style={{ color: '#722ed1' }}>
+                        ₹{Number(viewRow.attendanceSummary.tenureBonus.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                      <Button
+                        type="link"
+                        icon={<InfoCircleOutlined />}
+                        style={{ padding: 0, height: 'auto' }}
+                        onClick={() => {
+                          setBonusData(viewRow.attendanceSummary.tenureBonus);
+                          setBonusModalVisible(true);
+                        }}
+                      />
+                    </Space>
+                  ) : (
+                    <Text type="secondary">N/A</Text>
+                  )}
                 </Descriptions.Item>
-                <Descriptions.Item label="EE Penalty">
-                  <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Early Exit')}>
-                    ₹{Number(
-                      viewRow?.attendanceSummary?.earlyExitPenalty
-                      || viewRow?.deductions?.early_exit_penalty
-                      || 0
-                    ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
-                  </Button>
+                {Object.entries(viewRow?.earnings || {}).some(([k]) => k.startsWith('LEAVE_ENCASHMENT:')) && (
+                  <Descriptions.Item label="Leave Encashment" span={2}>
+                    <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                      {Object.entries(viewRow.earnings)
+                        .filter(([k]) => k.startsWith('LEAVE_ENCASHMENT:'))
+                        .map(([k, v]) => (
+                          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #f0f0f0' }}>
+                            <Text type="secondary">{k.replace('LEAVE_ENCASHMENT:', '').trim()}</Text>
+                            <Text>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+                          </div>
+                        ))}
+                    </Space>
+                  </Descriptions.Item>
+                )}
+                <Descriptions.Item label="Payable Days" span={2}>
+                  {normalizedAtt.multiplierBreakdown && normalizedAtt.multiplierBreakdown.length > 0 ? (
+                    <Popover
+                      title="Multiplier Breakdown"
+                      content={
+                        <Table
+                          size="small"
+                          dataSource={normalizedAtt.multiplierBreakdown}
+                          pagination={false}
+                          rowKey="date"
+                          columns={[
+                            { title: 'Date', dataIndex: 'date', key: 'date', render: (d) => moment(d).format('DD MMM') },
+                            { title: 'Type', dataIndex: 'type', key: 'type' },
+                            { title: 'Rule', dataIndex: 'multiplier', key: 'multiplier' },
+                            {
+                              title: 'Payable',
+                              key: 'pay',
+                              align: 'right',
+                              render: (_, r) => (Number(r.baseUnits || 0) + Number(r.addedUnits || 0)).toFixed(2)
+                            }
+                          ]}
+                        />
+                      }
+                    >
+                      <Button type="link" style={{ padding: 0, height: 'auto', color: '#52c41a', fontSize: '16px', fontWeight: 'bold' }}>
+                        {normalizedAtt.payableDays || 0} days
+                      </Button>
+                    </Popover>
+                  ) : (
+                    <Text strong style={{ color: '#52c41a', fontSize: '16px' }}>
+                      {normalizedAtt.payableDays || 0} days
+                    </Text>
+                  )}
                 </Descriptions.Item>
-              </>
-            ) : null}
-            {(Number(viewRow?.attendanceSummary?.breakPenalty || viewRow?.deductions?.break_penalty || 0) > 0 ||
-              Number(viewRow?.attendanceSummary?.excessBreakMinutes || 0) > 0) ? (
-              <>
-                <Descriptions.Item label="Excess Break">{Number(viewRow?.attendanceSummary?.excessBreakMinutes || 0)}m</Descriptions.Item>
-                <Descriptions.Item label="Break Penalty">
-                  <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Break')}>
-                    ₹{Number(
-                      viewRow?.attendanceSummary?.breakPenalty
-                      || viewRow?.deductions?.break_penalty
-                      || 0
-                    ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
-                  </Button>
-                </Descriptions.Item>
-              </>
-            ) : null}
-          </Descriptions>
+                {(Number(viewRow?.attendanceSummary?.overtimeMinutes || 0) > 0 ||
+                  Number(viewRow?.attendanceSummary?.overtimePay || viewRow?.earnings?.overtime_pay || 0) > 0) ? (
+                  <>
+                    <Descriptions.Item label="OT Time">
+                      {Number(viewRow?.attendanceSummary?.overtimeHours || 0).toFixed(2)}h
+                      {` (${Number(viewRow?.attendanceSummary?.overtimeMinutes || 0)}m)`}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="OT Pay">
+                      <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Overtime')}>
+                        ₹{Number(
+                          viewRow?.attendanceSummary?.overtimePay
+                          || viewRow?.earnings?.overtime_pay
+                          || 0
+                        ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Button>
+                    </Descriptions.Item>
+                  </>
+                ) : null}
+                {(Number(viewRow?.attendanceSummary?.earlyOvertimeMinutes || 0) > 0 ||
+                  Number(viewRow?.attendanceSummary?.earlyOvertimePay || viewRow?.earnings?.early_overtime_pay || 0) > 0) ? (
+                  <>
+                    <Descriptions.Item label="Early OT (Min)">
+                      {Number(viewRow?.attendanceSummary?.earlyOvertimeMinutes || 0)}m
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Early OT Pay">
+                      <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Early Overtime')}>
+                        ₹{Number(
+                          viewRow?.attendanceSummary?.earlyOvertimePay
+                          || viewRow?.earnings?.early_overtime_pay
+                          || 0
+                        ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Button>
+                    </Descriptions.Item>
+                  </>
+                ) : null}
+                {(Number(viewRow?.attendanceSummary?.earlyExitMinutes || 0) > 0 ||
+                  Number(viewRow?.attendanceSummary?.earlyExitPenalty || viewRow?.deductions?.early_exit_penalty || 0) > 0) ? (
+                  <>
+                    <Descriptions.Item label="Early Exit">
+                      {Number(viewRow?.attendanceSummary?.earlyExitMinutes || 0)}m
+                    </Descriptions.Item>
+                    <Descriptions.Item label="EE Penalty">
+                      <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Early Exit')}>
+                        ₹{Number(
+                          viewRow?.attendanceSummary?.earlyExitPenalty
+                          || viewRow?.deductions?.early_exit_penalty
+                          || 0
+                        ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Button>
+                    </Descriptions.Item>
+                  </>
+                ) : null}
+                {(Number(viewRow?.attendanceSummary?.breakPenalty || viewRow?.deductions?.break_penalty || 0) > 0 ||
+                  Number(viewRow?.attendanceSummary?.excessBreakMinutes || 0) > 0) ? (
+                  <>
+                    <Descriptions.Item label="Excess Break">{Number(viewRow?.attendanceSummary?.excessBreakMinutes || 0)}m</Descriptions.Item>
+                    <Descriptions.Item label="Break Penalty">
+                      <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Break')}>
+                        ₹{Number(
+                          viewRow?.attendanceSummary?.breakPenalty
+                          || viewRow?.deductions?.break_penalty
+                          || 0
+                        ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Button>
+                    </Descriptions.Item>
+                  </>
+                ) : null}
+              </Descriptions>
             );
           })()
         )}
@@ -1291,8 +1401,8 @@ const PayrollList = () => {
           size="small"
           columns={[
             { title: 'Date', dataIndex: 'date', key: 'date', render: (d) => moment(d).format('DD MMM (ddd)') },
-            { 
-              title: 'Duration', 
+            {
+              title: 'Duration',
               key: 'duration',
               render: (_, r) => {
                 if (drilldownType === 'Late') return `${r.latePunchInMinutes || 0} min`;
@@ -1303,8 +1413,27 @@ const PayrollList = () => {
                 return '-';
               }
             },
-            { 
-              title: drilldownType.includes('Overtime') ? 'Earnings' : 'Penalty', 
+            ...(drilldownType === 'Late' ? [{
+              title: 'Occurrence',
+              dataIndex: 'lateOccurrence',
+              key: 'lateOccurrence',
+              render: (v, r) => {
+                if (v) return <Tag color="orange">{v}</Tag>;
+                if (Number(r.latePunchInAmount || 0) <= 0) return <Text type="secondary" italic>Rule not assigned</Text>;
+                return '-';
+              }
+            }] : []),
+            ...(drilldownType === 'Early Exit' || drilldownType === 'Break' ? [{
+              title: 'Note',
+              key: 'note',
+              render: (_, r) => {
+                const amt = drilldownType === 'Early Exit' ? (r.earlyExitAmount || 0) : (r.breakDeductionAmount || 0);
+                if (Number(amt) <= 0) return <Text type="secondary" italic>Rule not assigned</Text>;
+                return '-';
+              }
+            }] : []),
+            {
+              title: drilldownType.includes('Overtime') ? 'Earnings' : 'Penalty',
               key: 'amt',
               align: 'right',
               render: (_, r) => {
@@ -1314,9 +1443,9 @@ const PayrollList = () => {
                 else if (drilldownType === 'Break') amt = r.breakDeductionAmount || 0;
                 else if (drilldownType === 'Overtime') amt = r.overtimeAmount || 0;
                 else if (drilldownType === 'Early Overtime') amt = r.earlyOvertimeAmount || 0;
-                
+
                 const isEarning = drilldownType.includes('Overtime');
-                return <Text strong type={isEarning ? "success" : "danger"}>₹{Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>;
+                return <Text strong type={isEarning ? "success" : "danger"}>₹{Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>;
               }
             }
           ]}
@@ -1343,24 +1472,24 @@ const PayrollList = () => {
         {bonusData && (
           <Descriptions column={1} bordered size="small">
             <Descriptions.Item label="Applied Rule">
-                <Text strong>{bonusData.ruleName || 'Tenure Bonus Rule'}</Text>
+              <Text strong>{bonusData.ruleName || 'Tenure Bonus Rule'}</Text>
             </Descriptions.Item>
             <Descriptions.Item label="Total Tenure">
-                <Text strong>{bonusData.tenureMonths} Months</Text>
+              <Text strong>{bonusData.tenureMonths} Months</Text>
             </Descriptions.Item>
             <Descriptions.Item label="Matched Bracket">
-                <Tag color="purple">
-                    {bonusData.bracketMin} - {bonusData.bracketMax} Months
-                </Tag>
+              <Tag color="purple">
+                {bonusData.bracketMin} - {bonusData.bracketMax} Months
+              </Tag>
             </Descriptions.Item>
             <Descriptions.Item label="Bonus Percentage">
-                <Text strong style={{ color: '#722ed1' }}>{bonusData.bracketPercent}%</Text>
-                <Text type="secondary" style={{ marginLeft: 8 }}>of Gross</Text>
+              <Text strong style={{ color: '#722ed1' }}>{bonusData.bracketPercent}%</Text>
+              <Text type="secondary" style={{ marginLeft: 8 }}>of Gross</Text>
             </Descriptions.Item>
             <Descriptions.Item label="Calculated Amount">
-                <Text strong style={{ fontSize: '18px', color: '#722ed1' }}>
-                    ₹{Number(bonusData.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
-                </Text>
+              <Text strong style={{ fontSize: '18px', color: '#722ed1' }}>
+                ₹{Number(bonusData.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Text>
             </Descriptions.Item>
           </Descriptions>
         )}
