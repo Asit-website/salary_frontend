@@ -81,6 +81,7 @@ export default function Sales() {
   const [approvalSearch, setApprovalSearch] = useState('');
   const [approvalDeptFilter, setApprovalDeptFilter] = useState(null);
   const [approvalStaffFilter, setApprovalStaffFilter] = useState(null);
+  const [clientSearch, setClientSearch] = useState('');
 
   // Incentive Approvals
   const [approvals, setApprovals] = useState([]);
@@ -832,11 +833,27 @@ export default function Sales() {
     {
       key: 'clients',
       label: 'Clients',
-      children: (
-        <Card title="Clients" extra={<Button type="primary" icon={<PlusOutlined />} onClick={openNewClient}>New Client</Button>}>
-          <Table rowKey={(r) => r.id} loading={clientsLoading} columns={clientColumns} dataSource={clients} pagination={false} />
-        </Card>
-      )
+      children: (() => {
+        const filtered = clients.filter(c => 
+          (c.name || '').toLowerCase().includes(clientSearch.toLowerCase()) || 
+          (c.phone || '').toLowerCase().includes(clientSearch.toLowerCase()) ||
+          (c.location || '').toLowerCase().includes(clientSearch.toLowerCase())
+        );
+        return (
+          <Card title="Clients" extra={<Button type="primary" icon={<PlusOutlined />} onClick={openNewClient}>New Client</Button>}>
+            <div style={{ marginBottom: 16 }}>
+              <Input.Search 
+                placeholder="Search by name, phone or location" 
+                allowClear 
+                style={{ width: 300 }} 
+                value={clientSearch} 
+                onChange={e => setClientSearch(e.target.value)} 
+              />
+            </div>
+            <Table rowKey={(r) => r.id} loading={clientsLoading} columns={clientColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
+          </Card>
+        );
+      })()
     },
     {
       key: 'assignments',
@@ -981,7 +998,7 @@ export default function Sales() {
         );
       })()
     },
-  ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading, visits, visitsLoading, orders, ordersLoading, approvals, loadingApprovals, departments, staffOptions, assignSearch, assignDeptFilter, assignStaffFilter, targetSearch, targetDeptFilter, targetStaffFilter, visitSearch, visitDeptFilter, visitStaffFilter, orderSearch, orderDeptFilter, orderStaffFilter, approvalSearch, approvalDeptFilter, approvalStaffFilter, getRecordStaffName]);
+  ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading, visits, visitsLoading, orders, ordersLoading, approvals, loadingApprovals, departments, staffOptions, assignSearch, assignDeptFilter, assignStaffFilter, targetSearch, targetDeptFilter, targetStaffFilter, visitSearch, visitDeptFilter, visitStaffFilter, orderSearch, orderDeptFilter, orderStaffFilter, approvalSearch, approvalDeptFilter, approvalStaffFilter, clientSearch, getRecordStaffName]);
 
   return (
     <Layout style={{ minHeight: '100vh', marginLeft: 200 }}>

@@ -81,7 +81,8 @@ const OrgReports = () => {
       label: 'Salary Register (Excel)',
       children: [
         { value: 'designation', label: 'Designation Wise' },
-        { value: 'department', label: 'Department Wise' }
+        { value: 'department', label: 'Department Wise' },
+        { value: 'template', label: 'Salary Template Wise' }
       ]
     },
     {
@@ -281,7 +282,13 @@ const OrgReports = () => {
       } else if (mainType === 'late-penalty') {
         endpoint = '/admin/reports/late-penalty-analysis';
       } else if (mainType === 'salary-register') {
-        endpoint = '/admin/payroll/salary-register-excel-by-month';
+        if (subType === 'template') {
+          endpoint = '/admin/payroll/salary-register-template-wise-excel';
+        } else {
+          endpoint = '/admin/payroll/salary-register-excel-by-month';
+        }
+      } else if (mainType === 'salary-register-template') {
+        endpoint = '/admin/payroll/salary-register-template-wise-excel';
       } else if (mainType === 'monthly-summary') {
         endpoint = '/admin/payroll/monthly-summary-excel';
       }

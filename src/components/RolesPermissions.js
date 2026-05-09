@@ -21,6 +21,7 @@ const RolesPermissions = () => {
   const [editing, setEditing] = useState(null);
   const [assigningUser, setAssigningUser] = useState(null);
   const [staffSearch, setStaffSearch] = useState('');
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [form] = Form.useForm();
   const [assignForm] = Form.useForm();
 
@@ -148,19 +149,38 @@ const RolesPermissions = () => {
     setAssignOpen(true);
   };
 
+  const onBulkAssign = () => {
+    setAssigningUser(null);
+    assignForm.resetFields();
+    setAssignOpen(true);
+  };
+
   const onAssignSubmit = async () => {
     try {
       const values = await assignForm.validateFields();
-      await api.post('/admin/roles/assign-role', {
-        userId: assigningUser.id,
-        roleIds: values.roleIds
-      });
+      
+      if (assigningUser) {
+        // Single assignment
+        await api.post('/admin/roles/assign-role', {
+          userId: assigningUser.id,
+          roleIds: values.roleIds
+        });
+      } else {
+        // Bulk assignment
+        await api.post('/admin/roles/bulk-assign-role', {
+          userIds: selectedRowKeys,
+          roleIds: values.roleIds
+        });
+        setSelectedRowKeys([]);
+      }
+      
       message.success('Roles assigned');
       setAssignOpen(false);
       loadStaff();
       loadGeoLimits();
     } catch (e) {
-      message.error('Failed to assign Roles');
+      if (e?.response?.data?.message) message.error(e.response.data.message);
+      else message.error('Failed to assign Roles');
     }
   };
 
@@ -279,11 +299,28 @@ const RolesPermissions = () => {
           </Card>
 
           <Card 
-            title="Staff Role Assignment"
+            title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Staff Role Assignment</span>
+                {selectedRowKeys.length > 0 && (
+                  <Button 
+                    type="primary" 
+                    onClick={onBulkAssign}
+                    icon={<TeamOutlined />}
+                  >
+                    Bulk Assign ({selectedRowKeys.length})
+                  </Button>
+                )}
+              </div>
+            }
           >
             <Table
               rowKey="id"
               loading={loading}
+              rowSelection={{
+                selectedRowKeys,
+                onChange: (keys) => setSelectedRowKeys(keys)
+              }}
               columns={staffColumns}
               dataSource={filteredStaff}
               pagination={{ pageSize: 10 }}
@@ -326,7 +363,7 @@ const RolesPermissions = () => {
           </Modal>
 
           <Modal
-            title={`Assign Roles to ${assigningUser?.profile?.name || assigningUser?.phone}`}
+            title={assigningUser ? `Assign Roles to ${assigningUser?.profile?.name || assigningUser?.phone}` : `Bulk Assign Roles to ${selectedRowKeys.length} Staff`}
             open={assignOpen}
             onCancel={() => setAssignOpen(false)}
             onOk={onAssignSubmit}

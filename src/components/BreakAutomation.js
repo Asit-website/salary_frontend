@@ -1,5 +1,5 @@
-import { Layout, Typography, Card, Space, Table, Button, Modal, Form, Input, Select, InputNumber, Switch, message, Breadcrumb, Divider, Tag, Checkbox, Row, Col, Alert } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, HomeOutlined, ThunderboltOutlined, ArrowLeftOutlined, DeleteFilled, InfoCircleOutlined } from '@ant-design/icons';
+import { Layout, Typography, Card, Space, Table, Button, Modal, Form, Input, Select, InputNumber, Switch, message, Breadcrumb, Divider, Tag, Checkbox, Row, Col, Alert, DatePicker } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, HomeOutlined, ThunderboltOutlined, ArrowLeftOutlined, DeleteFilled, InfoCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
@@ -26,6 +26,8 @@ export default function BreakAutomation() {
     const [assigningRule, setAssigningRule] = useState(null);
     const [staffOptions, setStaffOptions] = useState([]);
     const [selectedStaffIds, setSelectedStaffIds] = useState([]);
+    const [effectiveFrom, setEffectiveFrom] = useState(dayjs());
+    const [effectiveTo, setEffectiveTo] = useState(null);
     const [assignedListOpen, setAssignedListOpen] = useState(false);
     const [assignedListRule, setAssignedListRule] = useState(null);
     const [assignedListRows, setAssignedListRows] = useState([]);
@@ -116,6 +118,8 @@ export default function BreakAutomation() {
             setAssigningRule(rule);
             setAssignOpen(true);
             setSelectedStaffIds([]);
+            setEffectiveFrom(dayjs());
+            setEffectiveTo(null);
             const staffRes = await api.get('/admin/staff');
             const staffData = staffRes.data?.staff || staffRes.data?.data || [];
             setStaffOptions(staffData.map(s => ({ label: `${s.name || 'Staff ' + s.id} (${s.profile?.staffId || '-'})`, value: s.id })));
@@ -128,8 +132,23 @@ export default function BreakAutomation() {
         try {
             if (!assigningRule) return;
             if (selectedStaffIds.length === 0) return message.warning('Select at least one staff');
-            await api.post(`/admin/settings/break-rules/${assigningRule.id}/assign`, { userIds: selectedStaffIds });
-            message.success('Staff assigned successfully');
+            
+            const resp = await api.post(`/admin/settings/break-rules/${assigningRule.id}/assign`, { 
+                userIds: selectedStaffIds,
+                effectiveFrom: effectiveFrom.format('YYYY-MM-DD'),
+                effectiveTo: effectiveTo ? effectiveTo.format('YYYY-MM-DD') : null
+            });
+
+            if (resp.data?.payrollWarning) {
+                Modal.warning({
+                    title: 'Payroll Locked',
+                    content: resp.data.payrollWarning,
+                    icon: <WarningOutlined style={{ color: '#faad14' }} />
+                });
+            } else {
+                message.success('Staff assigned successfully' + (resp.data?.recalculated ? ' and attendance recalculated.' : ''));
+            }
+
             setAssignOpen(false);
             fetchRules();
         } catch (err) {
@@ -437,33 +456,65 @@ export default function BreakAutomation() {
 
                     {/* Assign Modal */}
                     <Modal title={assigningRule ? `Assign Staff • ${assigningRule.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
-                        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+                            <div>
                                 <Text type="secondary">Select staff members to apply this break rule to:</Text>
-                                <Button
-                                    size="small"
-                                    type="link"
-                                    onClick={() => {
-                                        if (selectedStaffIds.length === staffOptions.length) {
-                                            setSelectedStaffIds([]);
-                                        } else {
-                                            setSelectedStaffIds(staffOptions.map(o => o.value));
-                                        }
-                                    }}
-                                >
-                                    {selectedStaffIds.length === staffOptions.length ? 'Deselect All' : 'Select All'}
-                                </Button>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                                    <Button
+                                        size="small"
+                                        type="link"
+                                        onClick={() => {
+                                            if (selectedStaffIds.length === staffOptions.length) {
+                                                setSelectedStaffIds([]);
+                                            } else {
+                                                setSelectedStaffIds(staffOptions.map(o => o.value));
+                                            }
+                                        }}
+                                    >
+                                        {selectedStaffIds.length === staffOptions.length ? 'Deselect All' : 'Select All'}
+                                    </Button>
+                                </div>
+                                <Select
+                                    mode="multiple"
+                                    options={staffOptions}
+                                    value={selectedStaffIds}
+                                    onChange={setSelectedStaffIds}
+                                    style={{ width: '100%' }}
+                                    placeholder="Select staff..."
+                                    showSearch
+                                    filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                                />
                             </div>
-                            <Select
-                                mode="multiple"
-                                options={staffOptions}
-                                value={selectedStaffIds}
-                                onChange={setSelectedStaffIds}
-                                style={{ width: '100%' }}
-                                placeholder="Select staff..."
-                                showSearch
-                                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-                            />
+
+                            <Row gutter={16}>
+                                <Col span={12}>
+                                    <Text strong>Effective From</Text>
+                                    <DatePicker 
+                                        style={{ width: '100%', marginTop: 8 }} 
+                                        value={effectiveFrom} 
+                                        onChange={setEffectiveFrom} 
+                                        format="DD-MM-YYYY"
+                                        allowClear={false}
+                                    />
+                                </Col>
+                                <Col span={12}>
+                                    <Text strong>Effective To (Optional)</Text>
+                                    <DatePicker 
+                                        style={{ width: '100%', marginTop: 8 }} 
+                                        value={effectiveTo} 
+                                        onChange={setEffectiveTo} 
+                                        format="DD-MM-YYYY"
+                                        placeholder="No end date"
+                                    />
+                                </Col>
+                            </Row>
+
+                            {effectiveFrom && effectiveFrom.isBefore(dayjs(), 'day') && (
+                                <div style={{ background: '#fff7e6', border: '1px solid #ffd591', padding: '8px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <InfoCircleOutlined style={{ color: '#fa8c16' }} />
+                                    <Text type="warning" size="small">Backdated assignment will trigger attendance recalculation.</Text>
+                                </div>
+                            )}
                         </Space>
                     </Modal>
 
@@ -501,7 +552,7 @@ export default function BreakAutomation() {
                             columns={[
                                 { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
                                 { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
-                                { title: 'Assigned Date', render: (_, r) => r.createdAt ? dayjs(r.createdAt).format('DD-MM-YYYY') : '-' },
+                                { title: 'Effective From', render: (_, r) => r.effectiveFrom ? dayjs(r.effectiveFrom).format('DD-MM-YYYY') : '-' },
                                 { title: 'Phone', render: (_, r) => r.user?.phone || '-' },
                                 { title: 'Department', render: (_, r) => r.user?.profile?.department || '-' },
                                 { title: 'Designation', render: (_, r) => r.user?.profile?.designation || '-' },

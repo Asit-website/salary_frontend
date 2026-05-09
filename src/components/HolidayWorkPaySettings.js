@@ -99,6 +99,7 @@ export default function HolidayWorkPaySettings() {
       setEditingAssign(record);
       assignForm.setFieldsValue({
           ...record,
+          userId: record.userId, // For editing it's a single value
           effectiveFrom: record.effectiveFrom ? dayjs(record.effectiveFrom) : null,
           effectiveTo: record.effectiveTo ? dayjs(record.effectiveTo) : null,
       });
@@ -117,17 +118,23 @@ export default function HolidayWorkPaySettings() {
 
   const handleSaveAssign = async (values) => {
     try {
-      const payload = {
-        ...values,
-        effectiveFrom: values.effectiveFrom.format('YYYY-MM-DD'),
-        effectiveTo: values.effectiveTo ? values.effectiveTo.format('YYYY-MM-DD') : null,
-      };
       if (editingAssign) {
+        const payload = {
+          ...values,
+          effectiveFrom: values.effectiveFrom.format('YYYY-MM-DD'),
+          effectiveTo: values.effectiveTo ? values.effectiveTo.format('YYYY-MM-DD') : null,
+        };
         await api.put(`/admin/holiday-work-pay/assignments/${editingAssign.id}`, payload);
         message.success('Assignment updated');
       } else {
+        const payload = {
+          userIds: values.userIds,
+          ruleId: values.ruleId,
+          effectiveFrom: values.effectiveFrom.format('YYYY-MM-DD'),
+          effectiveTo: values.effectiveTo ? values.effectiveTo.format('YYYY-MM-DD') : null,
+        };
         await api.post('/admin/holiday-work-pay/assignments', payload);
-        message.success('Assignment created');
+        message.success('Assignments created');
       }
       setAssignModalOpen(false);
       fetchData();
@@ -146,7 +153,16 @@ export default function HolidayWorkPaySettings() {
       render: (_, record) => (
         <Space>
           <Button icon={<EditOutlined />} onClick={() => handleEditRule(record)} />
-          <Button icon={<DeleteOutlined />} danger onClick={() => handleDeleteRule(record.id)} />
+          <Popconfirm
+            title="Delete Rule"
+            description="Are you sure you want to delete this rule?"
+            onConfirm={() => handleDeleteRule(record.id)}
+            okText="Delete"
+            cancelText="Cancel"
+            okButtonProps={{ danger: true }}
+          >
+            <Button icon={<DeleteOutlined />} danger />
+          </Popconfirm>
         </Space>
       ),
     },
@@ -256,8 +272,45 @@ export default function HolidayWorkPaySettings() {
         onOk={() => assignForm.submit()}
       >
         <Form form={assignForm} layout="vertical" onFinish={handleSaveAssign}>
-          <Form.Item name="userId" label="Select Staff" rules={[{ required: true }]}>
-            <Select showSearch placeholder="Search staff" optionFilterProp="children">
+          <Form.Item 
+            name={editingAssign ? "userId" : "userIds"} 
+            label={editingAssign ? "Select Staff" : "Select Staff (Multiple)"} 
+            rules={[{ required: true, message: 'Please select staff' }]}
+          >
+            <Select 
+              showSearch 
+              placeholder="Search staff" 
+              optionFilterProp="children"
+              mode={editingAssign ? undefined : "multiple"}
+              dropdownRender={(menu) => (
+                <>
+                  {!editingAssign && (
+                    <div style={{ padding: '8px', borderBottom: '1px solid #e8e8e8', display: 'flex', justifyContent: 'space-between' }}>
+                      <Button 
+                        type="link" 
+                        size="small" 
+                        onClick={() => {
+                          const allIds = staff.map(s => s.id);
+                          assignForm.setFieldsValue({ userIds: allIds });
+                        }}
+                      >
+                        Select All
+                      </Button>
+                      <Button 
+                        type="link" 
+                        size="small" 
+                        onClick={() => {
+                          assignForm.setFieldsValue({ userIds: [] });
+                        }}
+                      >
+                        Clear All
+                      </Button>
+                    </div>
+                  )}
+                  {menu}
+                </>
+              )}
+            >
               {staff.map(s => (
                 <Option key={s.id} value={s.id}>
                   {s.name || 'Unknown'} ({s.staffId || ''})

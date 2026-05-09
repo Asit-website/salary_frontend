@@ -1234,7 +1234,40 @@ const PayrollList = () => {
                     return val;
                   })()}
                 </Descriptions.Item>
-                <Descriptions.Item label="Late Count">{normalizedAtt.lateCount || 0}</Descriptions.Item>
+                <Descriptions.Item label="Late Count">
+                  {normalizedAtt.lateDetails && normalizedAtt.lateDetails.length > 0 ? (
+                    <Popover
+                      title="Late Details"
+                      content={
+                        <Table
+                          size="small"
+                          dataSource={normalizedAtt.lateDetails}
+                          pagination={false}
+                          rowKey="date"
+                          columns={[
+                            { title: 'Date', dataIndex: 'date', key: 'date', render: (d) => moment(d).format('DD MMM') },
+                            { title: 'Late (m)', dataIndex: 'latePunchInMinutes', key: 'min' },
+                            {
+                              title: 'Status',
+                              key: 'status',
+                              render: (_, r) => {
+                                if (r.latePunchInAmount > 0) return <Tag color="error">Penalty: ₹{r.latePunchInAmount}</Tag>;
+                                if (r.lateOccurrence) return <Tag color="warning">{r.lateOccurrence}</Tag>;
+                                return <Tag color="blue">No Penalty</Tag>;
+                              }
+                            }
+                          ]}
+                        />
+                      }
+                    >
+                      <Button type="link" style={{ padding: 0, height: 'auto' }}>
+                        {normalizedAtt.lateCount || 0}
+                      </Button>
+                    </Popover>
+                  ) : (
+                    normalizedAtt.lateCount || 0
+                  )}
+                </Descriptions.Item>
                 <Descriptions.Item label="Late Penalty">
                   {normalizedAtt.latePenalty > 0 ? (
                     <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => showAttendanceDrilldown(viewRow.userId || viewRow.user_id, 'Late')}>

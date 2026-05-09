@@ -636,7 +636,7 @@ export default function Settings() {
       key: 'attendance',
       title: 'Attendance Settings',
       items: [
-        { key: 'att-tpl', icon: <ProfileOutlined />, label: 'Attendance Templates', desc: 'Set standard baselines for attendance tracking', onClick: () => navigate('/settings/attendance-templates') },
+        // { key: 'att-tpl', icon: <ProfileOutlined />, label: 'Attendance Templates', desc: 'Set standard baselines for attendance tracking', onClick: () => navigate('/settings/attendance-templates') },
         { key: 'att-geo', icon: <EnvironmentOutlined />, label: 'Attendance Geofence Settings', desc: 'Set up virtual boundaries for attendance tracking', onClick: () => navigate('/settings/geofence') },
         { key: 'shift', icon: <ScheduleOutlined />, label: 'Shift Settings', desc: 'Create and manage shifts for employees', onClick: () => navigate('/settings/shifts') },
         { key: 'rules', icon: <ThunderboltOutlined />, label: 'Automation Rules', desc: 'Track late entry, overtime, early exit, breaks and biometric sync', onClick: () => navigate('/settings/automation-rules') },

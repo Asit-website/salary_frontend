@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Card, Tag, Button, Modal, Input, message, Layout, Space, Typography, Select } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
+import { Layout, Typography, Card, Table, Button, Modal, Form, Input, Space, message, Tabs, Select, DatePicker, Tag, Typography as AntTypography } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined, SettingOutlined, CheckCircleOutlined, CloseCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
@@ -31,6 +31,10 @@ const LeaveRequests = () => {
     const [reviewLoading, setReviewLoading] = useState(false);
     const [staffList, setStaffList] = useState([]);
     const [selectedUserId, setSelectedUserId] = useState(null);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [leaveCategories, setLeaveCategories] = useState([]);
+    const [createLoading, setCreateLoading] = useState(false);
+    const [createForm] = Form.useForm();
 
     const navigate = useNavigate();
 
@@ -75,6 +79,57 @@ const LeaveRequests = () => {
         setReviewAction(action);
         setReviewNote('');
         setIsNoteModalVisible(true);
+    };
+
+    const fetchCategories = async (userId) => {
+        try {
+            const res = await api.get('/leave/categories', { params: { userId } });
+            if (res.data.success) {
+                setLeaveCategories(res.data.categories || []);
+            }
+        } catch (error) {
+            message.error('Failed to load leave categories for staff');
+        }
+    };
+
+    const handleCreateLeave = async (values) => {
+        setCreateLoading(true);
+        try {
+            const userId = values.userId;
+            const startDate = values.range[0].format('YYYY-MM-DD');
+            const endDate = values.range[1].format('YYYY-MM-DD');
+
+            // Check for conflicts (holiday/weekly off)
+            const checkRes = await api.get('/leave/check-range', { 
+                params: { userId, start: startDate, end: endDate } 
+            });
+            if (checkRes.data.success && checkRes.data.conflict) {
+                message.error(checkRes.data.message || 'Conflict in date range');
+                setCreateLoading(false);
+                return;
+            }
+
+            const payload = {
+                userId,
+                startDate,
+                endDate,
+                categoryKey: values.categoryKey,
+                leaveType: leaveCategories.find(c => c.key === values.categoryKey)?.name || 'Leave',
+                reason: values.reason,
+                status: 'APPROVED' // Admin creates pre-approved leave
+            };
+            const res = await api.post('/leave', payload);
+            if (res.data.success) {
+                message.success('Leave created and approved');
+                setIsCreateModalOpen(false);
+                createForm.resetFields();
+                fetchRequests();
+            }
+        } catch (error) {
+            message.error(error.response?.data?.message || 'Failed to create leave');
+        } finally {
+            setCreateLoading(false);
+        }
     };
 
     const submitReview = async () => {
@@ -223,7 +278,10 @@ const LeaveRequests = () => {
                                 ))}
                             </Select>
                         </Space>
-                        <Button type="primary" onClick={fetchRequests}>Refresh</Button>
+                        <Space>
+                            <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsCreateModalOpen(true)}>Create Leave</Button>
+                            <Button onClick={fetchRequests}>Refresh</Button>
+                        </Space>
                     </div>
                     <Table
                         columns={columns}
@@ -239,7 +297,6 @@ const LeaveRequests = () => {
                 title={`${reviewAction === 'APPROVED' ? 'Approve' : 'Reject'} Leave Request`}
                 open={isNoteModalVisible}
                 onOk={submitReview}
-                confirmLoading={reviewLoading}
                 onCancel={() => setIsNoteModalVisible(false)}
             >
                 <Typography.Text strong>Reason for {reviewAction?.toLowerCase()}:</Typography.Text>
@@ -250,6 +307,55 @@ const LeaveRequests = () => {
                     placeholder="Enter note..."
                     style={{ marginTop: '10px' }}
                 />
+            </Modal>
+
+            <Modal
+                title="Create Leave for Staff"
+                open={isCreateModalOpen}
+                onCancel={() => setIsCreateModalOpen(false)}
+                onOk={() => createForm.submit()}
+                confirmLoading={createLoading}
+                width={600}
+            >
+                <Form 
+                    form={createForm} 
+                    layout="vertical" 
+                    onFinish={handleCreateLeave}
+                    initialValues={{ reason: 'Created by Admin' }}
+                >
+                    <Form.Item name="userId" label="Select Staff" rules={[{ required: true }]}>
+                        <Select 
+                            showSearch 
+                            placeholder="Select staff member"
+                            onChange={(uid) => {
+                                fetchCategories(uid);
+                                createForm.setFieldsValue({ categoryKey: undefined });
+                            }}
+                        >
+                            {staffList.map(s => (
+                                <Option key={s.id} value={s.id}>{s.name} ({s.phone})</Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+
+                    <Form.Item name="range" label="Leave Dates" rules={[{ required: true }]}>
+                        <DatePicker.RangePicker style={{ width: '100%' }} />
+                    </Form.Item>
+
+                    <Form.Item name="categoryKey" label="Leave Type" rules={[{ required: true }]}>
+                        <Select placeholder="Select leave type" disabled={!leaveCategories.length}>
+                            {leaveCategories.map(c => (
+                                <Option key={c.key} value={c.key}>
+                                    {c.name} (Rem: {c.remaining})
+                                </Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+
+                    <Form.Item name="reason" label="Reason">
+                        <Input.TextArea rows={3} placeholder="Reason for leave" />
+                    </Form.Item>
+                </Form>
             </Modal>
         </Layout>
     );
