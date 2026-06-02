@@ -1,15 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layout, Card, Radio, Button, message, Space, Typography, Switch, Table, Input, Tag } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Layout, Card, Radio, Button, message, Space, Typography, Switch, Table, Input } from 'antd';
+import { ArrowLeftOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import api from '../api';
 
-const { Header, Content } = Layout;
-const { Title, Text } = Typography;
+const { Content } = Layout;
+
+const getInitials = (name) => {
+  if (!name) return 'ST';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+};
 
 export default function SalaryDetailsAccess() {
   const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState([]);
@@ -86,12 +94,77 @@ export default function SalaryDetailsAccess() {
   };
 
   const columns = [
-    { title: 'Staff ID', dataIndex: 'staffId', key: 'staffId', width: 120 },
-    { title: 'Name', dataIndex: 'name', key: 'name' },
-    { title: 'Phone', dataIndex: 'phone', key: 'phone', width: 140 },
+    { 
+      title: 'Staff ID', 
+      dataIndex: 'staffId', 
+      key: 'staffId', 
+      width: 140,
+      render: (text) => <span style={{ fontWeight: '600', color: '#475569' }}>{text || '—'}</span>
+    },
+    { 
+      title: 'Name', 
+      dataIndex: 'name', 
+      key: 'name',
+      render: (text) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            backgroundColor: '#e0f2fe',
+            color: '#0369a1',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '12px',
+            fontWeight: '700',
+            flexShrink: 0,
+            boxShadow: '0 2px 4px rgba(3, 105, 161, 0.08)'
+          }}>
+            {getInitials(text)}
+          </div>
+          <span style={{ fontWeight: '600', color: '#1e293b' }}>{text}</span>
+        </div>
+      )
+    },
+    { 
+      title: 'Phone', 
+      dataIndex: 'phone', 
+      key: 'phone', 
+      width: 160,
+      render: (text) => <span style={{ color: '#64748b', fontSize: '13px' }}>{text || '—'}</span>
+    },
     {
-      title: 'Access', key: 'access', width: 120,
-      render: (_, r) => r.allowCurrentCycle ? <Tag color="green">Allowed</Tag> : <Tag>Blocked</Tag>
+      title: 'Access Status', 
+      key: 'access', 
+      width: 140,
+      render: (_, r) => r.allowCurrentCycle ? (
+        <span style={{ 
+          padding: '4px 10px', 
+          borderRadius: '20px', 
+          fontSize: '11px', 
+          fontWeight: '700', 
+          color: '#16a34a', 
+          backgroundColor: '#f0fdf4', 
+          border: '1px solid #bbf7d0',
+          letterSpacing: '0.5px'
+        }}>
+          ALLOWED
+        </span>
+      ) : (
+        <span style={{ 
+          padding: '4px 10px', 
+          borderRadius: '20px', 
+          fontSize: '11px', 
+          fontWeight: '700', 
+          color: '#64748b', 
+          backgroundColor: '#f1f5f9', 
+          border: '1px solid #cbd5e1',
+          letterSpacing: '0.5px'
+        }}>
+          BLOCKED
+        </span>
+      )
     },
   ];
 
@@ -103,55 +176,117 @@ export default function SalaryDetailsAccess() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sidebar />
-      <Layout style={{ marginLeft: 200, background: '#f5f7fb' }}>
-        <Header style={{ background: '#fff', padding: '0 24px', borderBottom: '1px solid #f0f0f0' }}>
-          <Space>
-            <Button icon={<ArrowLeftOutlined />} type="text" onClick={() => navigate(-1)}>Back</Button>
-            <Title level={4} style={{ margin: 0 }}>Salary Details Access</Title>
-          </Space>
-        </Header>
-        <Content style={{ padding: 24 }}>
-          <Card style={{ borderRadius: 8 }} bodyStyle={{ padding: 16 }}>
-            <div style={{ marginBottom: 16 }}>
-              <Text>Staff with salary details access can see their salary slips and payment details in their Staff App.</Text>
+      <Sidebar collapsed={collapsed} />
+      <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden', transition: 'margin-left 0.2s' }}>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Salary Access Settings" 
+        />
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            
+            {/* Toolbar Row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Button 
+                type="text" 
+                icon={<ArrowLeftOutlined />} 
+                onClick={() => navigate('/settings')}
+                style={{ fontWeight: 600, color: '#475569' }}
+                shape="round"
+              >
+                Back to Settings
+              </Button>
             </div>
-            <Space wrap>
-              <Radio.Group value={mode} onChange={(e) => setMode(e.target.value)} disabled={!enabled}>
-                <Radio.Button value="all">All</Radio.Button>
-                <Radio.Button value="none">None</Radio.Button>
-                <Radio.Button value="selected">Selected staff</Radio.Button>
-              </Radio.Group>
-              <div style={{ marginLeft: 16 }}>
-                <Space>
+
+            {/* Main Card */}
+            <Card 
+              className="sales-content-card" 
+              style={{ borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }} 
+              bodyStyle={{ padding: '24px' }}
+            >
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b' }}>Configure Salary Details Access</div>
+                <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+                  Configure which staff members can see their salary slips and payment details in their Staff App.
+                </div>
+              </div>
+
+              {/* Settings Toolbar Panel */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between', 
+                flexWrap: 'wrap', 
+                gap: '16px', 
+                padding: '16px 20px', 
+                background: '#f8fafc', 
+                borderRadius: '12px', 
+                border: '1px solid #e2e8f0',
+                marginBottom: '24px'
+              }}>
+                <Radio.Group 
+                  value={mode} 
+                  onChange={(e) => setMode(e.target.value)} 
+                  disabled={!enabled}
+                  optionType="button"
+                  buttonStyle="solid"
+                >
+                  <Radio.Button value="all" style={{ borderRadius: '6px 0 0 6px' }}>All Staff</Radio.Button>
+                  <Radio.Button value="none">None</Radio.Button>
+                  <Radio.Button value="selected" style={{ borderRadius: '0 6px 6px 0' }}>Selected Staff</Radio.Button>
+                </Radio.Group>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <Switch checked={enabled} onChange={setEnabled} />
-                  <Text>Allow Current Cycle Salary Access</Text>
+                  <span style={{ fontWeight: '600', color: '#334155', fontSize: '13px' }}>Allow Current Cycle Salary Access</span>
+                </div>
+              </div>
+
+              {mode === 'selected' ? (
+                <div style={{ marginTop: 16 }}>
+                  <Input
+                    prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                    placeholder="Search by name, phone or staff ID..." 
+                    allowClear 
+                    style={{ width: 280, borderRadius: '20px', marginBottom: '16px' }} 
+                    value={q} 
+                    onChange={(e) => setQ(e.target.value)} 
+                  />
+                  <Table
+                    loading={loading}
+                    dataSource={filtered}
+                    columns={columns}
+                    rowKey="userId"
+                    pagination={{ pageSize: 10 }}
+                    rowSelection={rowSelection}
+                    bordered={false}
+                  />
+                </div>
+              ) : null}
+
+              {/* Action Buttons Row */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #f1f5f9' }}>
+                <Space size={12}>
+                  <Button 
+                    shape="round" 
+                    onClick={() => navigate('/settings')}
+                    style={{ fontWeight: '500' }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="primary" 
+                    shape="round" 
+                    loading={saving} 
+                    onClick={onConfirm}
+                    style={{ fontWeight: '600', minWidth: '100px', boxShadow: '0 2px 6px rgba(22, 119, 255, 0.15)' }}
+                  >
+                    Confirm Access
+                  </Button>
                 </Space>
               </div>
-            </Space>
-
-            {mode === 'selected' ? (
-              <div style={{ marginTop: 16 }}>
-                <Input.Search placeholder="Search by name, phone or staff id" allowClear style={{ maxWidth: 320, marginBottom: 12 }} value={q} onChange={(e) => setQ(e.target.value)} />
-                <Table
-                  size="middle"
-                  loading={loading}
-                  dataSource={filtered}
-                  columns={columns}
-                  rowKey="userId"
-                  pagination={{ pageSize: 10 }}
-                  rowSelection={rowSelection}
-                />
-              </div>
-            ) : null}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
-              <Space>
-                <Button onClick={() => navigate(-1)}>Cancel</Button>
-                <Button type="primary" loading={saving} onClick={onConfirm}>Confirm</Button>
-              </Space>
-            </div>
-          </Card>
+            </Card>
+          </Space>
         </Content>
       </Layout>
     </Layout>

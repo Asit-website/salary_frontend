@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Card, Tag, Button, Modal, Input, message, Layout, Space, Typography, Select } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
+import { Table, Card, Button, Modal, Input, message, Layout, Space, Typography } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import moment from 'moment';
 
 const { Title } = Typography;
-const { Header, Content } = Layout;
-const { Option } = Select;
+const { Content } = Layout;
 const { TextArea } = Input;
 
 const categoryNames = {
@@ -31,12 +31,6 @@ const LeaveEncashment = () => {
     const [reviewLoading, setReviewLoading] = useState(false);
 
     const navigate = useNavigate();
-
-    const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/');
-    };
 
     const fetchClaims = async () => {
         setLoading(true);
@@ -86,14 +80,36 @@ const LeaveEncashment = () => {
     const columns = [
         {
             title: 'Employee',
-            dataIndex: ['user', 'profile', 'name'],
             key: 'employee',
-            render: (text, record) => (
-                <Space direction="vertical" size={0}>
-                    <Typography.Text strong>{text || 'Unknown'}</Typography.Text>
-                    <Typography.Text type="secondary" style={{ fontSize: '12px' }}>{record.user?.phone} ({record.user?.profile?.staffId})</Typography.Text>
-                </Space>
-            )
+            render: (_, record) => {
+                const name = record.user?.profile?.name || 'Unknown';
+                const phone = record.user?.phone || 'No phone';
+                const staffId = record.user?.profile?.staffId || 'N/A';
+                return (
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '12px',
+                            backgroundColor: '#e6f7ff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: '12px',
+                            color: '#1677ff',
+                            fontSize: '16px',
+                            fontWeight: '700',
+                            boxShadow: '0 2px 6px rgba(22, 119, 255, 0.08)'
+                        }}>
+                            {name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '14px', fontWeight: '600', color: '#1677ff' }}>{name}</div>
+                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '2px' }}>{phone} (ID: {staffId})</div>
+                        </div>
+                    </div>
+                );
+            }
         },
         {
             title: 'Leave Type',
@@ -101,30 +117,38 @@ const LeaveEncashment = () => {
             key: 'categoryKey',
             render: (text) => {
                 const name = categoryNames[text?.toLowerCase()] || text?.toUpperCase();
-                return <Tag color="blue">{name}</Tag>;
+                return (
+                    <span className="sales-status-tag sales-status-active">
+                        {name}
+                    </span>
+                );
             }
         },
         {
             title: 'Days',
             dataIndex: 'days',
             key: 'days',
-            render: (days) => <Typography.Text strong>{days} Days</Typography.Text>
+            render: (days) => <Typography.Text style={{ fontWeight: '600', color: '#1f1f1f' }}>{days} Days</Typography.Text>
         },
         {
             title: 'Month',
             dataIndex: 'monthKey',
             key: 'monthKey',
-            render: (val) => moment(val, 'YYYY-MM').format('MMMM YYYY')
+            render: (val) => <span style={{ fontWeight: '500' }}>{moment(val, 'YYYY-MM').format('MMMM YYYY')}</span>
         },
         {
             title: 'Status',
             dataIndex: 'status',
             key: 'status',
             render: (status) => {
-                let color = 'gold';
-                if (status === 'APPROVED') color = 'green';
-                if (status === 'REJECTED') color = 'red';
-                return <Tag color={color}>{status}</Tag>;
+                let statusClass = 'sales-status-pending';
+                if (status === 'APPROVED') statusClass = 'sales-status-complete';
+                if (status === 'REJECTED') statusClass = 'sales-status-inactive';
+                return (
+                    <span className={`sales-status-tag ${statusClass}`}>
+                        {status}
+                    </span>
+                );
             }
         },
         {
@@ -141,16 +165,21 @@ const LeaveEncashment = () => {
                     <Button
                         type="primary"
                         ghost
+                        size="small"
                         icon={<CheckCircleOutlined />}
                         onClick={() => handleReview(record, 'APPROVED')}
+                        shape="round"
+                        style={{ borderColor: '#52c41a', color: '#52c41a' }}
                     >
                         Approve
                     </Button>
                     <Button
                         danger
                         ghost
+                        size="small"
                         icon={<CloseCircleOutlined />}
                         onClick={() => handleReview(record, 'REJECTED')}
+                        shape="round"
                     >
                         Reject
                     </Button>
@@ -162,47 +191,57 @@ const LeaveEncashment = () => {
     return (
         <Layout style={{ minHeight: '100vh' }}>
             <Sidebar collapsed={collapsed} />
-            <Layout style={{ marginLeft: collapsed ? 80 : 200 }}>
-                <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                        {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
-                            style: { fontSize: '18px', padding: '0 24px', cursor: 'pointer' },
-                            onClick: () => setCollapsed(!collapsed)
-                        })}
-                        <Title level={4} style={{ margin: 0 }}>Leave Encashment Claims</Title>
-                    </div>
-                    <div style={{ paddingRight: '24px' }}>
-                        <LogoutOutlined style={{ fontSize: '18px', cursor: 'pointer' }} onClick={handleLogout} />
-                    </div>
-                </Header>
-                <Content style={{ margin: '24px', background: '#fff', padding: '24px' }}>
-                    <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-                        <Button type="primary" onClick={fetchClaims}>Refresh</Button>
-                    </div>
-                    <Table
-                        columns={columns}
-                        dataSource={claims}
-                        rowKey="id"
-                        loading={loading}
-                        pagination={{ pageSize: 15 }}
-                    />
+            <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
+                <MainHeader 
+                    collapsed={collapsed} 
+                    setCollapsed={setCollapsed} 
+                    title="Leave Encashment Claims" 
+                />
+                
+                <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+                    <Card
+                        className="sales-content-card"
+                        bodyStyle={{ padding: '24px' }}
+                    >
+                        {/* Sleek Filter & Action Row */}
+                        <div className="sales-filter-row" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
+                            <Button type="primary" onClick={fetchClaims} shape="round">Refresh</Button>
+                        </div>
+
+                        <Table
+                            columns={columns}
+                            dataSource={claims}
+                            rowKey="id"
+                            loading={loading}
+                            className="sales-table"
+                            pagination={{ 
+                                pageSize: 15,
+                                showSizeChanger: true,
+                                showQuickJumper: true,
+                                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
+                            }}
+                        />
+                    </Card>
                 </Content>
             </Layout>
 
+            {/* Note Review Modal */}
             <Modal
                 title={`${reviewAction === 'APPROVED' ? 'Approve' : 'Reject'} Encashment Claim`}
                 open={isNoteModalVisible}
                 onOk={submitReview}
                 confirmLoading={reviewLoading}
                 onCancel={() => setIsNoteModalVisible(false)}
+                className="sales-modal"
+                destroyOnClose
             >
-                <Typography.Text strong>Reason for {reviewAction?.toLowerCase()}:</Typography.Text>
+                <span className="modal-field-label" style={{ marginTop: '10px', display: 'block' }}>Reason for {reviewAction?.toLowerCase()}:</span>
                 <TextArea
                     rows={4}
                     value={reviewNote}
                     onChange={(e) => setReviewNote(e.target.value)}
-                    placeholder="Enter note..."
-                    style={{ marginTop: '10px' }}
+                    placeholder="Enter review note here..."
+                    style={{ marginTop: '8px' }}
                 />
                 <div style={{ marginTop: '15px' }}>
                     <Typography.Text type="secondary">

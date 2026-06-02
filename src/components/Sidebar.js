@@ -452,7 +452,9 @@ const Sidebar = ({ collapsed }) => {
   const handleMenuClick = (e) => {
     // Check for Sales access
     if (e.key === '/sales') {
-      const isSalesActive = !!subscriptionInfo?.salesEnabled || !!subscriptionInfo?.plan?.salesEnabled;
+      const isSalesActive = subscriptionInfo && subscriptionInfo.salesEnabled !== undefined
+        ? !!subscriptionInfo.salesEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.salesEnabled : true);
       if (!isSalesActive) {
         message.warning('You do not have permission to access Sales module');
         return;
@@ -461,7 +463,9 @@ const Sidebar = ({ collapsed }) => {
 
     // Check for Geolocation access
     if (e.key === '/geolocation') {
-      const isGeoActive = !!subscriptionInfo?.geolocationEnabled || !!subscriptionInfo?.plan?.geolocationEnabled;
+      const isGeoActive = subscriptionInfo && subscriptionInfo.geolocationEnabled !== undefined
+        ? !!subscriptionInfo.geolocationEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.geolocationEnabled : true);
       if (!isGeoActive) {
         message.warning('You do not have permission to access Geolocation module');
         return;
@@ -470,7 +474,9 @@ const Sidebar = ({ collapsed }) => {
 
     // Check for Expense access
     if (e.key === '/expense-management') {
-      const isExpActive = !!subscriptionInfo?.expenseEnabled || !!subscriptionInfo?.plan?.expenseEnabled;
+      const isExpActive = subscriptionInfo && subscriptionInfo.expenseEnabled !== undefined
+        ? !!subscriptionInfo.expenseEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.expenseEnabled : true);
       if (!isExpActive) {
         message.warning('You do not have permission to access Expense module');
         return;
@@ -479,7 +485,9 @@ const Sidebar = ({ collapsed }) => {
 
     // Check for Payroll access
     if (e.key.startsWith('/payroll') || e.key === '/employee-salary' || e.key === '/advances') {
-      const isActive = !!subscriptionInfo?.payrollEnabled || !!subscriptionInfo?.plan?.payrollEnabled;
+      const isActive = subscriptionInfo && subscriptionInfo.payrollEnabled !== undefined
+        ? !!subscriptionInfo.payrollEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.payrollEnabled : true);
       if (!isActive) {
         message.warning('You do not have permission to access Payroll module');
         return;
@@ -488,7 +496,9 @@ const Sidebar = ({ collapsed }) => {
 
     // Check for Performance access
     if (e.key.startsWith('/performance')) {
-      const isActive = !!subscriptionInfo?.performanceEnabled || !!subscriptionInfo?.plan?.performanceEnabled;
+      const isActive = subscriptionInfo && subscriptionInfo.performanceEnabled !== undefined
+        ? !!subscriptionInfo.performanceEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.performanceEnabled : true);
       if (!isActive) {
         message.warning('You do not have permission to access Performance module');
         return;
@@ -497,7 +507,9 @@ const Sidebar = ({ collapsed }) => {
 
     // Check for AI Reports access
     if (e.key.startsWith('/ai-reports/') && e.key !== '/ai-reports/assistant') {
-      const isActive = !!subscriptionInfo?.aiReportsEnabled || !!subscriptionInfo?.plan?.aiReportsEnabled;
+      const isActive = subscriptionInfo && subscriptionInfo.aiReportsEnabled !== undefined
+        ? !!subscriptionInfo.aiReportsEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.aiReportsEnabled : true);
       if (!isActive) {
         message.warning('You do not have permission to access AI Reports');
         return;
@@ -506,7 +518,9 @@ const Sidebar = ({ collapsed }) => {
 
     // Check for AI Assistant access
     if (e.key === '/ai-reports/assistant') {
-      const isActive = !!subscriptionInfo?.aiAssistantEnabled || !!subscriptionInfo?.plan?.aiAssistantEnabled;
+      const isActive = subscriptionInfo && subscriptionInfo.aiAssistantEnabled !== undefined
+        ? !!subscriptionInfo.aiAssistantEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.aiAssistantEnabled : true);
       if (!isActive) {
         message.warning('You do not have permission to access AI Assistant');
         return;
@@ -515,7 +529,9 @@ const Sidebar = ({ collapsed }) => {
 
     // Check for Task Management access
     if (e.key === '/task-management') {
-      const isActive = !!subscriptionInfo?.taskManagementEnabled || !!subscriptionInfo?.plan?.taskManagementEnabled;
+      const isActive = subscriptionInfo && subscriptionInfo.taskManagementEnabled !== undefined
+        ? !!subscriptionInfo.taskManagementEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.taskManagementEnabled : true);
       if (!isActive) {
         message.warning('You do not have permission to access Task Management module');
         return;
@@ -524,7 +540,9 @@ const Sidebar = ({ collapsed }) => {
 
     // Check for Roster access
     if (e.key === '/roster') {
-      const isActive = !!subscriptionInfo?.rosterEnabled || !!subscriptionInfo?.plan?.rosterEnabled;
+      const isActive = subscriptionInfo && subscriptionInfo.rosterEnabled !== undefined
+        ? !!subscriptionInfo.rosterEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.rosterEnabled : true);
       if (!isActive) {
         message.warning('You do not have permission to access Roster module');
         return;
@@ -533,7 +551,9 @@ const Sidebar = ({ collapsed }) => {
 
     // Check for Recruitment access
     if (e.key === '/recruitment') {
-      const isActive = !!subscriptionInfo?.recruitmentEnabled || !!subscriptionInfo?.plan?.recruitmentEnabled;
+      const isActive = subscriptionInfo && subscriptionInfo.recruitmentEnabled !== undefined
+        ? !!subscriptionInfo.recruitmentEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.recruitmentEnabled : true);
       if (!isActive) {
         message.warning('You do not have permission to access Recruitment (ATS) module');
         return;
@@ -542,7 +562,9 @@ const Sidebar = ({ collapsed }) => {
 
     // Check for Community access
     if (e.key === '/community-feed') {
-      const isActive = !!subscriptionInfo?.communityEnabled || !!subscriptionInfo?.plan?.communityEnabled;
+      const isActive = subscriptionInfo && subscriptionInfo.communityEnabled !== undefined
+        ? !!subscriptionInfo.communityEnabled
+        : (subscriptionInfo?.plan ? !!subscriptionInfo.plan.communityEnabled : true);
       if (!isActive) {
         message.warning('You do not have permission to access Community Feed');
         return;
@@ -575,6 +597,7 @@ const Sidebar = ({ collapsed }) => {
     if (pathname.startsWith('/ai-reports/risk-detection')) return '/ai-reports/risk-detection';
     if (pathname.startsWith('/ai-reports')) return '/ai-reports/salary-forecast';
     if (pathname.startsWith('/community-feed')) return '/community-feed';
+    if (pathname.startsWith('/settings/')) return '/settings';
 
     // Handle report query params for sidebar selection
     const search = location.search;
@@ -618,7 +641,7 @@ const Sidebar = ({ collapsed }) => {
       collapsed={collapsed}
       style={{
         background: '#fff',
-        borderRight: '1px solid #f0f0f0',
+        borderRight: '1px solid #eeeff2',
         display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
@@ -626,35 +649,49 @@ const Sidebar = ({ collapsed }) => {
         top: 0,
         bottom: 0,
         height: '100vh',
-        zIndex: 100
+        zIndex: 100,
+        boxShadow: '2px 0 12px rgba(0,0,0,0.04)',
       }}
     >
+      {/* Brand Header */}
       <div style={{
-        padding: '16px',
-        borderBottom: '1px solid #f0f0f0',
-        textAlign: 'center',
+        padding: collapsed ? '16px 8px' : '16px 18px',
+        borderBottom: '1px solid #f0f2f5',
         minHeight: '73px',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        background: '#fff'
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        gap: 10,
+        background: '#fff',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
+        {/* Subtle top accent line */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0,
+          height: 3,
+          background: 'linear-gradient(90deg, #1677ff 0%, #4facfe 100%)',
+          borderRadius: '0 0 2px 2px',
+        }} />
+
         {collapsed ? (
           (sidebarHeaderType === 'logo' && orgLogo) ? (
-            <img src={orgLogo} alt="Logo" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+            <img src={orgLogo} alt="Logo" style={{ width: '36px', height: '36px', objectFit: 'contain', borderRadius: 8 }} />
           ) : (
             headerBrand ? (
               <div style={{
-                width: '40px',
-                height: '40px',
-                background: '#1890ff',
-                borderRadius: '8px',
+                width: '38px',
+                height: '38px',
+                background: 'linear-gradient(135deg, #1677ff 0%, #4facfe 100%)',
+                borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#fff',
-                fontWeight: 'bold',
-                fontSize: '18px'
+                fontWeight: '800',
+                fontSize: '15px',
+                boxShadow: '0 3px 10px rgba(22,119,255,0.25)',
+                flexShrink: 0,
               }}>
                 {headerBrand.substring(0, 2).toUpperCase()}
               </div>
@@ -662,21 +699,42 @@ const Sidebar = ({ collapsed }) => {
           )
         ) : (
           (sidebarHeaderType === 'logo' && orgLogo) ? (
-            <div style={{ padding: '4px', width: '100%', display: 'flex', justifyContent: 'center' }}>
-              <img src={orgLogo} alt="Logo" style={{ maxWidth: '100%', maxHeight: '45px', objectFit: 'contain' }} />
+            <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <img src={orgLogo} alt="Logo" style={{ maxWidth: '100%', maxHeight: '42px', objectFit: 'contain' }} />
             </div>
           ) : (
             headerBrand && (
-              <div style={{
-                fontSize: '20px',
-                fontWeight: 'bold',
-                color: '#1890ff',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                padding: '0 8px'
-              }}>
-                {headerBrand}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  background: 'linear-gradient(135deg, #1677ff 0%, #4facfe 100%)',
+                  borderRadius: '9px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontWeight: '800',
+                  fontSize: '14px',
+                  boxShadow: '0 3px 10px rgba(22,119,255,0.25)',
+                  flexShrink: 0,
+                }}>
+                  {headerBrand.substring(0, 2).toUpperCase()}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: '#1e293b',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    lineHeight: 1.3,
+                  }}>
+                    {headerBrand}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#475569', fontWeight: 600, marginTop: 1 }}>Organization</div>
+                </div>
               </div>
             )
           )
@@ -697,23 +755,27 @@ const Sidebar = ({ collapsed }) => {
         onClick={handleMenuClick}
         style={{
           borderRight: 'none',
-          flex: 1
+          flex: 1,
+          paddingTop: 6,
         }}
       />
 
+      {/* Footer logo */}
       <div style={{
-        padding: '8px 16px',
+        padding: collapsed ? '10px 8px' : '10px 16px',
         textAlign: 'center',
-        borderTop: '1px solid #f0f0f0',
-        flexShrink: 0
+        borderTop: '1px solid #f0f2f5',
+        flexShrink: 0,
+        background: '#fafbfc',
       }}>
         <img
           src="https://res.cloudinary.com/dgif730br/image/upload/v1768991385/thinktech-logo-blue-300x103_1_kh9gcg.png"
           alt="ThinkTech Logo"
           style={{
-            width: collapsed ? 32 : 140,
+            width: collapsed ? 28 : 120,
             height: 'auto',
-            opacity: 0.9
+            opacity: 0.75,
+            transition: 'width 0.2s',
           }}
         />
       </div>

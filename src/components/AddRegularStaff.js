@@ -72,6 +72,14 @@ const AddRegularStaff = () => {
   const otherAllowancesWatch = Form.useWatch('other_allowances', form);
   const travelAllowanceWatch = Form.useWatch('travel_allowance', form);
 
+  // Deductions watches
+  const pfWatch = Form.useWatch('provident_fund_employee', form);
+  const esiWatch = Form.useWatch('esi', form);
+  const ptWatch = Form.useWatch('professional_tax', form);
+  const itWatch = Form.useWatch('income_tax', form);
+  const loanWatch = Form.useWatch('loan_deduction', form);
+  const otherDedsWatch = Form.useWatch('other_deductions', form);
+
   const calcTotalEarnings = () =>
     Number(basicSalaryWatch || 0) +
     Number(hraWatch || 0) +
@@ -82,6 +90,17 @@ const AddRegularStaff = () => {
     Number(travelAllowanceWatch || 0) +
     Number(otherAllowancesWatch || 0) +
     (extraEarnings || []).reduce((sum, r) => sum + (parseFloat(r?.amount) || 0), 0);
+
+  const calcTotalDeductions = () =>
+    Number(pfWatch || 0) +
+    Number(esiWatch || 0) +
+    Number(ptWatch || 0) +
+    Number(itWatch || 0) +
+    Number(loanWatch || 0) +
+    Number(otherDedsWatch || 0) +
+    (extraDeductions || []).reduce((sum, r) => sum + (parseFloat(r?.amount) || 0), 0);
+
+  const calcNetSalary = () => calcTotalEarnings() - calcTotalDeductions();
 
   const pickProfessionalTax = (total, slabs) => {
     const t = Number(total || 0);
@@ -209,19 +228,27 @@ const AddRegularStaff = () => {
       const db = sv.deductions || {};
 
       // Handle dynamic extras
+      // Normalize keys for comparison: lowercase, remove spaces and underscores
+      const normKey = (s) => (s || '').toString().toLowerCase().replace(/[_\s]+/g, '');
       const knownE = ['basic_salary', 'hra', 'da', 'special_allowance', 'conveyance_allowance', 'medical_allowance', 'travel_allowance', 'other_allowances'];
+      const knownENorm = knownE.map(normKey);
+      const ignoredE = ['totalearnings', 'totalincentives'];
       const extE = [];
       Object.entries(eb).forEach(([k, v]) => {
-        if (!knownE.includes(k) && k !== 'totalEarnings' && k !== 'totalIncentives') {
+        const nk = normKey(k);
+        if (!knownENorm.includes(nk) && !ignoredE.includes(nk)) {
           extE.push({ id: Date.now() + Math.random(), label: k.replace(/_/g, ' ').toUpperCase(), amount: v });
         }
       });
       setExtraEarnings(extE);
 
       const knownD = ['provident_fund', 'esi', 'professional_tax', 'income_tax', 'loan_deduction', 'other_deductions'];
+      const knownDNorm = knownD.map(normKey);
+      const ignoredD = ['totaldeductions'];
       const extD = [];
       Object.entries(db).forEach(([k, v]) => {
-        if (!knownD.includes(k) && k !== 'totalDeductions') {
+        const nk = normKey(k);
+        if (!knownDNorm.includes(nk) && !ignoredD.includes(nk)) {
           extD.push({ id: Date.now() + Math.random(), label: k.replace(/_/g, ' ').toUpperCase(), amount: v });
         }
       });
@@ -888,10 +915,10 @@ const AddRegularStaff = () => {
                             alt="avatar"
                             style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }}
                           />
-                        ) : (
+                         ) : (
                           <div>
                             {photoLoading ? <LoadingOutlined /> : <PlusOutlined />}
-                            <div style={{ marginTop: 8 }}>Upload Photo</div>
+                            <div style={{ marginTop: 8, fontSize: '11px', color: '#8c8c8c' }}>Upload Photo<br/>(JPG/PNG, Max 2MB)</div>
                           </div>
                         )}
                       </Upload>
@@ -1412,7 +1439,7 @@ const AddRegularStaff = () => {
                       <Card size="small" style={{ textAlign: 'center', background: '#f0f8ff' }}>
                         <div style={{ fontSize: '14px', color: '#666' }}>Total Earnings</div>
                         <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1890ff' }}>
-                          ₹<span id="total-earnings">0</span>
+                          ₹{(calcTotalEarnings() || 0).toLocaleString('en-IN')}
                         </div>
                       </Card>
                     </Col>
@@ -1420,7 +1447,7 @@ const AddRegularStaff = () => {
                       <Card size="small" style={{ textAlign: 'center', background: '#fff2f0' }}>
                         <div style={{ fontSize: '14px', color: '#666' }}>Total Deductions</div>
                         <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ff4d4f' }}>
-                          ₹<span id="total-deductions">0</span>
+                          ₹{(calcTotalDeductions() || 0).toLocaleString('en-IN')}
                         </div>
                       </Card>
                     </Col>
@@ -1428,7 +1455,7 @@ const AddRegularStaff = () => {
                       <Card size="small" style={{ textAlign: 'center', background: '#f6ffed' }}>
                         <div style={{ fontSize: '14px', color: '#666' }}>Net Salary</div>
                         <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#52c41a' }}>
-                          ₹<span id="net-salary">0</span>
+                          ₹{(calcNetSalary() || 0).toLocaleString('en-IN')}
                         </div>
                       </Card>
                     </Col>

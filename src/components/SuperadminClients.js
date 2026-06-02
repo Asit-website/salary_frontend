@@ -35,6 +35,7 @@ export default function SuperadminClients() {
   const [selectedClientForGeoLimit, setSelectedClientForGeoLimit] = useState(null);
   const [geoStaffCounts, setGeoStaffCounts] = useState({});
   const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isSuperadmin = user.role === 'superadmin';
   const userPermissions = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : (user.permissions || {});
@@ -129,6 +130,12 @@ export default function SuperadminClients() {
     const aiReportsEnabled = sub.aiReportsEnabled !== null ? sub.aiReportsEnabled : (plan.aiReportsEnabled || false);
     const aiAssistantEnabled = sub.aiAssistantEnabled !== null ? sub.aiAssistantEnabled : (plan.aiAssistantEnabled || false);
     const taskManagementEnabled = sub.taskManagementEnabled !== null ? sub.taskManagementEnabled : (plan.taskManagementEnabled || false);
+    const salaryRegisterEnabled = sub.salaryRegisterEnabled !== null && sub.salaryRegisterEnabled !== undefined ? sub.salaryRegisterEnabled : (plan.salaryRegisterEnabled !== undefined ? plan.salaryRegisterEnabled : true);
+    const monthlySummaryEnabled = sub.monthlySummaryEnabled !== null && sub.monthlySummaryEnabled !== undefined ? sub.monthlySummaryEnabled : (plan.monthlySummaryEnabled !== undefined ? plan.monthlySummaryEnabled : true);
+    const perDaySalaryEnabled = sub.perDaySalaryEnabled !== null && sub.perDaySalaryEnabled !== undefined ? sub.perDaySalaryEnabled : (plan.perDaySalaryEnabled !== undefined ? plan.perDaySalaryEnabled : true);
+    const comparisonEnabled = sub.comparisonEnabled !== null && sub.comparisonEnabled !== undefined ? sub.comparisonEnabled : (plan.comparisonEnabled !== undefined ? plan.comparisonEnabled : true);
+    const otImpactEnabled = sub.otImpactEnabled !== null && sub.otImpactEnabled !== undefined ? sub.otImpactEnabled : (plan.otImpactEnabled !== undefined ? plan.otImpactEnabled : true);
+    const latePenaltyEnabled = sub.latePenaltyEnabled !== null && sub.latePenaltyEnabled !== undefined ? sub.latePenaltyEnabled : (plan.latePenaltyEnabled !== undefined ? plan.latePenaltyEnabled : true);
 
     console.log('Opening limit modal for client:', client.name);
 
@@ -143,8 +150,13 @@ export default function SuperadminClients() {
       performanceEnabled,
       aiReportsEnabled,
       aiAssistantEnabled,
-      aiAssistantEnabled,
       taskManagementEnabled,
+      salaryRegisterEnabled,
+      monthlySummaryEnabled,
+      perDaySalaryEnabled,
+      comparisonEnabled,
+      otImpactEnabled,
+      latePenaltyEnabled,
       rosterEnabled: sub.rosterEnabled !== null ? sub.rosterEnabled : (plan.rosterEnabled || false),
       recruitmentEnabled: sub.recruitmentEnabled !== null ? sub.recruitmentEnabled : (plan.recruitmentEnabled || false),
       communityEnabled: sub.communityEnabled !== null ? sub.communityEnabled : (plan.communityEnabled || false)
@@ -178,11 +190,16 @@ export default function SuperadminClients() {
         performanceEnabled: !!values.performanceEnabled,
         aiReportsEnabled: !!values.aiReportsEnabled,
         aiAssistantEnabled: !!values.aiAssistantEnabled,
-        aiAssistantEnabled: !!values.aiAssistantEnabled,
         taskManagementEnabled: !!values.taskManagementEnabled,
         rosterEnabled: !!values.rosterEnabled,
         recruitmentEnabled: !!values.recruitmentEnabled,
-        communityEnabled: !!values.communityEnabled
+        communityEnabled: !!values.communityEnabled,
+        salaryRegisterEnabled: !!values.salaryRegisterEnabled,
+        monthlySummaryEnabled: !!values.monthlySummaryEnabled,
+        perDaySalaryEnabled: !!values.perDaySalaryEnabled,
+        comparisonEnabled: !!values.comparisonEnabled,
+        otImpactEnabled: !!values.otImpactEnabled,
+        latePenaltyEnabled: !!values.latePenaltyEnabled
       };
 
       const res = await api.post(`/superadmin/clients/${selectedClientForLimit.id}/subscription`, payload);
@@ -320,7 +337,13 @@ export default function SuperadminClients() {
       taskManagementEnabled: sub.taskManagementEnabled !== null ? !!sub.taskManagementEnabled : (!!resolvedPlan.taskManagementEnabled || false),
       rosterEnabled: sub.rosterEnabled !== null ? !!sub.rosterEnabled : (!!resolvedPlan.rosterEnabled || false),
       recruitmentEnabled: sub.recruitmentEnabled !== null ? !!sub.recruitmentEnabled : (!!resolvedPlan.recruitmentEnabled || false),
-      communityEnabled: sub.communityEnabled !== null ? !!sub.communityEnabled : (!!resolvedPlan.communityEnabled || false)
+      communityEnabled: sub.communityEnabled !== null ? !!sub.communityEnabled : (!!resolvedPlan.communityEnabled || false),
+      salaryRegisterEnabled: sub.salaryRegisterEnabled !== null && sub.salaryRegisterEnabled !== undefined ? !!sub.salaryRegisterEnabled : (resolvedPlan.salaryRegisterEnabled !== undefined ? !!resolvedPlan.salaryRegisterEnabled : true),
+      monthlySummaryEnabled: sub.monthlySummaryEnabled !== null && sub.monthlySummaryEnabled !== undefined ? !!sub.monthlySummaryEnabled : (resolvedPlan.monthlySummaryEnabled !== undefined ? !!resolvedPlan.monthlySummaryEnabled : true),
+      perDaySalaryEnabled: sub.perDaySalaryEnabled !== null && sub.perDaySalaryEnabled !== undefined ? !!sub.perDaySalaryEnabled : (resolvedPlan.perDaySalaryEnabled !== undefined ? !!resolvedPlan.perDaySalaryEnabled : true),
+      comparisonEnabled: sub.comparisonEnabled !== null && sub.comparisonEnabled !== undefined ? !!sub.comparisonEnabled : (resolvedPlan.comparisonEnabled !== undefined ? !!resolvedPlan.comparisonEnabled : true),
+      otImpactEnabled: sub.otImpactEnabled !== null && sub.otImpactEnabled !== undefined ? !!sub.otImpactEnabled : (resolvedPlan.otImpactEnabled !== undefined ? !!resolvedPlan.otImpactEnabled : true),
+      latePenaltyEnabled: sub.latePenaltyEnabled !== null && sub.latePenaltyEnabled !== undefined ? !!sub.latePenaltyEnabled : (resolvedPlan.latePenaltyEnabled !== undefined ? !!resolvedPlan.latePenaltyEnabled : true)
     });
     setAssignModalTitle('Assign/Renew Subscription');
     setIsUpgrade(false);
@@ -356,7 +379,13 @@ export default function SuperadminClients() {
       taskManagementEnabled: !!plan.taskManagementEnabled,
       rosterEnabled: !!plan.rosterEnabled,
       recruitmentEnabled: !!plan.recruitmentEnabled,
-      communityEnabled: !!plan.communityEnabled
+      communityEnabled: !!plan.communityEnabled,
+      salaryRegisterEnabled: plan.salaryRegisterEnabled !== undefined ? !!plan.salaryRegisterEnabled : true,
+      monthlySummaryEnabled: plan.monthlySummaryEnabled !== undefined ? !!plan.monthlySummaryEnabled : true,
+      perDaySalaryEnabled: plan.perDaySalaryEnabled !== undefined ? !!plan.perDaySalaryEnabled : true,
+      comparisonEnabled: plan.comparisonEnabled !== undefined ? !!plan.comparisonEnabled : true,
+      otImpactEnabled: plan.otImpactEnabled !== undefined ? !!plan.otImpactEnabled : true,
+      latePenaltyEnabled: plan.latePenaltyEnabled !== undefined ? !!plan.latePenaltyEnabled : true
     });
     setAssignModalTitle('Upgrade Plan (Queued)');
     setIsUpgrade(true);
@@ -381,7 +410,13 @@ export default function SuperadminClients() {
         taskManagementEnabled: !!plan.taskManagementEnabled,
         rosterEnabled: !!plan.rosterEnabled,
         recruitmentEnabled: !!plan.recruitmentEnabled,
-        communityEnabled: !!plan.communityEnabled
+        communityEnabled: !!plan.communityEnabled,
+        salaryRegisterEnabled: plan.salaryRegisterEnabled !== undefined ? !!plan.salaryRegisterEnabled : true,
+        monthlySummaryEnabled: plan.monthlySummaryEnabled !== undefined ? !!plan.monthlySummaryEnabled : true,
+        perDaySalaryEnabled: plan.perDaySalaryEnabled !== undefined ? !!plan.perDaySalaryEnabled : true,
+        comparisonEnabled: plan.comparisonEnabled !== undefined ? !!plan.comparisonEnabled : true,
+        otImpactEnabled: plan.otImpactEnabled !== undefined ? !!plan.otImpactEnabled : true,
+        latePenaltyEnabled: plan.latePenaltyEnabled !== undefined ? !!plan.latePenaltyEnabled : true
       });
     }
   };
@@ -415,6 +450,12 @@ export default function SuperadminClients() {
         rosterEnabled: !!values.rosterEnabled,
         recruitmentEnabled: !!values.recruitmentEnabled,
         communityEnabled: !!values.communityEnabled,
+        salaryRegisterEnabled: !!values.salaryRegisterEnabled,
+        monthlySummaryEnabled: !!values.monthlySummaryEnabled,
+        perDaySalaryEnabled: !!values.perDaySalaryEnabled,
+        comparisonEnabled: !!values.comparisonEnabled,
+        otImpactEnabled: !!values.otImpactEnabled,
+        latePenaltyEnabled: !!values.latePenaltyEnabled,
       };
       await api.post(`/superadmin/clients/${editing.id}/subscription`, payload);
       message.success('Subscription assigned');
@@ -589,6 +630,17 @@ export default function SuperadminClients() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h2 style={{ margin: 0 }}>Clients</h2>
             <Space>
+              <Select
+                value={statusFilter}
+                onChange={value => setStatusFilter(value)}
+                style={{ width: 150 }}
+                options={[
+                  { value: 'ALL', label: 'All' },
+                  { value: 'ACTIVE', label: 'Active' },
+                  { value: 'DISABLED', label: 'Disabled' },
+                  { value: 'SUSPENDED', label: 'Suspended' }
+                ]}
+              />
               <Input.Search
                 placeholder="Search by name or phone"
                 allowClear
@@ -603,10 +655,12 @@ export default function SuperadminClients() {
             rowKey="id"
             loading={loading}
             columns={columns}
-            dataSource={rows.filter(r =>
-              (r.name || '').toLowerCase().includes(searchText.toLowerCase()) ||
-              (r.phone || '').includes(searchText)
-            )}
+            dataSource={rows.filter(r => {
+              const matchesSearch = (r.name || '').toLowerCase().includes(searchText.toLowerCase()) ||
+                                    (r.phone || '').includes(searchText);
+              const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter;
+              return matchesSearch && matchesStatus;
+            })}
             pagination={{
               pageSize: 100,
               showSizeChanger: true,
@@ -777,6 +831,41 @@ export default function SuperadminClients() {
                 <Col span={8}>
                   <Form.Item name="communityEnabled" valuePropName="checked">
                     <Checkbox>Enable Community Module</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={24} style={{ marginTop: 8, marginBottom: 8 }}>
+                  <div style={{ fontWeight: 600, color: '#1890ff', borderBottom: '1px solid #f0f0f0', paddingBottom: 4, marginBottom: 12 }}>
+                    Report Visibilities
+                  </div>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="salaryRegisterEnabled" valuePropName="checked">
+                    <Checkbox>Salary Register (Excel)</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="monthlySummaryEnabled" valuePropName="checked">
+                    <Checkbox>Monthly Summary (Excel)</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="perDaySalaryEnabled" valuePropName="checked">
+                    <Checkbox>Per Day Average (with OT)</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="comparisonEnabled" valuePropName="checked">
+                    <Checkbox>MoM Comparison</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="otImpactEnabled" valuePropName="checked">
+                    <Checkbox>OT Impact Analysis</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="latePenaltyEnabled" valuePropName="checked">
+                    <Checkbox>Late Penalty Analysis</Checkbox>
                   </Form.Item>
                 </Col>
               </Row>
@@ -957,6 +1046,41 @@ export default function SuperadminClients() {
             <Col span={8}>
               <Form.Item name="communityEnabled" valuePropName="checked">
                 <Checkbox>Enable Community Module</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={24} style={{ marginTop: 8, marginBottom: 8 }}>
+              <div style={{ fontWeight: 600, color: '#1890ff', borderBottom: '1px solid #f0f0f0', paddingBottom: 4, marginBottom: 12 }}>
+                Report Visibilities
+              </div>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="salaryRegisterEnabled" valuePropName="checked">
+                <Checkbox>Salary Register (Excel)</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="monthlySummaryEnabled" valuePropName="checked">
+                <Checkbox>Monthly Summary (Excel)</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="perDaySalaryEnabled" valuePropName="checked">
+                <Checkbox>Per Day Average (with OT)</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="comparisonEnabled" valuePropName="checked">
+                <Checkbox>MoM Comparison</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="otImpactEnabled" valuePropName="checked">
+                <Checkbox>OT Impact Analysis</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="latePenaltyEnabled" valuePropName="checked">
+                <Checkbox>Late Penalty Analysis</Checkbox>
               </Form.Item>
             </Col>
           </Row>

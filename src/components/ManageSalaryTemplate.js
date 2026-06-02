@@ -13,16 +13,20 @@ import {
   Row,
   Col,
   message,
-  Dropdown
+  Dropdown,
+  Space
 } from 'antd';
-import { PlusOutlined, MoreOutlined } from '@ant-design/icons';
+import { PlusOutlined, MoreOutlined, ArrowLeftOutlined, DeleteOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import api from '../api';
 
-const { Header, Content } = Layout;
-const { Title } = Typography;
+const { Content } = Layout;
 
 export default function ManageSalaryTemplate() {
+  const navigate = useNavigate();
+  const [collapsed, setCollapsed] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [listLoading, setListLoading] = React.useState(false);
   const [templates, setTemplates] = React.useState([]);
@@ -47,7 +51,6 @@ export default function ManageSalaryTemplate() {
     load();
   }, []);
 
-  // EXACT Step-2 defaults + requested additions
   const defaultEarningsList = [
     'BASIC SALARY',
     'HRA',
@@ -91,7 +94,6 @@ export default function ManageSalaryTemplate() {
     try {
       setEditing(row);
       form.resetFields();
-      // Fetch latest by id to ensure full JSON and avoid string parsing issues
       const res = await api.get(`/admin/salary-templates/${row.id}`);
       const tpl = res.data?.data || row;
 
@@ -176,7 +178,6 @@ export default function ManageSalaryTemplate() {
         if (key === 'PROVIDENT FUND') { pfFound = true; return; }
         if (key === 'ESI') {
           esiFound = true;
-          // Legacy ESI support: treat as employee percentage when new keys aren't present
           if (!hasEsiKeys) {
             esiEmployeeAmount = Number.isFinite(value) ? value : 0;
             esiEmployerAmount = 0;
@@ -190,10 +191,8 @@ export default function ManageSalaryTemplate() {
         });
       });
 
-      // Always add all default deductions including PF with proper values
       const finalDeductions = [];
 
-      // Add PF if found
       if (pfFound) {
         finalDeductions.push({
           name: 'PROVIDENT FUND',
@@ -202,7 +201,6 @@ export default function ManageSalaryTemplate() {
         });
       }
 
-      // Add ESI if found
       if (esiFound) {
         finalDeductions.push({
           name: 'ESI',
@@ -211,7 +209,6 @@ export default function ManageSalaryTemplate() {
         });
       }
 
-      // Add PT if found
       if (ptFound) {
         finalDeductions.push({
           name: 'PROFESSIONAL TAX',
@@ -220,7 +217,6 @@ export default function ManageSalaryTemplate() {
         });
       }
 
-      // Add other deductions from template
       dEntries.forEach((entry) => {
         const n = String(entry?.name ?? '').trim();
         if (!n) return;
@@ -234,7 +230,6 @@ export default function ManageSalaryTemplate() {
         });
       });
 
-      // Remove blanks + duplicates (prevents the extra "Enter deduction name" row)
       const seenDed = new Set();
       dEntries = finalDeductions.filter((d) => {
         const n = String(d?.name ?? '').trim();
@@ -245,7 +240,6 @@ export default function ManageSalaryTemplate() {
         return true;
       });
 
-      // Backfill defaults if empty
       if (!eEntries.length) eEntries = defaultEarningsList.map((k) => ({ name: k, amount: 0 }));
 
       form.setFieldsValue({
@@ -384,13 +378,50 @@ export default function ManageSalaryTemplate() {
   };
 
   const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name' },
-    { title: 'Active', dataIndex: 'active', key: 'active', render: (v) => (v ? 'Yes' : 'No') },
+    { 
+      title: 'Template Name', 
+      dataIndex: 'name', 
+      key: 'name',
+      render: (text) => <span style={{ fontWeight: '600', color: '#1e293b' }}>{text}</span>
+    },
+    { 
+      title: 'Status', 
+      dataIndex: 'active', 
+      key: 'active', 
+      width: 140,
+      render: (v) => v ? (
+        <span style={{ 
+          padding: '4px 10px', 
+          borderRadius: '20px', 
+          fontSize: '11px', 
+          fontWeight: '700', 
+          color: '#16a34a', 
+          backgroundColor: '#f0fdf4', 
+          border: '1px solid #bbf7d0',
+          letterSpacing: '0.5px'
+        }}>
+          ACTIVE
+        </span>
+      ) : (
+        <span style={{ 
+          padding: '4px 10px', 
+          borderRadius: '20px', 
+          fontSize: '11px', 
+          fontWeight: '700', 
+          color: '#dc2626', 
+          backgroundColor: '#fef2f2', 
+          border: '1px solid #fecaca',
+          letterSpacing: '0.5px'
+        }}>
+          INACTIVE
+        </span>
+      )
+    },
     {
       title: 'Actions',
       key: 'actions',
       align: 'right',
-      width: 220,
+      width: 160,
       fixed: 'right',
       render: (_, r) => {
         const items = [
@@ -404,7 +435,9 @@ export default function ManageSalaryTemplate() {
         return (
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Dropdown menu={{ items, onClick }} trigger={['click']}>
-              <Button icon={<MoreOutlined />}>More</Button>
+              <Button shape="round" icon={<MoreOutlined style={{ fontSize: '13px' }} />} style={{ border: '1px solid #cbd5e1', fontWeight: '500' }}>
+                Actions
+              </Button>
             </Dropdown>
           </div>
         );
@@ -414,328 +447,370 @@ export default function ManageSalaryTemplate() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sidebar />
-      <Layout style={{ marginLeft: 200, background: '#f5f7fb' }}>
-        <Header style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #f0f0f0' }}>
-          <Title level={4} style={{ margin: 0 }}>
-            Manage Salary Template
-          </Title>
-        </Header>
-        <Content style={{ padding: 24 }}>
-          <Card title="Templates" extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Create Template</Button>}>
-            <Table
-              size="small"
-              loading={listLoading}
-              dataSource={(templates || []).map((t) => ({ key: t.id, ...t }))}
-              columns={columns}
-              scroll={{ x: 900 }}
-              pagination={{ pageSize: 10 }}
-            />
-          </Card>
+      <Sidebar collapsed={collapsed} />
+      <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden', transition: 'margin-left 0.2s' }}>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Salary Templates" 
+        />
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            
+            {/* Toolbar Row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Button 
+                type="text" 
+                icon={<ArrowLeftOutlined />} 
+                onClick={() => navigate('/settings')}
+                style={{ fontWeight: 600, color: '#475569' }}
+                shape="round"
+              >
+                Back to Settings
+              </Button>
+            </div>
 
-          <Modal
-            title={editing ? 'Edit Template' : 'Create Template'}
-            open={modalOpen}
-            onCancel={() => {
-              setModalOpen(false);
-              setEditing(null);
-            }}
-            onOk={save}
-            confirmLoading={loading}
-            okText={editing ? 'Save' : 'Create'}
-            width={720}
-          >
-            <Form form={form} layout="vertical">
-              <Row gutter={12}>
-                <Col span={14}>
-                  <Form.Item name="name" label="Template Name" rules={[{ required: true, message: 'Name is required' }]}>
-                    <Input />
-                  </Form.Item>
-                </Col>
-                <Col span={10}>
-                  <Form.Item name="active" label="Active" valuePropName="checked">
-                    <Switch defaultChecked />
-                  </Form.Item>
-                </Col>
-              </Row>
+            {/* Main Card */}
+            <Card 
+              className="sales-content-card" 
+              style={{ borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }} 
+              bodyStyle={{ padding: '24px' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b' }}>Salary Structure Templates</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Configure earnings and statutory deductions (PF, ESI, PT) for staff payroll.</div>
+                </div>
+                <Button 
+                  type="primary" 
+                  shape="round" 
+                  icon={<PlusOutlined />} 
+                  onClick={openAdd}
+                  style={{ boxShadow: '0 2px 6px rgba(22, 119, 255, 0.15)' }}
+                >
+                  Create Template
+                </Button>
+              </div>
 
-              <Card size="small" title="Earnings" style={{ marginBottom: 12 }}>
-                <Form.List name="earnings">
-                  {(fields, { add, remove }) => (
-                    <>
-                      {fields.map(({ key, name, ...rest }) => (
-                        <Row key={key} gutter={8} style={{ marginBottom: 8 }}>
+              <Table
+                loading={listLoading}
+                dataSource={(templates || []).map((t) => ({ key: t.id, ...t }))}
+                columns={columns}
+                pagination={{ pageSize: 10 }}
+                bordered={false}
+              />
+            </Card>
+          </Space>
+        </Content>
+      </Layout>
+
+      <Modal
+        title={<span style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>{editing ? 'Edit Salary Template' : 'Create Salary Template'}</span>}
+        open={modalOpen}
+        onCancel={() => {
+          setModalOpen(false);
+          setEditing(null);
+        }}
+        onOk={save}
+        confirmLoading={loading}
+        okText={editing ? 'Save' : 'Create'}
+        cancelButtonProps={{ shape: 'round' }}
+        okButtonProps={{ shape: 'round' }}
+        width={720}
+      >
+        <div style={{ paddingTop: '12px' }}>
+          <Form form={form} layout="vertical">
+            <Row gutter={16} style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+              <Col span={16}>
+                <Form.Item name="name" label={<span style={{ fontWeight: '600', color: '#475569' }}>Template Name</span>} rules={[{ required: true, message: 'Name is required' }]} style={{ marginBottom: 0 }}>
+                  <Input placeholder="e.g. Executive Staff Salary" style={{ borderRadius: '8px' }} />
+                </Form.Item>
+              </Col>
+              <Col span={8} style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>Active Status</span>
+                <Form.Item name="active" valuePropName="checked" style={{ marginBottom: 0 }}>
+                  <Switch defaultChecked />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Card size="small" title={<span style={{ fontWeight: '700', color: '#1e293b', fontSize: '13px' }}>Earnings</span>} style={{ marginBottom: 16, borderRadius: '10px' }} bodyStyle={{ padding: '16px' }}>
+              <Form.List name="earnings">
+                {(fields, { add, remove }) => (
+                  <>
+                    {fields.map(({ key, name, ...rest }) => (
+                      <Row key={key} gutter={12} style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
+                        <Col span={14}>
+                          <Form.Item
+                            {...rest}
+                            name={[name, 'name']}
+                            rules={[{ required: true, message: 'Name' }]}
+                            style={{ marginBottom: 0 }}
+                          >
+                            <Input placeholder="e.g. BASIC SALARY" style={{ borderRadius: '8px' }} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                          <Form.Item {...rest} name={[name, 'amount']} style={{ marginBottom: 0 }}>
+                            <InputNumber disabled min={0} style={{ width: '100%', borderRadius: '8px' }} placeholder="0" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={2} style={{ textAlign: 'right' }}>
+                          <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                        </Col>
+                      </Row>
+                    ))}
+                    <Button 
+                      type="dashed" 
+                      onClick={() => add({ name: '', amount: 0 })} 
+                      icon={<PlusOutlined />} 
+                      style={{ borderRadius: '8px', marginTop: '4px' }}
+                      block
+                    >
+                      Add Earning Component
+                    </Button>
+                  </>
+                )}
+              </Form.List>
+            </Card>
+
+            <Card size="small" title={<span style={{ fontWeight: '700', color: '#1e293b', fontSize: '13px' }}>Deductions</span>} style={{ borderRadius: '10px' }} bodyStyle={{ padding: '16px' }}>
+              <Form.List name="deductions">
+                {(fields, { add, remove }) => (
+                  <>
+                    {fields.map(({ key, name, ...rest }) => {
+                      const initialValues = form.getFieldValue(['deductions', name]);
+                      const isPF = String(initialValues?.name || '').trim().toUpperCase() === 'PROVIDENT FUND';
+                      const isESI = String(initialValues?.name || '').trim().toUpperCase() === 'ESI';
+                      const isPT = String(initialValues?.name || '').trim().toUpperCase() === 'PROFESSIONAL TAX';
+
+                      if (isPF) {
+                        return (
+                          <div key={key} style={{ marginBottom: 16, padding: '16px', border: '1px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#f8fafc' }}>
+                            <Row gutter={8} style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
+                              <Col span={22}>
+                                <Form.Item
+                                  {...rest}
+                                  name={[name, 'name']}
+                                  rules={[{ required: true, message: 'Name' }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Input placeholder="PROVIDENT FUND" style={{ fontWeight: '700', color: '#1e293b', borderRadius: '8px' }} />
+                                </Form.Item>
+                              </Col>
+                              <Col span={2} style={{ textAlign: 'right' }}>
+                                <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                              </Col>
+                            </Row>
+                            <Row gutter={12}>
+                              <Col span={12}>
+                                <Form.Item
+                                  label={<span style={{ fontWeight: '600', color: '#475569', fontSize: '12px' }}>Employee Contribution (%)</span>}
+                                  {...rest}
+                                  name={[name, 'amount']}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <InputNumber
+                                    min={0}
+                                    max={100}
+                                    style={{ width: '100%', borderRadius: '8px' }}
+                                    placeholder="12"
+                                    addonAfter="%"
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col span={12}>
+                                <Form.Item
+                                  label={<span style={{ fontWeight: '600', color: '#475569', fontSize: '12px' }}>Employer Contribution (%)</span>}
+                                  {...rest}
+                                  name={[name, 'employerAmount']}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <InputNumber
+                                    min={0}
+                                    max={100}
+                                    style={{ width: '100%', borderRadius: '8px' }}
+                                    placeholder="12"
+                                    addonAfter="%"
+                                  />
+                                </Form.Item>
+                              </Col>
+                            </Row>
+                          </div>
+                        );
+                      }
+
+                      if (isPT) {
+                        return (
+                          <div key={key} style={{ marginBottom: 16, padding: '16px', border: '1px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#f8fafc' }}>
+                            <Row gutter={8} style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
+                              <Col span={22}>
+                                <Form.Item
+                                  {...rest}
+                                  name={[name, 'name']}
+                                  rules={[{ required: true, message: 'Name' }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Input placeholder="PROFESSIONAL TAX" style={{ fontWeight: '700', color: '#1e293b', borderRadius: '8px' }} />
+                                </Form.Item>
+                              </Col>
+                              <Col span={2} style={{ textAlign: 'right' }}>
+                                <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                              </Col>
+                            </Row>
+
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>Slab Rules</div>
+                            <Form.List name={[name, 'slabs']}>
+                              {(slabFields, { add: addSlab, remove: removeSlab }) => (
+                                <>
+                                  {slabFields.map(({ key: sKey, name: sName, ...sRest }) => (
+                                    <Row key={sKey} gutter={8} style={{ marginBottom: 8, display: 'flex', alignItems: 'end' }}>
+                                      <Col span={7}>
+                                        <Form.Item
+                                          label={sName === 0 ? <span style={{ fontSize: '11px', color: '#64748b' }}>From (₹)</span> : ''}
+                                          {...sRest}
+                                          name={[sName, 'min']}
+                                          style={{ marginBottom: 0 }}
+                                        >
+                                          <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} placeholder="0" />
+                                        </Form.Item>
+                                      </Col>
+                                      <Col span={7}>
+                                        <Form.Item
+                                          label={sName === 0 ? <span style={{ fontSize: '11px', color: '#64748b' }}>To (₹)</span> : ''}
+                                          {...sRest}
+                                          name={[sName, 'max']}
+                                          style={{ marginBottom: 0 }}
+                                        >
+                                          <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} placeholder="max" />
+                                        </Form.Item>
+                                      </Col>
+                                      <Col span={8}>
+                                        <Form.Item
+                                          label={sName === 0 ? <span style={{ fontSize: '11px', color: '#64748b' }}>PT Amount (₹)</span> : ''}
+                                          {...sRest}
+                                          name={[sName, 'amount']}
+                                          style={{ marginBottom: 0 }}
+                                        >
+                                          <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} placeholder="0" />
+                                        </Form.Item>
+                                      </Col>
+                                      <Col span={2} style={{ display: 'flex', justifyContent: 'flex-end', height: '32px', alignItems: 'center' }}>
+                                        <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => removeSlab(sName)} />
+                                      </Col>
+                                    </Row>
+                                  ))}
+                                  <Button
+                                    type="dashed"
+                                    onClick={() => addSlab({ min: 0, max: null, amount: 0 })}
+                                    icon={<PlusOutlined />}
+                                    style={{ marginTop: '8px', borderRadius: '8px' }}
+                                    block
+                                  >
+                                    Add Slab Rule
+                                  </Button>
+                                </>
+                              )}
+                            </Form.List>
+                          </div>
+                        );
+                      }
+
+                      if (isESI) {
+                        return (
+                          <div key={key} style={{ marginBottom: 16, padding: '16px', border: '1px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#f8fafc' }}>
+                            <Row gutter={8} style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
+                              <Col span={22}>
+                                <Form.Item
+                                  {...rest}
+                                  name={[name, 'name']}
+                                  rules={[{ required: true, message: 'Name' }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Input placeholder="ESI" style={{ fontWeight: '700', color: '#1e293b', borderRadius: '8px' }} />
+                                </Form.Item>
+                              </Col>
+                              <Col span={2} style={{ textAlign: 'right' }}>
+                                <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                              </Col>
+                            </Row>
+                            <Row gutter={12}>
+                              <Col span={12}>
+                                <Form.Item
+                                  label={<span style={{ fontWeight: '600', color: '#475569', fontSize: '12px' }}>Employee Contribution (%)</span>}
+                                  {...rest}
+                                  name={[name, 'amount']}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <InputNumber
+                                    min={0}
+                                    max={100}
+                                    style={{ width: '100%', borderRadius: '8px' }}
+                                    placeholder="0.75"
+                                    addonAfter="%"
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col span={12}>
+                                <Form.Item
+                                  label={<span style={{ fontWeight: '600', color: '#475569', fontSize: '12px' }}>Employer Contribution (%)</span>}
+                                  {...rest}
+                                  name={[name, 'employerAmount']}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <InputNumber
+                                    min={0}
+                                    max={100}
+                                    style={{ width: '100%', borderRadius: '8px' }}
+                                    placeholder="3.25"
+                                    addonAfter="%"
+                                  />
+                                </Form.Item>
+                              </Col>
+                            </Row>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <Row key={key} gutter={12} style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
                           <Col span={14}>
                             <Form.Item
                               {...rest}
                               name={[name, 'name']}
                               rules={[{ required: true, message: 'Name' }]}
+                              style={{ marginBottom: 0 }}
                             >
-                              <Input placeholder="e.g. BASIC SALARY" />
+                              <Input placeholder="Enter deduction name" style={{ borderRadius: '8px' }} />
                             </Form.Item>
                           </Col>
                           <Col span={8}>
-                            <Form.Item {...rest} name={[name, 'amount']}>
-                              <InputNumber disabled min={0} style={{ width: '100%' }} />
+                            <Form.Item {...rest} name={[name, 'amount']} style={{ marginBottom: 0 }}>
+                              <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} placeholder="0" />
                             </Form.Item>
                           </Col>
-                          <Col span={2}>
-                            <Button danger onClick={() => remove(name)}>
-                              X
-                            </Button>
+                          <Col span={2} style={{ textAlign: 'right' }}>
+                            <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
                           </Col>
                         </Row>
-                      ))}
-                      <Button type="dashed" onClick={() => add({ name: '', amount: 0 })} icon={<PlusOutlined />}>
-                        Add More
-                      </Button>
-                    </>
-                  )}
-                </Form.List>
-              </Card>
-              <Card size="small" title="Deductions">
-                <Form.List name="deductions">
-                  {(fields, { add, remove }) => (
-                    <>
-                      {fields.map(({ key, name, ...rest }) => {
-                        // Get the initial value to determine if this is PF
-                        const initialValues = form.getFieldValue(['deductions', name]);
-                        const isPF = String(initialValues?.name || '').trim().toUpperCase() === 'PROVIDENT FUND';
-                        const isESI = String(initialValues?.name || '').trim().toUpperCase() === 'ESI';
-                        const isPT = String(initialValues?.name || '').trim().toUpperCase() === 'PROFESSIONAL TAX';
-
-                        if (isPF) {
-                          return (
-                            <div key={key} style={{ marginBottom: 16, padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fafafa' }}>
-                              <Row gutter={8} style={{ marginBottom: 8 }}>
-                                <Col span={22}>
-                                  <Form.Item
-                                    {...rest}
-                                    name={[name, 'name']}
-                                    rules={[{ required: true, message: 'Name' }]}
-                                    style={{ marginBottom: 0 }}
-                                  >
-                                    <Input placeholder="PROVIDENT FUND" />
-                                  </Form.Item>
-                                </Col>
-                                <Col span={2}>
-                                  <Button danger onClick={() => remove(name)} size="small">
-                                    X
-                                  </Button>
-                                </Col>
-                              </Row>
-                              <Row gutter={8}>
-                                <Col span={12}>
-                                  <Form.Item
-                                    label="Employee Contribution (%)"
-                                    {...rest}
-                                    name={[name, 'amount']}
-                                    style={{ marginBottom: 0 }}
-                                  >
-                                    <InputNumber
-                                      min={0}
-                                      max={100}
-                                      style={{ width: '100%' }}
-                                      placeholder="12%"
-                                      addonAfter="%"
-                                    />
-                                  </Form.Item>
-                                </Col>
-                                <Col span={12}>
-                                  <Form.Item
-                                    label="Employer Contribution (%)"
-                                    {...rest}
-                                    name={[name, 'employerAmount']}
-                                    style={{ marginBottom: 0 }}
-                                  >
-                                    <InputNumber
-                                      min={0}
-                                      max={100}
-                                      style={{ width: '100%' }}
-                                      placeholder="12%"
-                                      addonAfter="%"
-                                    />
-                                  </Form.Item>
-                                </Col>
-                              </Row>
-                            </div>
-                          );
-                        }
-
-                        if (isPT) {
-                          return (
-                            <div key={key} style={{ marginBottom: 16, padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fafafa' }}>
-                              <Row gutter={8} style={{ marginBottom: 8 }}>
-                                <Col span={22}>
-                                  <Form.Item
-                                    {...rest}
-                                    name={[name, 'name']}
-                                    rules={[{ required: true, message: 'Name' }]}
-                                    style={{ marginBottom: 0 }}
-                                  >
-                                    <Input placeholder="PROFESSIONAL TAX" />
-                                  </Form.Item>
-                                </Col>
-                                <Col span={2}>
-                                  <Button danger onClick={() => remove(name)} size="small">
-                                    X
-                                  </Button>
-                                </Col>
-                              </Row>
-
-                              <Form.List name={[name, 'slabs']}>
-                                {(slabFields, { add: addSlab, remove: removeSlab }) => (
-                                  <>
-                                    {slabFields.map(({ key: sKey, name: sName, ...sRest }) => (
-                                      <Row key={sKey} gutter={8} style={{ marginBottom: 8 }}>
-                                        <Col span={7}>
-                                          <Form.Item
-                                            label={sName === 0 ? 'From (₹)' : ''}
-                                            {...sRest}
-                                            name={[sName, 'min']}
-                                            style={{ marginBottom: 0 }}
-                                          >
-                                            <InputNumber min={0} style={{ width: '100%' }} placeholder="0" />
-                                          </Form.Item>
-                                        </Col>
-                                        <Col span={7}>
-                                          <Form.Item
-                                            label={sName === 0 ? 'To (₹)' : ''}
-                                            {...sRest}
-                                            name={[sName, 'max']}
-                                            style={{ marginBottom: 0 }}
-                                          >
-                                            <InputNumber min={0} style={{ width: '100%' }} placeholder="max" />
-                                          </Form.Item>
-                                        </Col>
-                                        <Col span={8}>
-                                          <Form.Item
-                                            label={sName === 0 ? 'PT Amount (₹)' : ''}
-                                            {...sRest}
-                                            name={[sName, 'amount']}
-                                            style={{ marginBottom: 0 }}
-                                          >
-                                            <InputNumber min={0} style={{ width: '100%' }} placeholder="0" />
-                                          </Form.Item>
-                                        </Col>
-                                        <Col span={2} style={{ display: 'flex', alignItems: 'end' }}>
-                                          <Button danger onClick={() => removeSlab(sName)} size="small">
-                                            X
-                                          </Button>
-                                        </Col>
-                                      </Row>
-                                    ))}
-                                    <Button
-                                      type="dashed"
-                                      onClick={() => addSlab({ min: 0, max: null, amount: 0 })}
-                                      icon={<PlusOutlined />}
-                                    >
-                                      Add Slab
-                                    </Button>
-                                  </>
-                                )}
-                              </Form.List>
-                            </div>
-                          );
-                        }
-
-                        if (isESI) {
-                          return (
-                            <div key={key} style={{ marginBottom: 16, padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fafafa' }}>
-                              <Row gutter={8} style={{ marginBottom: 8 }}>
-                                <Col span={22}>
-                                  <Form.Item
-                                    {...rest}
-                                    name={[name, 'name']}
-                                    rules={[{ required: true, message: 'Name' }]}
-                                    style={{ marginBottom: 0 }}
-                                  >
-                                    <Input placeholder="ESI" />
-                                  </Form.Item>
-                                </Col>
-                                <Col span={2}>
-                                  <Button danger onClick={() => remove(name)} size="small">
-                                    X
-                                  </Button>
-                                </Col>
-                              </Row>
-                              <Row gutter={8}>
-                                <Col span={12}>
-                                  <Form.Item
-                                    label="Employee Contribution (%)"
-                                    {...rest}
-                                    name={[name, 'amount']}
-                                    style={{ marginBottom: 0 }}
-                                  >
-                                    <InputNumber
-                                      min={0}
-                                      max={100}
-                                      style={{ width: '100%' }}
-                                      placeholder="0%"
-                                      addonAfter="%"
-                                    />
-                                  </Form.Item>
-                                </Col>
-                                <Col span={12}>
-                                  <Form.Item
-                                    label="Employer Contribution (%)"
-                                    {...rest}
-                                    name={[name, 'employerAmount']}
-                                    style={{ marginBottom: 0 }}
-                                  >
-                                    <InputNumber
-                                      min={0}
-                                      max={100}
-                                      style={{ width: '100%' }}
-                                      placeholder="0%"
-                                      addonAfter="%"
-                                    />
-                                  </Form.Item>
-                                </Col>
-                              </Row>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <Row key={key} gutter={8} style={{ marginBottom: 8 }}>
-                            <Col span={14}>
-                              <Form.Item
-                                {...rest}
-                                name={[name, 'name']}
-                                rules={[{ required: true, message: 'Name' }]}
-                              >
-                                <Input placeholder="Enter deduction name" />
-                              </Form.Item>
-                            </Col>
-                            <Col span={8}>
-                              <Form.Item {...rest} name={[name, 'amount']}>
-                                <InputNumber
-                                  min={0}
-                                  style={{ width: '100%' }}
-                                  placeholder="0"
-                                />
-                              </Form.Item>
-                            </Col>
-                            <Col span={2}>
-                              <Button danger onClick={() => remove(name)}>
-                                X
-                              </Button>
-                            </Col>
-                          </Row>
-                        );
-                      })}
-                      <Button type="dashed" onClick={() => add({ name: '', amount: 0 })} icon={<PlusOutlined />}>
-                        Add More
-                      </Button>
-                    </>
-                  )}
-                </Form.List>
-              </Card>
-            </Form>
-          </Modal>
-        </Content>
-      </Layout>
+                      );
+                    })}
+                    <Button 
+                      type="dashed" 
+                      onClick={() => add({ name: '', amount: 0 })} 
+                      icon={<PlusOutlined />} 
+                      style={{ borderRadius: '8px', marginTop: '4px' }}
+                      block
+                    >
+                      Add Deduction Component
+                    </Button>
+                  </>
+                )}
+              </Form.List>
+            </Card>
+          </Form>
+        </div>
+      </Modal>
     </Layout>
   );
 }

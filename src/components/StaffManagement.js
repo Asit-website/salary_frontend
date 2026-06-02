@@ -409,21 +409,22 @@ const StaffManagement = () => {
           <div style={{
             width: '40px',
             height: '40px',
-            borderRadius: '50%',
-            backgroundColor: '#f0f5ff',
+            borderRadius: '12px',
+            backgroundColor: '#e6f7ff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             marginRight: '12px',
-            color: '#1890ff',
+            color: '#1677ff',
             fontSize: '16px',
-            fontWeight: 'bold'
+            fontWeight: '700',
+            boxShadow: '0 2px 6px rgba(22, 119, 255, 0.08)'
           }}>
             {text.charAt(0).toUpperCase()}
           </div>
           <div>
-            <div style={{ fontSize: '14px', fontWeight: '500', color: '#262626', textDecoration: 'underline' }}>{text}</div>
-            <div style={{ fontSize: '12px', color: '#8c8c8c' }}>{record.email}</div>
+            <div className="staff-name-link" style={{ fontSize: '14px', fontWeight: '600', color: '#1677ff' }}>{text}</div>
+            <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '2px' }}>{record.email}</div>
           </div>
         </div>
       ),
@@ -433,7 +434,7 @@ const StaffManagement = () => {
       dataIndex: 'staffId',
       key: 'staffId',
       render: (text) => (
-        <Tag color="blue" style={{ fontSize: '12px' }}>{text}</Tag>
+        <span className="sales-status-tag sales-status-active" style={{ minWidth: '80px', display: 'inline-block' }}>{text}</span>
       ),
     },
     {
@@ -441,7 +442,7 @@ const StaffManagement = () => {
       dataIndex: 'phone',
       key: 'phone',
       render: (text) => (
-        <div style={{ fontSize: '14px', color: '#262626' }}>{text}</div>
+        <div style={{ fontSize: '14px', color: '#434343', fontWeight: '500' }}>{text}</div>
       ),
     },
     {
@@ -469,9 +470,9 @@ const StaffManagement = () => {
       dataIndex: 'role',
       key: 'role',
       render: (role) => (
-        <Tag color={role === 'admin' ? 'red' : 'blue'} style={{ fontSize: '12px' }}>
+        <span className={`sales-status-tag ${role === 'admin' ? 'sales-status-inactive' : 'sales-status-active'}`} style={{ textTransform: 'capitalize' }}>
           {role}
-        </Tag>
+        </span>
       ),
     },
     {
@@ -479,16 +480,17 @@ const StaffManagement = () => {
       dataIndex: 'status',
       key: 'status',
       render: (status, record) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Switch
             size="small"
             checked={status === 'active'}
             onChange={(checked) => handleToggleStaffStatus(record, checked)}
             loading={updatingStaffId === record.id}
+            style={{ backgroundColor: status === 'active' ? '#52c41a' : undefined }}
           />
-          <Text style={{ fontSize: '12px', color: status === 'active' ? '#52c41a' : '#bfbfbf', fontWeight: '500' }}>
+          <span className={`sales-status-tag ${status === 'active' ? 'sales-status-complete' : 'sales-status-inactive'}`}>
             {status === 'active' ? 'Active' : 'Inactive'}
-          </Text>
+          </span>
         </div>
       ),
     },
@@ -497,9 +499,9 @@ const StaffManagement = () => {
       dataIndex: 'canCreateOrg',
       key: 'canCreateOrg',
       render: (canCreateOrg) => (
-        <Tag color={canCreateOrg ? 'green' : 'default'} style={{ fontSize: '12px' }}>
+        <span className={`sales-status-tag ${canCreateOrg ? 'sales-status-complete' : 'sales-status-inactive'}`}>
           {canCreateOrg ? 'Allowed' : 'Denied'}
-        </Tag>
+        </span>
       ),
     },
     {
@@ -511,7 +513,7 @@ const StaffManagement = () => {
             items: [
               {
                 key: 'view',
-                icon: <EyeOutlined style={{ color: '#1890ff' }} />,
+                icon: <EyeOutlined style={{ color: '#1677ff' }} />,
                 label: 'View',
                 onClick: () => handleViewStaff(record)
               },
@@ -540,12 +542,13 @@ const StaffManagement = () => {
         >
           <Button
             type="text"
+            className="sales-action-btn"
             icon={<MoreOutlined />}
             style={{
-              border: 'none',
-              boxShadow: 'none',
-              padding: '4px 8px',
-              height: 'auto'
+              padding: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
           />
         </Dropdown>
@@ -572,6 +575,7 @@ const StaffManagement = () => {
             onOk={() => issueForm.submit()}
             confirmLoading={issuingLetter}
             destroyOnClose
+            className="sales-modal"
           >
             <Form form={issueForm} layout="vertical" onFinish={async (values) => {
               setIssuingLetter(true);
@@ -603,7 +607,7 @@ const StaffManagement = () => {
                 setIssuingLetter(false);
               }
             }}>
-              <Form.Item name="templateId" label="Select Letter Template" rules={[{ required: true }]}>
+              <Form.Item name="templateId" label={<span className="modal-field-label">Select Letter Template</span>} rules={[{ required: true }]}>
                 <Select placeholder="Choose a template">
                   {letterTemplates.map(t => (
                     <Option key={t.id} value={t.id}>{t.title}</Option>
@@ -687,97 +691,93 @@ const StaffManagement = () => {
             <Col xs={24} sm={12} md={6}>
               <Card
                 style={{
-                  background: '#fff',
-                  border: '1px solid #e8e8e8',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-                  borderRadius: '4px'
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px'
                 }}
-                bodyStyle={{ padding: '16px' }}
+                bodyStyle={{ padding: '20px' }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>Total Employees</div>
-                    <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>{totalEmployees}</div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Employees</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '26px', fontWeight: '700', lineHeight: 1 }}>{totalEmployees}</div>
                   </div>
                   <div style={{
-                    width: '40px',
-                    height: '40px',
+                    width: '46px',
+                    height: '46px',
                     background: '#e6f7ff',
-                    borderRadius: '6px',
+                    borderRadius: '12px',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(24, 144, 255, 0.1)'
                   }}>
-                    <UserOutlined style={{ color: '#1890ff', fontSize: '18px' }} />
+                    <UserOutlined style={{ color: '#1677ff', fontSize: '20px' }} />
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-
                 </div>
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
               <Card
                 style={{
-                  background: '#fff',
-                  border: '1px solid #e8e8e8',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-                  borderRadius: '4px'
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px'
                 }}
-                bodyStyle={{ padding: '16px' }}
+                bodyStyle={{ padding: '20px' }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>Active Employees</div>
-                    <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Employees</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '26px', fontWeight: '700', lineHeight: 1 }}>
                       {activeEmployees}
                     </div>
                   </div>
                   <div style={{
-                    width: '40px',
-                    height: '40px',
+                    width: '46px',
+                    height: '46px',
                     background: '#f6ffed',
-                    borderRadius: '6px',
+                    borderRadius: '12px',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(82, 196, 26, 0.1)'
                   }}>
-                    <UserOutlined style={{ color: '#52c41a', fontSize: '18px' }} />
+                    <UserOutlined style={{ color: '#52c41a', fontSize: '20px' }} />
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-
-
                 </div>
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
               <Card
                 style={{
-                  background: '#fff',
-                  border: '1px solid #e8e8e8',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-                  borderRadius: '4px'
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px'
                 }}
-                bodyStyle={{ padding: '16px' }}
+                bodyStyle={{ padding: '20px' }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>Inactive Employees</div>
-                    <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Inactive Employees</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '26px', fontWeight: '700', lineHeight: 1 }}>
                       {inactiveEmployees}
                     </div>
                   </div>
                   <div style={{
-                    width: '40px',
-                    height: '40px',
+                    width: '46px',
+                    height: '46px',
                     background: '#fff1f0',
-                    borderRadius: '6px',
+                    borderRadius: '12px',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(255, 77, 79, 0.1)'
                   }}>
-                    <UserOutlined style={{ color: '#ff4d4f', fontSize: '18px' }} />
+                    <UserOutlined style={{ color: '#ff4d4f', fontSize: '20px' }} />
                   </div>
                 </div>
               </Card>
@@ -785,33 +785,30 @@ const StaffManagement = () => {
             <Col xs={24} sm={12} md={6}>
               <Card
                 style={{
-                  background: '#fff',
-                  border: '1px solid #e8e8e8',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-                  borderRadius: '4px'
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px'
                 }}
-                bodyStyle={{ padding: '16px' }}
+                bodyStyle={{ padding: '20px' }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '500' }}>New Hires</div>
-                    <div style={{ color: '#262626', fontSize: '20px', fontWeight: '600', lineHeight: 1 }}>{newHires}</div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>New Hires</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '26px', fontWeight: '700', lineHeight: 1 }}>{newHires}</div>
                   </div>
                   <div style={{
-                    width: '40px',
-                    height: '40px',
+                    width: '46px',
+                    height: '46px',
                     background: '#f9f0ff',
-                    borderRadius: '6px',
+                    borderRadius: '12px',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(114, 46, 209, 0.1)'
                   }}>
-                    <PlusOutlined style={{ color: '#722ed1', fontSize: '18px' }} />
+                    <PlusOutlined style={{ color: '#722ed1', fontSize: '20px' }} />
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-
-
                 </div>
               </Card>
             </Col>
@@ -880,49 +877,56 @@ const StaffManagement = () => {
           </Row> */}
 
           <Card
-            style={{
-              boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-              borderRadius: '4px',
-              border: '1px solid #e8e8e8'
-            }}
-            title={
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <Title level={4} style={{ margin: 0, color: '#262626' }}>Staff Management</Title>
-                  <Search
-                    placeholder="Search staff..."
-                    allowClear
-                    onSearch={handleSearch}
-                    onChange={(e) => handleSearch(e.target.value)}
-                    style={{ width: 250 }}
-                  />
-                </div>
-                <Space>
-                  <Button
-                    type="primary"
-                    style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                    icon={<PlusOutlined />}
-                    onClick={handleUpdateAllStaff}
-                    loading={bulkUpdating}
-                  >
-                    Update All Staff
-                  </Button>
-                  <Dropdown
-                    menu={{
-                      items: staffMenuItems,
-                      onClick: handleMenuClick
-                    }}
-                    placement="bottomRight"
-                    trigger={['click']}
-                  >
-                    <Button type="primary" icon={<PlusOutlined />}>
-                      Add Staff
-                    </Button>
-                  </Dropdown>
-                </Space>
-              </div>
-            }
+            className="sales-content-card"
+            bodyStyle={{ padding: '24px' }}
           >
+            {/* Sleek Filter & Action Row */}
+            <div className="sales-filter-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Search
+                  placeholder="Search staff..."
+                  allowClear
+                  onSearch={handleSearch}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  style={{ width: 250 }}
+                  prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                />
+                <Select
+                  placeholder="Filter Status"
+                  value={filterStatus || 'all'}
+                  onChange={(val) => setFilterStatus(val === 'all' ? '' : val)}
+                  style={{ width: 140 }}
+                >
+                  <Option value="all">All</Option>
+                  <Option value="active">Active</Option>
+                  <Option value="inactive">Inactive</Option>
+                </Select>
+              </div>
+              <Space>
+                <Button
+                  type="primary"
+                  style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                  icon={<PlusOutlined />}
+                  onClick={handleUpdateAllStaff}
+                  loading={bulkUpdating}
+                  shape="round"
+                >
+                  Update All Staff
+                </Button>
+                <Dropdown
+                  menu={{
+                    items: staffMenuItems,
+                    onClick: handleMenuClick
+                  }}
+                  placement="bottomRight"
+                  trigger={['click']}
+                >
+                  <Button type="primary" icon={<PlusOutlined />} shape="round">
+                    Add Staff
+                  </Button>
+                </Dropdown>
+              </Space>
+            </div>
 
             {/* Table */}
             <Table
@@ -939,9 +943,9 @@ const StaffManagement = () => {
               }}
               scroll={{ x: 1000 }}
               size="middle"
+              className="sales-table"
               style={{
-                background: '#fff',
-                borderRadius: '4px'
+                background: '#fff'
               }}
             />
           </Card>
@@ -952,6 +956,7 @@ const StaffManagement = () => {
             onCancel={() => setModalVisible(false)}
             footer={null}
             width={800}
+            className="sales-modal"
           >
             <Form
               form={form}
@@ -962,7 +967,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="staffId"
-                    label="Staff ID"
+                    label={<span className="modal-field-label">Staff ID</span>}
                     rules={[{ required: true, message: 'Please enter staff ID' }]}
                   >
                     <Input placeholder="Enter unique staff ID" />
@@ -971,7 +976,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="phone"
-                    label="Phone Number"
+                    label={<span className="modal-field-label">Phone Number</span>}
                     rules={[{ required: true, message: 'Please enter phone number' }]}
                   >
                     <Input placeholder="Enter phone number" />
@@ -983,7 +988,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="name"
-                    label="Full Name"
+                    label={<span className="modal-field-label">Full Name</span>}
                     rules={[{ required: true, message: 'Please enter full name' }]}
                   >
                     <Input placeholder="Enter full name" />
@@ -992,7 +997,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="email"
-                    label="Email Address"
+                    label={<span className="modal-field-label">Email Address</span>}
                     rules={[
                       { type: 'email', message: 'Please enter valid email' }
                     ]}
@@ -1006,7 +1011,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="department"
-                    label="Department"
+                    label={<span className="modal-field-label">Department</span>}
                     rules={[{ required: true, message: 'Please select department' }]}
                   >
                     <Select placeholder="Select department">
@@ -1020,7 +1025,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="designation"
-                    label="Designation"
+                    label={<span className="modal-field-label">Designation</span>}
                     rules={[{ required: true, message: 'Please enter designation' }]}
                   >
                     <Input placeholder="Enter job designation" />
@@ -1032,7 +1037,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="basic_salary"
-                    label="Basic Salary"
+                    label={<span className="modal-field-label">Basic Salary</span>}
                     rules={[{ required: true, message: 'Please enter basic salary' }]}
                   >
                     <Input type="number" placeholder="Enter basic salary" />
@@ -1041,7 +1046,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="hra"
-                    label="HRA"
+                    label={<span className="modal-field-label">HRA</span>}
                     rules={[{ required: true, message: 'Please enter HRA' }]}
                   >
                     <Input type="number" placeholder="Enter HRA amount" />
@@ -1053,7 +1058,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="da"
-                    label="DA"
+                    label={<span className="modal-field-label">DA</span>}
                     rules={[{ required: true, message: 'Please enter DA' }]}
                   >
                     <Input type="number" placeholder="Enter DA amount" />
@@ -1062,7 +1067,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="special_allowance"
-                    label="Special Allowance"
+                    label={<span className="modal-field-label">Special Allowance</span>}
                   >
                     <Input type="number" placeholder="Enter special allowance" />
                   </Form.Item>
@@ -1073,7 +1078,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="conveyance_allowance"
-                    label="Conveyance Allowance"
+                    label={<span className="modal-field-label">Conveyance Allowance</span>}
                   >
                     <Input type="number" placeholder="Enter conveyance allowance" />
                   </Form.Item>
@@ -1081,7 +1086,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="medical_allowance"
-                    label="Medical Allowance"
+                    label={<span className="modal-field-label">Medical Allowance</span>}
                   >
                     <Input type="number" placeholder="Enter medical allowance" />
                   </Form.Item>
@@ -1092,7 +1097,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="telephone_allowance"
-                    label="Telephone Allowance"
+                    label={<span className="modal-field-label">Telephone Allowance</span>}
                   >
                     <Input type="number" placeholder="Enter telephone allowance" />
                   </Form.Item>
@@ -1100,7 +1105,7 @@ const StaffManagement = () => {
                 <Col span={12}>
                   <Form.Item
                     name="other_allowances"
-                    label="Other Allowances"
+                    label={<span className="modal-field-label">Other Allowances</span>}
                   >
                     <Input type="number" placeholder="Enter other allowances" />
                   </Form.Item>
@@ -1109,7 +1114,7 @@ const StaffManagement = () => {
 
               <Form.Item
                 name="password"
-                label="Password"
+                label={<span className="modal-field-label">Password</span>}
                 rules={[{ required: true, message: 'Please enter password' }]}
               >
                 <Input.Password placeholder="Enter password" />
@@ -1117,11 +1122,11 @@ const StaffManagement = () => {
 
               <Form.Item
                 name="active"
-                label="Status"
+                label={<span className="modal-field-label">Status</span>}
                 valuePropName="checked"
                 initialValue={true}
               >
-                <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
+                <Switch checkedChildren="Active" unCheckedChildren="Inactive" style={{ backgroundColor: '#52c41a' }} />
               </Form.Item>
 
               <Form.Item>
@@ -1143,19 +1148,20 @@ const StaffManagement = () => {
             onCancel={() => setImportModalVisible(false)}
             footer={null}
             width={600}
+            className="sales-modal"
           >
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <p>Download the template, fill it with staff details, and upload it back.</p>
+            <div style={{ textAlign: 'center', padding: '10px 0' }}>
+              <p style={{ color: '#595959', marginBottom: '20px', fontSize: '14px' }}>Download the template, fill it with staff details, and upload it back.</p>
 
-              <div style={{ textAlign: 'left', marginBottom: '24px', padding: '12px', background: '#e6f7ff', borderRadius: '4px', border: '1px solid #91d5ff' }}>
-                <Text strong>Expected Excel Fields:</Text>
-                <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-                  <li><Text code>Name</Text> (Full name of the staff)</li>
-                  <li><Text code>Staff ID</Text> (Unique employee ID)</li>
-                  <li><Text code>Phone Number</Text> (Required - used for login)</li>
-                  <li><Text code>Designation</Text> (Job title)</li>
-                  <li><Text code>Joining Date</Text> (Format: YYYY-MM-DD)</li>
-                  <li><Text code>Email Address</Text></li>
+              <div style={{ textAlign: 'left', marginBottom: '24px', padding: '16px', background: '#e6f7ff', borderRadius: '12px', border: '1px solid #bae7ff' }}>
+                <Text strong style={{ color: '#1677ff', fontSize: '14px', display: 'block', marginBottom: '8px' }}>Expected Excel Fields:</Text>
+                <ul style={{ margin: 0, paddingLeft: '20px', color: '#434343', lineHeight: '1.8' }}>
+                  <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Name</Text> (Full name of the staff)</li>
+                  <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Staff ID</Text> (Unique employee ID)</li>
+                  <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Phone Number</Text> (Required - used for login)</li>
+                  <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Designation</Text> (Job title)</li>
+                  <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Joining Date</Text> (Format: YYYY-MM-DD)</li>
+                  <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Email Address</Text></li>
                 </ul>
               </div>
 
@@ -1180,6 +1186,7 @@ const StaffManagement = () => {
                 style={{ marginBottom: '24px' }}
                 type="primary"
                 ghost
+                shape="round"
               >
                 Download Excel Template
               </Button>
@@ -1224,16 +1231,16 @@ const StaffManagement = () => {
               </Upload.Dragger>
 
               {importResults && (
-                <div style={{ marginTop: '24px', textAlign: 'left', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
-                  <Typography.Title level={5}>Import Results</Typography.Title>
-                  <div style={{ marginBottom: '8px' }}>
-                    <Tag color="success">Success: {importResults.success}</Tag>
-                    <Tag color="warning">Skipped: {importResults.skipped}</Tag>
-                    <Tag color="error">Failed: {importResults.failed}</Tag>
+                <div style={{ marginTop: '24px', textAlign: 'left', padding: '16px', background: '#fafafa', borderRadius: '12px', border: '1px solid #f0f2f5' }}>
+                  <Typography.Title level={5} style={{ fontSize: '15px', fontWeight: '600', color: '#262626', marginBottom: '12px' }}>Import Results</Typography.Title>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                    <span className="sales-status-tag sales-status-complete">Success: {importResults.success}</span>
+                    <span className="sales-status-tag sales-status-pending">Skipped: {importResults.skipped}</span>
+                    <span className="sales-status-tag sales-status-inactive">Failed: {importResults.failed}</span>
                   </div>
                   {importResults.errors && importResults.errors.length > 0 && (
-                    <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '12px', borderTop: '1px solid #ddd', paddingTop: '8px' }}>
-                      <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                    <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '12px', borderTop: '1px solid #f0f2f5', paddingTop: '8px' }}>
+                      <ul style={{ paddingLeft: '20px', margin: 0, color: '#8c8c8c' }}>
                         {importResults.errors.map((err, i) => (
                           <li key={i}>{err}</li>
                         ))}

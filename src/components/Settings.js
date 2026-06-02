@@ -15,7 +15,8 @@ import {
   AutoComplete,
   Menu,
   Radio,
-  Switch
+  Switch,
+  Table
 } from 'antd';
 import {
   SettingOutlined,
@@ -37,45 +38,115 @@ import {
   ApiOutlined,
   LogoutOutlined,
   LayoutOutlined,
-  HomeOutlined
+  HomeOutlined,
+  LockOutlined,
+  QrcodeOutlined,
+  KeyOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import api, { API_BASE_URL } from '../api';
 
-const { Header, Content } = Layout;
+const { Content } = Layout;
 const { Title, Text } = Typography;
 
+const getInitials = (name) => {
+  if (!name) return 'ST';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+};
+
+
 const Tile = ({ title, items }) => (
-  <Card bordered style={{ height: '100%' }} title={title}>
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+  <Card 
+    className="sales-content-card" 
+    style={{ height: '100%' }} 
+    title={<span style={{ fontWeight: '700', color: '#1e293b', fontSize: '15px' }}>{title}</span>}
+    bodyStyle={{ padding: '20px' }}
+  >
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {items.map((it) => (
         <div
           key={it.key}
           onClick={it.onClick}
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: it.onClick ? 'pointer' : 'default' }}
+          style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            cursor: it.onClick ? 'pointer' : 'default',
+            padding: '12px 14px',
+            borderRadius: '10px',
+            background: '#f8fafc',
+            border: '1px solid #f1f5f9',
+            transition: 'all 0.25s',
+          }}
+          className="settings-tile-item"
+          onMouseEnter={(e) => {
+            if (it.onClick) {
+              e.currentTarget.style.borderColor = '#91d5ff';
+              e.currentTarget.style.background = '#e6f7ff30';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(22, 119, 255, 0.04)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (it.onClick) {
+              e.currentTarget.style.borderColor = '#f1f5f9';
+              e.currentTarget.style.background = '#f8fafc';
+              e.currentTarget.style.boxShadow = 'none';
+            }
+          }}
         >
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            {it.icon ? <span style={{ color: '#1677ff', lineHeight: '20px' }}>{it.icon}</span> : null}
-            <div>
-              <div><Text strong>{it.label}</Text></div>
+          <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flex: 1, minWidth: 0 }}>
+            {it.icon ? (
+              <div style={{ 
+                width: '36px', 
+                height: '36px', 
+                borderRadius: '10px', 
+                backgroundColor: '#e6f7ff', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                color: '#1677ff',
+                fontSize: '16px',
+                flexShrink: 0,
+                boxShadow: '0 2px 4px rgba(22, 119, 255, 0.04)'
+              }}>
+                {it.icon}
+              </div>
+            ) : null}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div><Text strong style={{ fontSize: '13px', color: '#1e293b' }}>{it.label}</Text></div>
               {it.desc ? (
-                <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>{it.desc}</div>
+                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.desc}</div>
               ) : null}
             </div>
           </div>
           {it.thumb ? (
-            <img src={it.thumb} alt="thumb" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, border: '1px solid #E5E7EB' }} />
+            <img src={it.thumb} alt="thumb" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: '8px', border: '1px solid #e2e8f0', flexShrink: 0 }} />
           ) : (
-            <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{it.cta || '>'}</Text>
+            <div style={{ 
+              fontSize: '14px', 
+              color: '#94a3b8', 
+              fontWeight: 'bold', 
+              display: 'flex', 
+              alignItems: 'center', 
+              marginLeft: '12px',
+              flexShrink: 0
+            }}>
+              {it.cta || '→'}
+            </div>
           )}
         </div>
       ))}
-    </Space>
+    </div>
   </Card>
 );
 
 export default function Settings() {
   const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
   const DEFAULT_BRAND_TEXT = 'Your Company Name';
   const [search, setSearch] = useState('');
   const [brandOpen, setBrandOpen] = useState(false);
@@ -139,6 +210,22 @@ export default function Settings() {
   const [kioskUsername, setKioskUsername] = useState('');
   const [kioskPassword, setKioskPassword] = useState('');
   const [kioskPasswordSet, setKioskPasswordSet] = useState(false);
+
+  const [mobileRestricted, setMobileRestricted] = useState(false);
+  const [mobileRestrictedOpen, setMobileRestrictedOpen] = useState(false);
+  const [mobileRestrictedSaving, setMobileRestrictedSaving] = useState(false);
+  const [staffList, setStaffList] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [selectedStaffIds, setSelectedStaffIds] = useState([]);
+  const [staffSearchText, setStaffSearchText] = useState('');
+
+  const [qrRestricted, setQrRestricted] = useState(false);
+  const [qrRestrictedOpen, setQrRestrictedOpen] = useState(false);
+  const [qrRestrictedSaving, setQrRestrictedSaving] = useState(false);
+  const [qrStaffList, setQrStaffList] = useState([]);
+  const [qrStaffLoading, setQrStaffLoading] = useState(false);
+  const [qrSelectedStaffIds, setQrSelectedStaffIds] = useState([]);
+  const [qrStaffSearchText, setQrStaffSearchText] = useState('');
   const normalizeBrand = (value) => {
     const raw = String(value || '').trim();
     if (!raw) return DEFAULT_BRAND_TEXT;
@@ -631,6 +718,174 @@ export default function Settings() {
     }
   };
 
+  const openMobileRestrictionModal = async () => {
+    try {
+      const resp = await api.get('/admin/settings/org');
+      setMobileRestricted(!!resp.data?.config?.mobilePunchRestricted);
+    } catch (_) { }
+    
+    setMobileRestrictedOpen(true);
+    fetchStaffForRestriction();
+  };
+
+  const fetchStaffForRestriction = async () => {
+    try {
+      setStaffLoading(true);
+      const resp = await api.get('/admin/staff');
+      setStaffList(resp.data?.data || []);
+    } catch (e) {
+      message.error('Failed to load staff list');
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  const handleBulkMobilePunch = async (enabled) => {
+    if (selectedStaffIds.length === 0) {
+      message.warning('Please select at least one staff member');
+      return;
+    }
+    try {
+      setStaffLoading(true);
+      const resp = await api.post('/admin/staff/bulk-mobile-punch', {
+        userIds: selectedStaffIds,
+        enabled
+      });
+      if (resp.data?.success) {
+        message.success(resp.data.message || 'Staff status updated');
+        setSelectedStaffIds([]);
+        fetchStaffForRestriction();
+      } else {
+        message.error(resp.data?.message || 'Update failed');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Update failed');
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  const toggleIndividualMobilePunch = async (userId, enabled) => {
+    try {
+      const resp = await api.post('/admin/staff/bulk-mobile-punch', {
+        userIds: [userId],
+        enabled
+      });
+      if (resp.data?.success) {
+        setStaffList(prev => prev.map(s => s.id === userId ? { ...s, mobilePunchEnabled: enabled } : s));
+        message.success('Status updated');
+      } else {
+        message.error(resp.data?.message || 'Update failed');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Update failed');
+    }
+  };
+
+  const saveMobileRestriction = async () => {
+    try {
+      setMobileRestrictedSaving(true);
+      const current = await api.get('/admin/settings/org');
+      const config = current.data?.config || {};
+      const payload = { ...config, mobilePunchRestricted: mobileRestricted };
+      const resp = await api.put('/admin/settings/org', payload);
+      if (resp?.data?.success) {
+        message.success('Mobile punch restriction updated');
+        setMobileRestrictedOpen(false);
+      } else {
+        message.error(resp?.data?.message || 'Failed to save');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to save');
+    } finally {
+      setMobileRestrictedSaving(false);
+    }
+  };
+
+  const openQrRestrictionModal = async () => {
+    try {
+      const resp = await api.get('/admin/settings/org');
+      setQrRestricted(!!resp.data?.config?.qrPunchRestricted);
+    } catch (_) { }
+    
+    setQrRestrictedOpen(true);
+    fetchStaffForQrRestriction();
+  };
+
+  const fetchStaffForQrRestriction = async () => {
+    try {
+      setQrStaffLoading(true);
+      const resp = await api.get('/admin/staff');
+      setQrStaffList(resp.data?.data || []);
+    } catch (e) {
+      message.error('Failed to load staff list');
+    } finally {
+      setQrStaffLoading(false);
+    }
+  };
+
+  const handleBulkQrPunch = async (enabled) => {
+    if (qrSelectedStaffIds.length === 0) {
+      message.warning('Please select at least one staff member');
+      return;
+    }
+    try {
+      setQrStaffLoading(true);
+      const resp = await api.post('/admin/staff/bulk-qr-punch', {
+        userIds: qrSelectedStaffIds,
+        enabled
+      });
+      if (resp.data?.success) {
+        message.success(resp.data.message || 'Staff status updated');
+        setQrSelectedStaffIds([]);
+        fetchStaffForQrRestriction();
+      } else {
+        message.error(resp.data?.message || 'Update failed');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Update failed');
+    } finally {
+      setQrStaffLoading(false);
+    }
+  };
+
+  const toggleIndividualQrPunch = async (userId, enabled) => {
+    try {
+      const resp = await api.post('/admin/staff/bulk-qr-punch', {
+        userIds: [userId],
+        enabled
+      });
+      if (resp.data?.success) {
+        setQrStaffList(prev => prev.map(s => s.id === userId ? { ...s, qrPunchEnabled: enabled } : s));
+        message.success('Status updated');
+      } else {
+        message.error(resp.data?.message || 'Update failed');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Update failed');
+    }
+  };
+
+  const saveQrRestriction = async () => {
+    try {
+      setQrRestrictedSaving(true);
+      const current = await api.get('/admin/settings/org');
+      const config = current.data?.config || {};
+      const payload = { ...config, qrPunchRestricted: qrRestricted };
+      const resp = await api.put('/admin/settings/org', payload);
+      if (resp?.data?.success) {
+        message.success('QR punch restriction updated');
+        setQrRestrictedOpen(false);
+      } else {
+        message.error(resp?.data?.message || 'Failed to save');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to save');
+    } finally {
+      setQrRestrictedSaving(false);
+    }
+  };
+
   const tiles = useMemo(() => [
     {
       key: 'attendance',
@@ -641,6 +896,9 @@ export default function Settings() {
         { key: 'shift', icon: <ScheduleOutlined />, label: 'Shift Settings', desc: 'Create and manage shifts for employees', onClick: () => navigate('/settings/shifts') },
         { key: 'rules', icon: <ThunderboltOutlined />, label: 'Automation Rules', desc: 'Track late entry, overtime, early exit, breaks and biometric sync', onClick: () => navigate('/settings/automation-rules') },
         { key: 'holiday-work-pay', icon: <ThunderboltOutlined />, label: 'Holiday Work Pay Rules', desc: 'Configure multipliers for working on holidays/off-days', onClick: () => navigate('/settings/holiday-work-pay') },
+        { key: 'mobile-punch-restriction', icon: <LockOutlined />, label: 'Mobile Punch Restriction', desc: 'Restrict staff from punching via mobile app', onClick: openMobileRestrictionModal },
+        // { key: 'qr-punch-restriction', icon: <LockOutlined />, label: 'QR Punch Restriction', desc: 'Restrict staff from punching via QR codes', onClick: openQrRestrictionModal },
+        { key: 'qr-attendance-settings', icon: <QrcodeOutlined />, label: 'QR Attendance Settings', desc: 'Generate secure QR poster with geofence protection', onClick: () => navigate('/settings/qr-attendance') },
       ],
     },
     {
@@ -727,6 +985,7 @@ export default function Settings() {
       title: 'Device Management',
       items: [
         { key: 'device-mgmt', icon: <MobileOutlined />, label: 'Device Management', desc: 'Monitor and control devices used by employees', onClick: () => navigate('/settings/device-management') },
+        { key: 'session-mgmt', icon: <KeyOutlined />, label: 'Active Sessions & Devices', desc: 'Manage your active devices and revoke remote sessions', onClick: () => navigate('/settings/sessions') },
         { key: 'kiosk-settings', icon: <SettingOutlined />, label: 'Kiosk Settings', desc: kioskUsername ? `User: ${kioskUsername}` : 'Set kiosk username/password', onClick: openKioskModal },
       ],
     },
@@ -762,33 +1021,22 @@ export default function Settings() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sidebar />
-      <Layout style={{ marginLeft: 200, background: '#f5f7fb' }}>
-        <Header style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Title level={4} style={{ margin: 0 }}>Settings</Title>
-          <Menu
-            theme="light"
-            mode="horizontal"
-            items={[
-              {
-                key: 'logout',
-                icon: <LogoutOutlined />,
-                label: 'Logout',
-                onClick: handleLogout
-              }
-            ]}
-            style={{ borderRight: 'none', backgroundColor: 'transparent' }}
-          />
-        </Header>
-        <Content style={{ padding: 24 }}>
-          <Card bodyStyle={{ padding: 12 }} style={{ marginBottom: 16 }}>
-            <Input.Search
-              placeholder="Search"
+      <Sidebar collapsed={collapsed} />
+      <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden', transition: 'margin-left 0.2s' }}>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Settings" 
+        />
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+          <Card className="sales-content-card" bodyStyle={{ padding: '16px' }} style={{ marginBottom: 24 }}>
+            <Input 
+              prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+              placeholder="Search settings..."
               allowClear
-              style={{ maxWidth: 360 }}
+              style={{ maxWidth: 360, borderRadius: '20px' }}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onSearch={(v) => setSearch(v)}
             />
           </Card>
           <Row gutter={[16, 16]}>
@@ -1169,6 +1417,20 @@ export default function Settings() {
                   input.onchange = async () => {
                     if (!input.files || !input.files[0]) return;
                     const file = input.files[0];
+
+                    const isLt10M = file.size / 1024 / 1024 < 10;
+                    if (!isLt10M) {
+                      message.error('File must be smaller than 10MB!');
+                      return;
+                    }
+
+                    const allowedExts = ['.pdf', '.png', '.jpg', '.jpeg'];
+                    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+                    if (!allowedExts.includes(ext)) {
+                      message.error('Only PDF, PNG, JPG, or JPEG files are allowed!');
+                      return;
+                    }
+
                     const form = new FormData();
                     form.append('file', file);
                     const resp = await api.post(`/admin/settings/kyb/doc/${d.key}`, form);
@@ -1254,6 +1516,299 @@ export default function Settings() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
             <Button onClick={() => setSmsOpen(false)}>Cancel</Button>
             <Button type="primary" loading={smsSaving} onClick={saveSmsSettings}>Save Settings</Button>
+          </div>
+        </Space>
+      </Modal>
+      <Modal
+        title={<span style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>Mobile Punch Restriction</span>}
+        open={mobileRestrictedOpen}
+        onCancel={() => setMobileRestrictedOpen(false)}
+        footer={null}
+        width={700}
+        destroyOnClose
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+          <div style={{ color: '#64748b', fontSize: '12px' }}>
+            Configure how staff can punch attendance. 
+            <strong> Global Restriction</strong> prevents everyone from using the mobile app.
+          </div>
+
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            padding: '16px 20px', 
+            background: 'linear-gradient(135deg, #f0f7ff 0%, #e6f4ff 100%)', 
+            borderRadius: '12px', 
+            border: '1px solid #bae0ff',
+            boxShadow: '0 2px 8px rgba(22, 119, 255, 0.04)'
+          }}>
+            <div>
+              <Text strong style={{ fontSize: '14px', color: '#1e293b' }}>Global Mobile Punch Restriction</Text>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>When enabled, no staff can punch from mobile.</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Switch checked={mobileRestricted} onChange={setMobileRestricted} />
+              <Button 
+                type="primary" 
+                size="small" 
+                shape="round"
+                loading={mobileRestrictedSaving} 
+                onClick={saveMobileRestriction}
+                style={{ boxShadow: '0 2px 4px rgba(22, 119, 255, 0.15)' }}
+              >
+                Save Global
+              </Button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>Individual Staff Exceptions</span>
+              <Input
+                prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                placeholder="Search staff..."
+                style={{ width: 220, borderRadius: '20px' }}
+                size="small"
+                value={staffSearchText}
+                onChange={e => setStaffSearchText(e.target.value)}
+              />
+            </div>
+
+            {selectedStaffIds.length > 0 && (
+              <div style={{ 
+                marginBottom: 12, 
+                padding: '10px 16px', 
+                background: '#fffbeb', 
+                border: '1px solid #fef3c7', 
+                borderRadius: '10px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <Text style={{ fontSize: '12px', fontWeight: '600', color: '#d97706' }}>{selectedStaffIds.length} staff selected</Text>
+                <Space size={8}>
+                  <Button size="small" type="primary" shape="round" onClick={() => handleBulkMobilePunch(true)}>Enable Mobile</Button>
+                  <Button size="small" danger shape="round" onClick={() => handleBulkMobilePunch(false)}>Disable Mobile</Button>
+                </Space>
+              </div>
+            )}
+
+            <Table
+              size="small"
+              dataSource={staffList.filter(s => 
+                !staffSearchText || 
+                s.name?.toLowerCase().includes(staffSearchText.toLowerCase()) || 
+                s.phone?.includes(staffSearchText)
+              )}
+              loading={staffLoading}
+              rowKey="id"
+              pagination={{ pageSize: 5 }}
+              bordered={false}
+              rowSelection={{
+                selectedRowKeys: selectedStaffIds,
+                onChange: (keys) => setSelectedStaffIds(keys),
+              }}
+              columns={[
+                { 
+                  title: 'Name', 
+                  dataIndex: 'name', 
+                  key: 'name', 
+                  render: (text, record) => {
+                    const initials = getInitials(text);
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          backgroundColor: '#e0f2fe',
+                          color: '#0369a1',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          flexShrink: 0,
+                          boxShadow: '0 2px 4px rgba(3, 105, 161, 0.08)'
+                        }}>
+                          {initials}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: '600', color: '#1e293b' }}>{text}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>{record.phone || '—'}</div>
+                        </div>
+                      </div>
+                    );
+                  }
+                },
+                { 
+                  title: 'Mobile Punch', 
+                  dataIndex: 'mobilePunchEnabled', 
+                  key: 'status', 
+                  align: 'center', 
+                  width: 120,
+                  render: (enabled, record) => (
+                    <Switch 
+                      size="small" 
+                      checked={!!enabled} 
+                      onChange={(val) => toggleIndividualMobilePunch(record.id, val)} 
+                    />
+                  )
+                },
+              ]}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
+            <Button shape="round" onClick={() => setMobileRestrictedOpen(false)}>Close</Button>
+          </div>
+        </Space>
+      </Modal>
+
+      <Modal
+        title={<span style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>QR Punch Restriction</span>}
+        open={qrRestrictedOpen}
+        onCancel={() => setQrRestrictedOpen(false)}
+        footer={null}
+        width={700}
+        destroyOnClose
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+          <div style={{ color: '#64748b', fontSize: '12px' }}>
+            Configure how staff can punch QR attendance. 
+            <strong> Global Restriction</strong> prevents everyone from using QR codes.
+          </div>
+
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            padding: '16px 20px', 
+            background: 'linear-gradient(135deg, #f0f7ff 0%, #e6f4ff 100%)', 
+            borderRadius: '12px', 
+            border: '1px solid #bae0ff',
+            boxShadow: '0 2px 8px rgba(22, 119, 255, 0.04)'
+          }}>
+            <div>
+              <Text strong style={{ fontSize: '14px', color: '#1e293b' }}>Global QR Punch Restriction</Text>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>When enabled, no staff can punch via QR code.</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Switch checked={qrRestricted} onChange={setQrRestricted} />
+              <Button 
+                type="primary" 
+                size="small" 
+                shape="round"
+                loading={qrRestrictedSaving} 
+                onClick={saveQrRestriction}
+                style={{ boxShadow: '0 2px 4px rgba(22, 119, 255, 0.15)' }}
+              >
+                Save Global
+              </Button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>Individual Staff Exceptions</span>
+              <Input
+                prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                placeholder="Search staff..."
+                style={{ width: 220, borderRadius: '20px' }}
+                size="small"
+                value={qrStaffSearchText}
+                onChange={e => setQrStaffSearchText(e.target.value)}
+              />
+            </div>
+
+            {qrSelectedStaffIds.length > 0 && (
+              <div style={{ 
+                marginBottom: 12, 
+                padding: '10px 16px', 
+                background: '#fffbeb', 
+                border: '1px solid #fef3c7', 
+                borderRadius: '10px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <Text style={{ fontSize: '12px', fontWeight: '600', color: '#d97706' }}>{qrSelectedStaffIds.length} staff selected</Text>
+                <Space size={8}>
+                  <Button size="small" type="primary" shape="round" onClick={() => handleBulkQrPunch(true)}>Enable QR</Button>
+                  <Button size="small" danger shape="round" onClick={() => handleBulkQrPunch(false)}>Disable QR</Button>
+                </Space>
+              </div>
+            )}
+
+            <Table
+              size="small"
+              dataSource={qrStaffList.filter(s => 
+                !qrStaffSearchText || 
+                s.name?.toLowerCase().includes(qrStaffSearchText.toLowerCase()) || 
+                s.phone?.includes(qrStaffSearchText)
+              )}
+              loading={qrStaffLoading}
+              rowKey="id"
+              pagination={{ pageSize: 5 }}
+              bordered={false}
+              rowSelection={{
+                selectedRowKeys: qrSelectedStaffIds,
+                onChange: (keys) => setQrSelectedStaffIds(keys),
+              }}
+              columns={[
+                { 
+                  title: 'Name', 
+                  dataIndex: 'name', 
+                  key: 'name', 
+                  render: (text, record) => {
+                    const initials = getInitials(text);
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          backgroundColor: '#e0f2fe',
+                          color: '#0369a1',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          flexShrink: 0,
+                          boxShadow: '0 2px 4px rgba(3, 105, 161, 0.08)'
+                        }}>
+                          {initials}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: '600', color: '#1e293b' }}>{text}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>{record.phone || '—'}</div>
+                        </div>
+                      </div>
+                    );
+                  }
+                },
+                { 
+                  title: 'QR Punch', 
+                  dataIndex: 'qrPunchEnabled', 
+                  key: 'status', 
+                  align: 'center', 
+                  width: 120,
+                  render: (enabled, record) => (
+                    <Switch 
+                      size="small" 
+                      checked={!!enabled} 
+                      onChange={(val) => toggleIndividualQrPunch(record.id, val)} 
+                    />
+                  )
+                },
+              ]}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
+            <Button shape="round" onClick={() => setQrRestrictedOpen(false)}>Close</Button>
           </div>
         </Space>
       </Modal>

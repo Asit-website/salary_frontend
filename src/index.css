@@ -98,3 +98,277 @@ code {
 .staff-profile-menu .ant-menu-item-selected {
   background-color: #1677ff !important;
 }
+
+/* --- Thinktech Sales Dashboard Custom Premium Theme --- */
+.sales-content-card {
+  border-radius: 16px !important;
+  border: 1px solid #f0f2f5 !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02) !important;
+  background: #ffffff !important;
+}
+
+.sales-content-card .ant-card-head {
+  border-bottom: 1px solid #f0f2f5 !important;
+  padding: 0 24px !important;
+}
+
+.sales-content-card .ant-card-head-title {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  color: #1f1f1f !important;
+}
+
+/* Modern Pill-Style Tabs */
+.sales-tabs .ant-tabs-nav {
+  margin-bottom: 20px !important;
+  border-bottom: none !important;
+  background: #f5f5f5 !important;
+  padding: 6px !important;
+  border-radius: 12px !important;
+  display: inline-flex !important;
+}
+
+.sales-tabs .ant-tabs-nav-wrap {
+  border: none !important;
+}
+
+.sales-tabs .ant-tabs-nav-list {
+  display: flex !important;
+  gap: 4px !important;
+}
+
+.sales-tabs .ant-tabs-tab {
+  font-weight: 500 !important;
+  font-size: 14px !important;
+  padding: 8px 16px !important;
+  margin: 0 !important;
+  border-radius: 8px !important;
+  border: none !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  color: #595959 !important;
+}
+
+.sales-tabs .ant-tabs-tab:hover {
+  color: #1677ff !important;
+  background: rgba(22, 119, 255, 0.05) !important;
+}
+
+.sales-tabs .ant-tabs-tab-active {
+  background: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+.sales-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  font-weight: 600 !important;
+  color: #1677ff !important;
+}
+
+.sales-tabs .ant-tabs-ink-bar {
+  display: none !important;
+}
+
+/* Filter Row Style */
+.sales-filter-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: #fafafa;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #f0f2f5;
+}
+
+.sales-filter-row input,
+.sales-filter-row .ant-select-selector {
+  border-radius: 8px !important;
+  border-color: #d9d9d9 !important;
+  transition: all 0.2s ease !important;
+}
+
+.sales-filter-row input:hover,
+.sales-filter-row input:focus,
+.sales-filter-row .ant-select-selector:hover {
+  border-color: #1677ff !important;
+}
+
+/* Table Style Improvements */
+.sales-table {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  border: 1px solid #f0f2f5 !important;
+}
+
+.sales-table .ant-table-thead > tr > th {
+  background: #fafafa !important;
+  font-weight: 600 !important;
+  color: #262626 !important;
+  border-bottom: 1px solid #f0f2f5 !important;
+  padding: 14px 16px !important;
+}
+
+.sales-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid #f0f2f5 !important;
+  padding: 14px 16px !important;
+  font-size: 14px !important;
+  color: #434343 !important;
+}
+
+.sales-table .ant-table-row {
+  transition: all 0.2s ease !important;
+}
+
+.sales-table .ant-table-row:hover > td {
+  background: #fafcff !important;
+}
+
+/* Premium Badges / Custom Tags */
+.sales-status-tag {
+  border-radius: 20px !important;
+  padding: 4px 12px !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  border: none !important;
+  display: inline-block !important;
+  text-align: center !important;
+}
+
+.sales-status-active {
+  background-color: #e6f7ff !important;
+  color: #1890ff !important;
+}
+
+.sales-status-inactive {
+  background-color: #fff1f0 !important;
+  color: #ff4d4f !important;
+}
+
+.sales-status-pending {
+  background-color: #fff7e6 !important;
+  color: #fa8c16 !important;
+}
+
+.sales-status-inprogress {
+  background-color: #f9f0ff !important;
+  color: #722ed1 !important;
+}
+
+.sales-status-complete {
+  background-color: #f6ffed !important;
+  color: #52c41a !important;
+}
+
+/* Round Action Buttons */
+.sales-action-btn {
+  border-radius: 50% !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-color: #d9d9d9 !important;
+  color: #595959 !important;
+  transition: all 0.2s ease !important;
+}
+
+.sales-action-btn:hover {
+  color: #1677ff !important;
+  border-color: #1677ff !important;
+  background-color: rgba(22, 119, 255, 0.03) !important;
+}
+
+/* Premium Modals */
+.sales-modal .ant-modal-content {
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08) !important;
+}
+
+.sales-modal .ant-modal-header {
+  border-bottom: 1px solid #f0f2f5 !important;
+  padding-bottom: 14px !important;
+  margin-bottom: 20px !important;
+}
+
+.sales-modal .ant-modal-title {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  color: #1f1f1f !important;
+}
+
+.sales-modal .ant-modal-footer {
+  border-top: 1px solid #f0f2f5 !important;
+  padding-top: 14px !important;
+  margin-top: 20px !important;
+}
+
+.sales-modal .ant-btn {
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+}
+
+/* Premium Header styling */
+.sales-header {
+  background: #ffffff !important;
+  padding: 16px 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  border-bottom: 1px solid #f0f2f5 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02) !important;
+}
+
+.sales-header-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+}
+
+.sales-header-back-btn {
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  color: #595959 !important;
+  transition: all 0.2s ease !important;
+}
+
+.sales-header-back-btn:hover {
+  color: #1677ff !important;
+  background-color: rgba(22, 119, 255, 0.05) !important;
+}
+
+.sales-header-title {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  color: #1f1f1f !important;
+  margin: 0 !important;
+}
+
+/* Custom form styling inside premium modals */
+.sales-modal .modal-field-label {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #595959 !important;
+  margin-bottom: 6px !important;
+  display: block !important;
+}
+
+.sales-modal input,
+.sales-modal textarea,
+.sales-modal .ant-select-selector,
+.sales-modal .ant-picker {
+  border-radius: 8px !important;
+  border-color: #d9d9d9 !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.sales-modal input:hover,
+.sales-modal input:focus,
+.sales-modal textarea:hover,
+.sales-modal textarea:focus,
+.sales-modal .ant-select-selector:hover,
+.sales-modal .ant-picker:hover {
+  border-color: #1677ff !important;
+}
+
+

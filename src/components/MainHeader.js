@@ -7,6 +7,7 @@ import {
   MenuUnfoldOutlined 
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import api from '../api';
 
 const { Header } = Layout;
 const { Title } = Typography;
@@ -14,12 +15,18 @@ const { Title } = Typography;
 const MainHeader = ({ collapsed, setCollapsed, title, showHome }) => {
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('multi_account');
-    sessionStorage.removeItem('selection_data');
-    navigate('/');
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      console.log('Logout API failed:', e);
+    } finally {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('multi_account');
+      sessionStorage.clear();
+      navigate('/');
+    }
   };
 
   const isMultiAccount = localStorage.getItem('multi_account') === 'true' || !!sessionStorage.getItem('impersonate_token');

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Layout, Card, DatePicker, Button, Select, Table, message, Space, Typography, Row, Col, Statistic, Menu, Tag, Timeline, Modal, Descriptions, List, Avatar, Spin, Empty, Switch } from 'antd';
 import {
   EnvironmentOutlined,
@@ -12,11 +12,13 @@ import {
   CompressOutlined,
   PhoneOutlined,
   ClockCircleOutlined,
-  CalendarOutlined
+  CalendarOutlined,
+  CloseOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import dayjs from 'dayjs';
 
 const { Header, Content } = Layout;
@@ -98,6 +100,7 @@ const Geolocation = () => {
   const [loading, setLoading] = useState(false);
   const [locationData, setLocationData] = useState([]);
   const [selectedStaff, setSelectedStaff] = useState(null);
+  const [panelVisible, setPanelVisible] = useState(true);
   const [staffList, setStaffList] = useState([]);
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [timelineVisible, setTimelineVisible] = useState(false);
@@ -143,6 +146,7 @@ const Geolocation = () => {
   useEffect(() => {
     if (selectedStaff && selectedDate) {
       setFocusedLocation(null);
+      setPanelVisible(true);
       fetchLocationData();
     }
   }, [selectedStaff, selectedDate]);
@@ -401,6 +405,14 @@ const Geolocation = () => {
       ),
     },
     {
+      title: 'Visits',
+      dataIndex: 'visitCount',
+      key: 'visitCount',
+      render: (count) => (
+        <Tag color="cyan">{count || 0} visits</Tag>
+      ),
+    },
+    {
       title: 'First Location',
       dataIndex: 'firstLocation',
       key: 'firstLocation',
@@ -470,7 +482,7 @@ const Geolocation = () => {
   ];
 
   // Map component
-  const SimpleMap = ({ locations, selectedStaffData, selectedDayRecord, insights, focusedLocation }) => {
+  const SimpleMap = ({ locations, selectedStaffData, selectedDayRecord, insights, focusedLocation, setFocusedLocation, panelVisible, setPanelVisible }) => {
     const [mapLoaded, setMapLoaded] = useState(false);
     const [mapInstance, setMapInstance] = useState(null);
     const mapContainerRef = useRef(null);
@@ -564,6 +576,9 @@ const Geolocation = () => {
           },
         });
         marker.addListener('click', () => {
+          if (setPanelVisible) {
+            setPanelVisible(true);
+          }
           if (!infoWindowRef.current) return;
           infoWindowRef.current.setContent(
             `<div style="padding: 8px;">
@@ -594,6 +609,11 @@ const Geolocation = () => {
             scale: 6,
           },
         });
+        inMarker.addListener('click', () => {
+          if (setPanelVisible) {
+            setPanelVisible(true);
+          }
+        });
         markersRef.current.push(inMarker);
       }
       if (punchOutLoc) {
@@ -609,6 +629,11 @@ const Geolocation = () => {
             strokeWeight: 2,
             scale: 6,
           },
+        });
+        outMarker.addListener('click', () => {
+          if (setPanelVisible) {
+            setPanelVisible(true);
+          }
         });
         markersRef.current.push(outMarker);
       }
@@ -654,6 +679,73 @@ const Geolocation = () => {
     const validLocationCount = (locations || []).filter((loc) => hasValidCoord(loc?.lat, loc?.lng)).length;
     const hasValidLocations = validLocationCount > 0;
 
+    const timelineItems = useMemo(() => {
+      const items = [];
+
+      // 1. Punch-in
+      if (selectedDayRecord?.punchInTime) {
+        items.push({
+          type: 'punch-in',
+          time: dayjs(selectedDayRecord.punchInTime).format('hh:mm A'),
+          title: `PUNCH-IN @ ${dayjs(selectedDayRecord.punchInTime).format('hh:mm A')}`,
+          rawTime: new Date(selectedDayRecord.punchInTime).getTime(),
+          color: '#52c41a',
+        });
+      }
+
+      // 2. Halts (stops)
+      if (insights?.halts && insights.halts.length > 0) {
+        insights.halts.forEach((halt) => {
+          items.push({
+            type: 'halt',
+            time: dayjs(halt.startTs).format('hh:mm A'),
+            title: 'UNPLANNED STOP',
+            duration: formatDuration(halt.durationMs),
+            subTitle: `${dayjs(halt.startTs).format('hh:mm A')} - ${dayjs(halt.endTs).format('hh:mm A')} (${formatDuration(halt.durationMs)})`,
+            address: halt.address,
+            lat: halt.lat,
+            lng: halt.lng,
+            rawTime: halt.startTs,
+            color: '#faad14',
+          });
+        });
+      }
+
+      // 3. Last Known Location
+      if (locations && locations.length > 0) {
+        const valid = locations.filter((loc) => hasValidCoord(loc?.lat, loc?.lng));
+        if (valid.length > 0) {
+          const lastLoc = valid[valid.length - 1];
+          items.push({
+            type: 'last-seen',
+            time: dayjs(lastLoc.timestamp).format('hh:mm A'),
+            title: 'LAST KNOWN LOCATION',
+            subTitle: dayjs(lastLoc.timestamp).format('hh:mm A'),
+            address: lastLoc.address,
+            lat: lastLoc.lat,
+            lng: lastLoc.lng,
+            rawTime: new Date(lastLoc.timestamp).getTime(),
+            color: '#1890ff',
+          });
+        }
+      }
+
+      // 4. Punch-out
+      if (selectedDayRecord?.punchOutTime) {
+        items.push({
+          type: 'punch-out',
+          time: dayjs(selectedDayRecord.punchOutTime).format('hh:mm A'),
+          title: `PUNCH-OUT @ ${dayjs(selectedDayRecord.punchOutTime).format('hh:mm A')}`,
+          rawTime: new Date(selectedDayRecord.punchOutTime).getTime(),
+          color: '#ff4d4f',
+        });
+      }
+
+      // Sort chronologically by time
+      items.sort((a, b) => a.rawTime - b.rawTime);
+      return items;
+    }, [selectedDayRecord, insights, locations]);
+
     // Show loading state while map is loading
     if (!mapLoaded) {
       return (
@@ -664,9 +756,220 @@ const Geolocation = () => {
     }
 
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {/* Map Container */}
         <div ref={mapContainerRef} style={{ height: '100%', minHeight: 350, borderRadius: 8 }} />
+
+        {/* Floating Box (Overlay matching Screenshot 2) */}
+        {selectedStaffData && panelVisible && (
+          <div style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            width: '320px',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: '12px',
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+            zIndex: 1000,
+            maxHeight: 'calc(100% - 100px)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            border: '1px solid rgba(226, 232, 240, 0.8)',
+            fontFamily: 'Inter, system-ui, sans-serif'
+          }}>
+            {/* Profile Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+              padding: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              color: '#ffffff',
+              borderBottom: '1px solid rgba(255,255,255,0.1)'
+            }}>
+              <Avatar 
+                size={44} 
+                icon={<UserOutlined />} 
+                style={{ backgroundColor: 'rgba(255, 255, 255, 0.25)', marginRight: '12px', border: '2px solid rgba(255,255,255,0.4)' }}
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <span style={{ fontSize: '15px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '0.3px', textTransform: 'capitalize' }}>
+                  {selectedStaffData.name || 'Unknown Staff'}
+                </span>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', marginTop: '2px', fontWeight: 500 }}>
+                  {selectedDayRecord?.punchInTime 
+                    ? `Punched-in @ ${dayjs(selectedDayRecord.punchInTime).format('hh:mm A')}`
+                    : 'Not Punched-in'
+                  }
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <PhoneOutlined style={{ fontSize: '12px', color: '#fff' }} />
+                </div>
+                <div 
+                  onClick={() => setPanelVisible(false)}
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                    borderRadius: '50%',
+                    width: '28px',
+                    height: '28px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.25s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.35)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'}
+                >
+                  <CloseOutlined style={{ fontSize: '12px', color: '#fff' }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Metrics Row */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '6px',
+              padding: '10px',
+              backgroundColor: '#f8fafc',
+              borderBottom: '1px solid #f1f5f9'
+            }}>
+              {/* Metric 1 */}
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Accuracy</span>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
+                  {insights?.avgAccuracy ? `${insights.avgAccuracy.toFixed(0)}m` : 'N/A'}
+                </span>
+              </div>
+
+              {/* Metric 2 */}
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Visits</span>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
+                  {selectedDayRecord?.visitCount || 0}
+                </span>
+              </div>
+
+              {/* Metric 3 */}
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Distance</span>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px', whiteSpace: 'nowrap' }}>
+                  {insights?.distanceKm ? `${insights.distanceKm.toFixed(1)} km` : '0 km'}
+                </span>
+              </div>
+
+              {/* Metric 4 */}
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Span</span>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {insights?.span || '0m'}
+                </span>
+              </div>
+            </div>
+
+            {/* Timeline Title Header */}
+            <div style={{
+              padding: '12px 16px 6px 16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              borderBottom: '1px solid #f1f5f9'
+            }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Timeline</span>
+              <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                {dayjs(selectedDayRecord?.date || selectedDate).format('DD MMM YYYY')}
+              </span>
+            </div>
+
+            {/* Scrollable Timeline List */}
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '16px 16px 4px 16px',
+              backgroundColor: '#ffffff'
+            }}>
+              {timelineItems.length === 0 ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No timeline events recorded" style={{ margin: '20px 0' }} />
+              ) : (
+                <Timeline mode="left" style={{ marginLeft: '4px' }}>
+                  {timelineItems.map((item, idx) => (
+                    <Timeline.Item
+                      key={idx}
+                      color={item.color}
+                      dot={
+                        item.type === 'punch-in' ? <ClockCircleOutlined style={{ fontSize: '13px', color: '#52c41a' }} /> :
+                        item.type === 'punch-out' ? <ClockCircleOutlined style={{ fontSize: '13px', color: '#ff4d4f' }} /> :
+                        item.type === 'halt' ? <EnvironmentOutlined style={{ fontSize: '13px', color: '#faad14' }} /> :
+                        <EnvironmentOutlined style={{ fontSize: '13px', color: '#1890ff' }} />
+                      }
+                      style={{ paddingBottom: '16px' }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontWeight: 700, fontSize: '12px', color: '#1e293b' }}>
+                          {item.title}
+                        </span>
+                        {item.subTitle && (
+                          <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', fontWeight: 500 }}>
+                            {item.subTitle}
+                          </span>
+                        )}
+
+                        {/* Interactive Geofocus Link */}
+                        {(item.type === 'halt' || item.type === 'last-seen') && (
+                          <div style={{ marginTop: '4px' }}>
+                            <Button
+                              type="link"
+                              size="small"
+                              onClick={() => {
+                                if (setFocusedLocation) {
+                                  setFocusedLocation({
+                                    lat: item.lat,
+                                    lng: item.lng,
+                                    timestamp: item.rawTime,
+                                    accuracy: insights?.avgAccuracy
+                                  });
+                                }
+                              }}
+                              style={{ padding: 0, height: 'auto', fontSize: '11px', color: '#0284c7', fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}
+                            >
+                              <EnvironmentOutlined style={{ marginRight: '4px' }} /> Click here to Show Address
+                            </Button>
+                            {item.address && (
+                              <div style={{
+                                fontSize: '10px',
+                                color: '#475569',
+                                marginTop: '3px',
+                                backgroundColor: '#f8fafc',
+                                padding: '4px 6px',
+                                borderRadius: '4px',
+                                border: '1px dashed #e2e8f0',
+                                lineHeight: '1.4'
+                              }}>
+                                {item.address}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </Timeline.Item>
+                  ))}
+                </Timeline>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Status Message */}
         <div style={{
@@ -701,49 +1004,23 @@ const Geolocation = () => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} />
-      <Layout style={{ marginLeft: collapsed ? 80 : 200, transition: 'margin-left 0.2s' }}>
-        <Header style={{
-          padding: '0 16px',
-          background: '#fff',
-          borderBottom: '1px solid #f0f0f0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <Button
-              type="text"
-              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={() => setCollapsed(!collapsed)}
-              style={{ marginRight: 16 }}
-            />
-            <Title level={4} style={{ margin: 0 }}>
-              <EnvironmentOutlined /> Geolocation Tracking
-            </Title>
-          </div>
-          <Button
-            type="text"
-            icon={<LogoutOutlined />}
-            onClick={() => {
-              localStorage.removeItem('token');
-              localStorage.removeItem('user');
-              navigate('/');
-            }}
-          >
-            Logout
-          </Button>
-        </Header>
+      <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden', transition: 'margin-left 0.2s' }}>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Geolocation Tracking" 
+        />
 
-        <Content style={{ margin: '16px', background: 'linear-gradient(180deg, #f6f9ff 0%, #f3f5f9 100%)' }}>
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
           {subscriptionInfo && !(!!subscriptionInfo.geolocationEnabled || !!subscriptionInfo.plan?.geolocationEnabled) ? (
-            <Card style={{ textAlign: 'center', padding: '50px' }}>
+            <Card className="sales-content-card" style={{ textAlign: 'center', padding: '50px' }}>
               <Empty
                 image={<EnvironmentOutlined style={{ fontSize: '64px', color: '#ff4d4f' }} />}
                 description={
                   <Space direction="vertical">
                     <Text strong style={{ fontSize: '18px' }}>Geolocation Not Enabled</Text>
                     <Text type="secondary">This module is not included in your current subscription plan.</Text>
-                    <Button type="primary" onClick={() => navigate('/dashboard')}>Back to Dashboard</Button>
+                    <Button type="primary" shape="round" onClick={() => navigate('/dashboard')}>Back to Dashboard</Button>
                   </Space>
                 }
               />
@@ -751,104 +1028,141 @@ const Geolocation = () => {
           ) : (
             <>
               <Card
-                style={{
-                  marginTop: 8,
-                  borderRadius: 16,
-                  border: '1px solid #e6ecff',
-                  boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
-                  background: '#ffffff',
-                }}
-                bodyStyle={{ padding: 20 }}
+                className="sales-content-card"
+                bodyStyle={{ padding: '24px' }}
               >
-                <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-                  <Col span={8}>
+                <div className="sales-filter-row" style={{ marginBottom: 24, display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div style={{ flex: '1 1 200px' }}>
+                    <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#475569' }}>Select & Search Staff</label>
+                    <Select
+                      showSearch
+                      placeholder="Search and select staff..."
+                      optionFilterProp="label"
+                      value={selectedStaff}
+                      onChange={(value) => setSelectedStaff(value)}
+                      style={{ width: '100%' }}
+                      size="large"
+                      allowClear
+                      options={staffList.map(staff => ({
+                        value: staff.id,
+                        label: `${staff.name} (${staff.phone || ''})`
+                      }))}
+                    />
+                  </div>
+                  <div style={{ flex: '1 1 180px' }}>
                     <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#475569' }}>Select Date</label>
                     <DatePicker
                       value={selectedDate}
                       onChange={setSelectedDate}
-                      style={{ width: '100%', borderRadius: 10 }}
+                      style={{ width: '100%', height: 40 }}
+                      size="large"
                     />
-                  </Col>
-                  <Col span={8}>
-                    <label style={{ display: 'block', marginBottom: 8 }}>&nbsp;</label>
+                  </div>
+                  <div style={{ flex: '0 0 140px' }}>
                     <Button
                       type="primary"
                       icon={<ReloadOutlined />}
                       onClick={fetchLocationData}
                       loading={loading}
-                      style={{ width: '100%', borderRadius: 10, height: 42, fontWeight: 600 }}
+                      shape="round"
+                      style={{ width: '100%', height: 40, fontWeight: 600 }}
+                      size="large"
                     >
                       Refresh
                     </Button>
-                  </Col>
-                  <Col span={8}>
+                  </div>
+                  <div style={{ flex: '1 1 220px' }}>
                     <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#475569' }}>Live Tracking</label>
-                    <Space style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 10, minHeight: 42 }}>
-                      <Switch
-                        checked={autoRefresh}
-                        onChange={setAutoRefresh}
-                        checkedChildren="ON"
-                        unCheckedChildren="OFF"
-                      />
-                      {autoRefresh && (
-                        <Tag color="red" style={{ animation: 'pulse 1.5s infinite' }}>
-                          â— LIVE
-                        </Tag>
-                      )}
+                    <Space style={{ padding: '0 12px', border: '1px solid #d9d9d9', borderRadius: '20px', height: 40, width: '100%', backgroundColor: '#fff', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Switch
+                          checked={autoRefresh}
+                          onChange={setAutoRefresh}
+                          checkedChildren="ON"
+                          unCheckedChildren="OFF"
+                        />
+                        {autoRefresh && (
+                          <Tag color="red" style={{ animation: 'pulse 1.5s infinite', margin: 0, fontWeight: 600 }}>
+                            ● LIVE
+                          </Tag>
+                        )}
+                      </div>
                       {lastUpdated && (
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          Updated: {dayjs(lastUpdated).format('HH:mm:ss')}
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {dayjs(lastUpdated).format('HH:mm:ss')}
                         </Text>
                       )}
                     </Space>
-                  </Col>
-                </Row>
+                  </div>
+                </div>
 
                 {selectedStaff ? (
-                  <Row gutter={12} style={{ marginBottom: 12 }}>
-                    <Col flex="1">
-                      <Card size="small" style={{ borderRadius: 14, border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
-                        <Statistic title="Total Pings" value={trackingInsights.totalPings} prefix={<EnvironmentOutlined />} />
+                  <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
+                    <Col xs={24} sm={12} md={4} style={{ flex: 1 }}>
+                      <Card className="sales-content-card" bodyStyle={{ padding: '16px' }} style={{ border: '1px solid #e6f7ff', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)', boxShadow: 'none' }}>
+                        <Statistic 
+                          title={<span style={{ fontSize: '12px', color: '#8c8c8c', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Total Pings</span>} 
+                          value={trackingInsights.totalPings} 
+                          valueStyle={{ color: '#1677ff', fontWeight: '700', fontSize: '22px', marginTop: '4px' }}
+                          prefix={<EnvironmentOutlined style={{ color: '#1677ff', marginRight: '4px' }} />} 
+                        />
                       </Card>
                     </Col>
-                    <Col flex="1">
-                      <Card size="small" style={{ borderRadius: 14, border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
-                        <Statistic title="Valid GPS" value={trackingInsights.validPings} />
+                    <Col xs={24} sm={12} md={4} style={{ flex: 1 }}>
+                      <Card className="sales-content-card" bodyStyle={{ padding: '16px' }} style={{ border: '1px solid #e6ffd8', background: 'linear-gradient(180deg, #fafdf7 0%, #f0fbeb 100%)', boxShadow: 'none' }}>
+                        <Statistic 
+                          title={<span style={{ fontSize: '12px', color: '#8c8c8c', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Valid GPS</span>} 
+                          value={trackingInsights.validPings} 
+                          valueStyle={{ color: '#52c41a', fontWeight: '700', fontSize: '22px', marginTop: '4px' }}
+                        />
                       </Card>
                     </Col>
-                    <Col flex="1">
-                      <Card size="small" style={{ borderRadius: 14, border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
-                        <Statistic title="Distance" value={trackingInsights.distanceKm.toFixed(2)} suffix="km" />
+                    <Col xs={24} sm={12} md={4} style={{ flex: 1 }}>
+                      <Card className="sales-content-card" bodyStyle={{ padding: '16px' }} style={{ border: '1px solid #fff7e6', background: 'linear-gradient(180deg, #fffcf6 0%, #fffbe6 100%)', boxShadow: 'none' }}>
+                        <Statistic 
+                          title={<span style={{ fontSize: '12px', color: '#8c8c8c', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Distance</span>} 
+                          value={trackingInsights.distanceKm} 
+                          precision={2}
+                          suffix=" km"
+                          valueStyle={{ color: '#fa8c16', fontWeight: '700', fontSize: '22px', marginTop: '4px' }}
+                        />
                       </Card>
                     </Col>
-                    <Col flex="1">
-                      <Card size="small" style={{ borderRadius: 14, border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
-                        <Statistic title="Tracking Span" value={trackingInsights.span} />
+                    <Col xs={24} sm={12} md={4} style={{ flex: 1 }}>
+                      <Card className="sales-content-card" bodyStyle={{ padding: '16px' }} style={{ border: '1px solid #f9f0ff', background: 'linear-gradient(180deg, #fdfaff 0%, #f6edfc 100%)', boxShadow: 'none' }}>
+                        <Statistic 
+                          title={<span style={{ fontSize: '12px', color: '#8c8c8c', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Tracking Span</span>} 
+                          value={trackingInsights.span} 
+                          valueStyle={{ color: '#722ed1', fontWeight: '700', fontSize: '20px', marginTop: '4px' }}
+                        />
                       </Card>
                     </Col>
-                    <Col flex="1">
-                      <Card size="small" style={{ borderRadius: 14, border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
-                        <Statistic title="Halts" value={trackingInsights.haltCount} suffix={trackingInsights.haltTotalMs ? `(${formatDuration(trackingInsights.haltTotalMs)})` : ''} />
+                    <Col xs={24} sm={12} md={4} style={{ flex: 1 }}>
+                      <Card className="sales-content-card" bodyStyle={{ padding: '16px' }} style={{ border: '1px solid #fff0f6', background: 'linear-gradient(180deg, #fffafc 0%, #fff0f5 100%)', boxShadow: 'none' }}>
+                        <Statistic 
+                          title={<span style={{ fontSize: '12px', color: '#8c8c8c', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Halts</span>} 
+                          value={trackingInsights.haltCount} 
+                          suffix={trackingInsights.haltTotalMs ? ` (${formatDuration(trackingInsights.haltTotalMs)})` : ''}
+                          valueStyle={{ color: '#eb2f96', fontWeight: '700', fontSize: '18px', marginTop: '4px' }}
+                        />
                       </Card>
                     </Col>
                   </Row>
                 ) : null}
 
-                <Row gutter={16} style={{ marginTop: 16 }}>
+                <Row gutter={24} style={{ marginTop: 24 }}>
                   {/* Left Column - Staff List Table */}
                   {!isMapFullWidth ? (
                     <Col span={12}>
                       <Card
+                        className="sales-content-card"
                         title={
-                          <Title level={5} style={{ marginBottom: 0 }}>
-                            <UserOutlined /> Organization Staff
+                          <Title level={5} style={{ marginBottom: 0, fontWeight: 600 }}>
+                            <UserOutlined style={{ marginRight: 8, color: '#1677ff' }} /> Organization Staff
                           </Title>
                         }
                         style={{
                           height: '600px',
-                          borderRadius: 16,
-                          border: '1px solid #e2e8f0',
-                          boxShadow: '0 8px 20px rgba(15, 23, 42, 0.05)',
                         }}
                         bodyStyle={{ padding: '16px', height: 'calc(100% - 57px)', overflow: 'auto' }}
                       >
@@ -860,33 +1174,51 @@ const Geolocation = () => {
                               dataIndex: 'name',
                               key: 'name',
                               render: (text, record) => (
-                                <Space>
-                                  <Avatar size="small" icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
-                                  <span style={{ fontWeight: 'bold' }}>{text}</span>
-                                </Space>
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <Avatar 
+                                    size={36} 
+                                    icon={<UserOutlined />} 
+                                    style={{ 
+                                      backgroundColor: '#e6f7ff', 
+                                      color: '#1677ff',
+                                      marginRight: '12px',
+                                      fontWeight: '700',
+                                      boxShadow: '0 2px 6px rgba(22, 119, 255, 0.06)'
+                                    }}
+                                  >
+                                    {text ? text.charAt(0).toUpperCase() : 'U'}
+                                  </Avatar>
+                                  <span style={{ fontWeight: '600', color: '#262626' }}>{text}</span>
+                                </div>
                               ),
                             },
                             {
                               title: 'Phone',
                               dataIndex: 'phone',
                               key: 'phone',
+                              render: (phone) => <span style={{ color: '#595959', fontWeight: '500' }}>{phone || '-'}</span>
                             },
                             {
                               title: 'Action',
                               key: 'action',
                               render: (_, record) => (
-                                <Space>
+                                <Space size={6}>
                                   <Button
-                                    type="primary"
+                                    type={selectedStaff === record.id ? 'primary' : 'default'}
                                     size="small"
+                                    shape="round"
                                     icon={<EnvironmentOutlined />}
                                     onClick={() => setSelectedStaff(record.id)}
-                                    disabled={selectedStaff === record.id}
+                                    style={selectedStaff === record.id ? { 
+                                      backgroundColor: '#52c41a', 
+                                      borderColor: '#52c41a' 
+                                    } : {}}
                                   >
-                                    {selectedStaff === record.id ? 'Selected' : 'View Map'}
+                                    {selectedStaff === record.id ? 'Active' : 'Map'}
                                   </Button>
                                   <Button
                                     size="small"
+                                    shape="round"
                                     icon={<HistoryOutlined />}
                                     onClick={() => handleViewTimeline(record)}
                                   >
@@ -910,20 +1242,22 @@ const Geolocation = () => {
                   {/* Right Column - Map */}
                   <Col span={isMapFullWidth ? 24 : 12}>
                     <Card
+                      className="sales-content-card"
                       title={
-                        <Title level={5} style={{ marginBottom: 0 }}>
-                          <EnvironmentOutlined /> Location Tracking Map
+                        <Title level={5} style={{ marginBottom: 0, fontWeight: 600 }}>
+                          <EnvironmentOutlined style={{ marginRight: 8, color: '#1677ff' }} /> Location Tracking Map
                         </Title>
                       }
                       extra={(
                         <Space>
                           {selectedStaff && (
-                            <span style={{ fontSize: '14px', fontWeight: 'normal' }}>
-                              {selectedStaffData?.name || 'Unknown'} - {selectedDate.format('YYYY-MM-DD')}
+                            <span style={{ fontSize: '13px', color: '#595959', fontWeight: '500' }}>
+                              {selectedStaffData?.name || 'Unknown'} | {selectedDate.format('DD MMM YYYY')}
                             </span>
                           )}
                           <Button
                             size="small"
+                            shape="round"
                             icon={isMapFullWidth ? <CompressOutlined /> : <ExpandOutlined />}
                             onClick={() => setIsMapFullWidth((prev) => !prev)}
                           >
@@ -933,9 +1267,6 @@ const Geolocation = () => {
                       )}
                       style={{
                         height: isMapFullWidth ? '700px' : '600px',
-                        borderRadius: 16,
-                        border: '1px solid #e2e8f0',
-                        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.05)',
                       }}
                       bodyStyle={{ padding: 0, height: 'calc(100% - 57px)', overflow: 'hidden' }}
                     >
@@ -946,6 +1277,9 @@ const Geolocation = () => {
                           selectedDayRecord={selectedDayRecord}
                           insights={trackingInsights}
                           focusedLocation={focusedLocation}
+                          setFocusedLocation={setFocusedLocation}
+                          panelVisible={panelVisible}
+                          setPanelVisible={setPanelVisible}
                         />
                       ) : (
                         <div style={{
@@ -956,37 +1290,44 @@ const Geolocation = () => {
                           flexDirection: 'column',
                           color: '#999'
                         }}>
-                          <EnvironmentOutlined style={{ fontSize: '48px', marginBottom: '16px' }} />
-                          <Text>Select a staff member to view their location tracking</Text>
+                          <EnvironmentOutlined style={{ fontSize: '48px', marginBottom: '16px', color: '#bfbfbf' }} />
+                          <Text type="secondary" style={{ fontWeight: '500' }}>Select a staff member to view their location tracking</Text>
                         </div>
                       )}
                     </Card>
 
                     {selectedStaff ? (
                       <Card
-                        title="Recent Location Timeline"
+                        className="sales-content-card"
+                        title={
+                          <span style={{ fontWeight: 600, color: '#262626' }}>
+                            <HistoryOutlined style={{ marginRight: 6, color: '#1677ff' }} /> Recent Location Timeline
+                          </span>
+                        }
                         size="small"
                         style={{
-                          marginTop: 12,
-                          borderRadius: 16,
-                          border: '1px solid #e2e8f0',
-                          boxShadow: '0 8px 20px rgba(15, 23, 42, 0.05)',
+                          marginTop: 16,
                         }}
                         extra={(
-                          <Button size="small" icon={<HistoryOutlined />} onClick={() => handleViewTimeline(selectedStaffData || { id: selectedStaff, name: selectedStaffData?.name || 'Staff' })}>
+                          <Button 
+                            size="small" 
+                            shape="round" 
+                            icon={<HistoryOutlined />} 
+                            onClick={() => handleViewTimeline(selectedStaffData || { id: selectedStaff, name: selectedStaffData?.name || 'Staff' })}
+                          >
                             View Full
                           </Button>
                         )}
                       >
                         {trackingInsights.haltCount > 0 ? (
-                          <div style={{ marginBottom: 10, padding: '8px 10px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 6 }}>
-                            <Text strong style={{ color: '#ad6800' }}>
-                              Halt detected: {trackingInsights.haltCount} ({formatDuration(trackingInsights.haltTotalMs)})
+                          <div style={{ marginBottom: 12, padding: '10px 14px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 8 }}>
+                            <Text strong style={{ color: '#ad6800', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <EnvironmentOutlined /> Halt detected: {trackingInsights.haltCount} ({formatDuration(trackingInsights.haltTotalMs)})
                             </Text>
-                            <div style={{ marginTop: 4 }}>
+                            <div style={{ marginTop: 6 }}>
                               {trackingInsights.halts.slice(-2).map((h, idx) => (
-                                <Text key={`${h.startTs}-${idx}`} type="secondary" style={{ display: 'block', fontSize: 12 }}>
-                                  {dayjs(h.startTs).format('hh:mm A')} - {dayjs(h.endTs).format('hh:mm A')} ({formatDuration(h.durationMs)}) | {formatLocationLabel(h.address, h.lat, h.lng)}
+                                <Text key={`${h.startTs}-${idx}`} type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 2 }}>
+                                  ● {dayjs(h.startTs).format('hh:mm A')} - {dayjs(h.endTs).format('hh:mm A')} ({formatDuration(h.durationMs)}) | {formatLocationLabel(h.address, h.lat, h.lng)}
                                 </Text>
                               ))}
                             </div>
@@ -999,20 +1340,23 @@ const Geolocation = () => {
                             size="small"
                             dataSource={trackingInsights.recent}
                             renderItem={(item) => (
-                              <List.Item>
+                              <List.Item style={{ padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}>
                                 <Button
                                   type="text"
                                   onClick={() => setFocusedLocation({ ...item, _focusNonce: Date.now() })}
-                                  style={{ width: '100%', height: 'auto', textAlign: 'left', padding: 0 }}
+                                  style={{ width: '100%', height: 'auto', textAlign: 'left', padding: '6px 8px', borderRadius: '6px', transition: 'background 0.2s' }}
                                 >
-                                  <Space direction="vertical" size={0} style={{ width: '100%' }}>
-                                    <Text strong>
-                                      {dayjs(item.timestamp).format('hh:mm A')} - {formatLocationLabel(item.address, item.lat, item.lng)}
-                                    </Text>
-                                    <Space split={<span style={{ color: '#bfbfbf' }}>|</span>}>
-                                      <Text type="secondary">{item.accuracy ? `${item.accuracy}m` : 'N/A'}</Text>
-                                      <Text type="secondary" style={{ fontSize: 12 }}>
-                                        {formatCoord(item.lat)}, {formatCoord(item.lng)}
+                                  <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                      <EnvironmentOutlined style={{ color: '#1677ff', marginTop: '3px' }} />
+                                      <span style={{ fontWeight: '600', color: '#262626' }}>
+                                        {dayjs(item.timestamp).format('hh:mm A')} - {formatLocationLabel(item.address, item.lat, item.lng)}
+                                      </span>
+                                    </div>
+                                    <Space split={<span style={{ color: '#bfbfbf' }}>|</span>} style={{ marginLeft: '18px' }}>
+                                      <Text type="secondary" style={{ fontSize: '11px' }}>Accuracy: {item.accuracy ? `${item.accuracy}m` : 'N/A'}</Text>
+                                      <Text type="secondary" style={{ fontSize: '11px' }}>
+                                        Coords: {formatCoord(item.lat)}, {formatCoord(item.lng)}
                                       </Text>
                                     </Space>
                                   </Space>

@@ -3,16 +3,16 @@ import {
   Card, Select, DatePicker, Button, Table, message, Space, Spin, Row, Col, 
   Typography, Layout, Tag, Cascader, Modal 
 } from 'antd';
-import { DownloadOutlined, FileExcelOutlined, MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
+import { DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import moment from 'moment';
 
 const { Option } = Select;
-const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
-const { Header, Content } = Layout;
+const { Content } = Layout;
 
 const OrgReports = () => {
   const [loading, setLoading] = useState(false);
@@ -28,15 +28,15 @@ const OrgReports = () => {
   const [employees, setEmployees] = useState([]);
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [reportScope, setReportScope] = useState('all'); // 'all' or 'selected'
+  const [salaryRegisterEnabled, setSalaryRegisterEnabled] = useState(true);
+  const [monthlySummaryEnabled, setMonthlySummaryEnabled] = useState(true);
+  const [perDaySalaryEnabled, setPerDaySalaryEnabled] = useState(true);
+  const [comparisonEnabled, setComparisonEnabled] = useState(true);
+  const [otImpactEnabled, setOtImpactEnabled] = useState(true);
+  const [latePenaltyEnabled, setLatePenaltyEnabled] = useState(true);
   const activeRequestRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/');
-  };
 
   // Fetch employees for selection
   useEffect(() => {
@@ -56,6 +56,83 @@ const OrgReports = () => {
     fetchEmployees();
   }, []);
 
+  // Fetch subscription info to check feature toggles
+  useEffect(() => {
+    const fetchSubInfo = async () => {
+      try {
+        const response = await api.get('/subscription/subscription-info');
+        if (response.data.success && response.data.subscriptionInfo) {
+          const subInfo = response.data.subscriptionInfo;
+          setSalaryRegisterEnabled(subInfo.salaryRegisterEnabled !== undefined ? !!subInfo.salaryRegisterEnabled : true);
+          setMonthlySummaryEnabled(subInfo.monthlySummaryEnabled !== undefined ? !!subInfo.monthlySummaryEnabled : true);
+          setPerDaySalaryEnabled(subInfo.perDaySalaryEnabled !== undefined ? !!subInfo.perDaySalaryEnabled : true);
+          setComparisonEnabled(subInfo.comparisonEnabled !== undefined ? !!subInfo.comparisonEnabled : true);
+          setOtImpactEnabled(subInfo.otImpactEnabled !== undefined ? !!subInfo.otImpactEnabled : true);
+          setLatePenaltyEnabled(subInfo.latePenaltyEnabled !== undefined ? !!subInfo.latePenaltyEnabled : true);
+        }
+      } catch (error) {
+        console.error('Error fetching subscription info:', error);
+      }
+    };
+    fetchSubInfo();
+  }, []);
+
+  const reportOptions = React.useMemo(() => {
+    const options = [
+      { value: 'attendance', label: 'Attendance Report' },
+      { value: 'monthly-attendance', label: 'Monthly Attendance (Detailed Excel)' },
+      { value: 'leave', label: 'Leave Report' },
+      { value: 'applied-leave', label: 'Applied Leave Report' },
+      { value: 'leave-balance', label: 'Leave Balance Report' },
+      { value: 'punch-report', label: 'Punch Report (Matrix)' },
+      { value: 'sales', label: 'Visit Report' },
+      { value: 'activities', label: 'Activities Report' },
+      { value: 'tickets', label: 'Tickets Report' },
+      { value: 'meetings', label: 'Meetings Report' },
+    ];
+
+    if (salaryRegisterEnabled) {
+      options.push({
+        value: 'salary-register',
+        label: 'Salary Register (Excel)',
+        children: [
+          { value: 'designation', label: 'Designation Wise' },
+          { value: 'department', label: 'Department Wise' },
+          { value: 'template', label: 'Salary Template Wise' }
+        ]
+      });
+    }
+
+    if (monthlySummaryEnabled) {
+      options.push({
+        value: 'monthly-summary',
+        label: 'Monthly Summary (Excel)',
+        children: [
+          { value: 'designation', label: 'Designation Wise' },
+          { value: 'department', label: 'Department Wise' }
+        ]
+      });
+    }
+
+    if (perDaySalaryEnabled) {
+      options.push({ value: 'per-day-salary', label: 'Per Day Salary Average (with OT)' });
+    }
+
+    if (comparisonEnabled) {
+      options.push({ value: 'comparison', label: 'Month-over-Month Comparison' });
+    }
+
+    if (otImpactEnabled) {
+      options.push({ value: 'ot-impact', label: 'Overtime Impact Analysis' });
+    }
+
+    if (latePenaltyEnabled) {
+      options.push({ value: 'late-penalty', label: 'Late Penalty Analysis' });
+    }
+
+    return options;
+  }, [salaryRegisterEnabled, monthlySummaryEnabled, perDaySalaryEnabled, comparisonEnabled, otImpactEnabled, latePenaltyEnabled]);
+
   // Handle report type from query params
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -63,41 +140,7 @@ const OrgReports = () => {
     if (type && reportOptions.some(rt => rt.value === type)) {
       setReportType([type]);
     }
-  }, [location.search]);
-
-  const reportOptions = [
-    { value: 'attendance', label: 'Attendance Report' },
-    { value: 'monthly-attendance', label: 'Monthly Attendance (Detailed Excel)' },
-    { value: 'leave', label: 'Leave Report' },
-    { value: 'applied-leave', label: 'Applied Leave Report' },
-    { value: 'leave-balance', label: 'Leave Balance Report' },
-    { value: 'punch-report', label: 'Punch Report (Matrix)' },
-    { value: 'sales', label: 'Visit Report' },
-    { value: 'activities', label: 'Activities Report' },
-    { value: 'tickets', label: 'Tickets Report' },
-    { value: 'meetings', label: 'Meetings Report' },
-    {
-      value: 'salary-register',
-      label: 'Salary Register (Excel)',
-      children: [
-        { value: 'designation', label: 'Designation Wise' },
-        { value: 'department', label: 'Department Wise' },
-        { value: 'template', label: 'Salary Template Wise' }
-      ]
-    },
-    {
-      value: 'monthly-summary',
-      label: 'Monthly Summary (Excel)',
-      children: [
-        { value: 'designation', label: 'Designation Wise' },
-        { value: 'department', label: 'Department Wise' }
-      ]
-    },
-    { value: 'per-day-salary', label: 'Per Day Salary Average (with OT)' },
-    { value: 'comparison', label: 'Month-over-Month Comparison' },
-    { value: 'ot-impact', label: 'Overtime Impact Analysis' },
-    { value: 'late-penalty', label: 'Late Penalty Analysis' }
-  ];
+  }, [location.search, reportOptions]);
 
   const months = [];
   for (let i = 0; i < 12; i++) {
@@ -119,7 +162,7 @@ const OrgReports = () => {
 
     const mainType = reportType[0];
     if (mainType === 'monthly-attendance' || mainType === 'salary-register' || mainType === 'monthly-summary') {
-      // These reports are Excel-only; clear any stale data immediately
+      // These reports are Excel-only; clear preview data
       setData([]);
       setLoading(false);
       return;
@@ -128,7 +171,6 @@ const OrgReports = () => {
     setLoading(true);
     try {
       let endpoint;
-      const mainType = reportType[0];
       if (mainType === 'attendance') {
         endpoint = '/admin/reports/org-attendance-matrix';
       } else if (mainType === 'monthly-attendance') {
@@ -166,7 +208,6 @@ const OrgReports = () => {
         year: moment(month).year()
       };
 
-      // Add employee IDs to params if specific employees are selected
       if (reportScope === 'selected' && selectedEmployees.length > 0) {
         params.employeeIds = selectedEmployees.join(',');
       }
@@ -177,12 +218,11 @@ const OrgReports = () => {
 
       if (response.data.success) {
         setReportData(response.data.data);
-        if (reportType[0] === 'punch-report') {
+        if (mainType === 'punch-report') {
           const { staffList, matrix, daysInMonth, startDate } = response.data.data;
           const formatted = staffList.map((staff, idx) => {
             const row = { id: staff.id, sn: idx + 1, staffName: staff.profile?.name || 'N/A' };
             for (let i = 1; i <= daysInMonth; i++) {
-              // Ensure we use the correct date comparison (local YYYY-MM-DD)
               const d = new Date(startDate);
               d.setDate(i);
               const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -191,7 +231,7 @@ const OrgReports = () => {
             return row;
           });
           setData(formatted);
-        } else if (reportType[0] === 'attendance') {
+        } else if (mainType === 'attendance') {
           const { staffList, matrix, daysInMonth, startDate, summary } = response.data.data;
           const formatted = staffList.map((staff, idx) => {
             const row = {
@@ -211,13 +251,13 @@ const OrgReports = () => {
             return row;
           });
           setData(formatted);
-        } else if (reportType[0] === 'per-day-salary') {
+        } else if (mainType === 'per-day-salary') {
           const formatted = response.data.data.map((item, idx) => ({
             ...item,
             sn: idx + 1
           }));
           setData(formatted);
-        } else if (reportType[0] === 'comparison' || reportType[0] === 'ot-impact' || reportType[0] === 'late-penalty') {
+        } else if (mainType === 'comparison' || mainType === 'ot-impact' || mainType === 'late-penalty') {
           const formatted = response.data.data.map((item, idx) => ({
             ...item,
             sn: idx + 1
@@ -227,14 +267,13 @@ const OrgReports = () => {
           setData(response.data.data);
         }
       } else {
-        // Handle cases where backend might just serve the file for some reports
-        if (reportType[0] !== 'monthly-attendance') {
+        if (mainType !== 'monthly-attendance') {
           message.error('Failed to fetch report data');
         }
       }
     } catch (error) {
       console.error('Error fetching report:', error);
-      if (reportType[0] !== 'monthly-attendance') {
+      if (mainType !== 'monthly-attendance') {
         message.error('Error loading report data');
       }
     } finally {
@@ -301,7 +340,6 @@ const OrgReports = () => {
         groupBy: subType || 'designation'
       };
 
-      // Add employee IDs to params if specific employees are selected
       if (reportScope === 'selected' && selectedEmployees.length > 0) {
         params.employeeIds = selectedEmployees.join(',');
       }
@@ -311,7 +349,6 @@ const OrgReports = () => {
         responseType: 'blob'
       });
 
-      // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -355,7 +392,7 @@ const OrgReports = () => {
       title: 'Employee Name',
       dataIndex: 'employeeName',
       key: 'employeeName',
-      render: (text, record) => record.user?.profile?.name || 'N/A'
+      render: (text, record) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{record.user?.profile?.name || 'N/A'}</span>
     },
     {
       title: 'Phone Number',
@@ -372,7 +409,8 @@ const OrgReports = () => {
     {
       title: 'Client Name',
       dataIndex: 'clientName',
-      key: 'clientName'
+      key: 'clientName',
+      render: (v) => <span style={{ fontWeight: '500', color: '#262626' }}>{v}</span>
     },
     {
       title: 'Visit Date',
@@ -402,7 +440,14 @@ const OrgReports = () => {
     const days = moment(month, 'YYYY-MM').daysInMonth();
     const cols = [
       { title: 'S.N.', dataIndex: 'sn', key: 'sn', fixed: 'left', width: 60 },
-      { title: 'Staff Name', dataIndex: 'staffName', key: 'staffName', fixed: 'left', width: 150 }
+      { 
+        title: 'Staff Name', 
+        dataIndex: 'staffName', 
+        key: 'staffName', 
+        fixed: 'left', 
+        width: 150,
+        render: (v) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{v}</span>
+      }
     ];
     for (let i = 1; i <= days; i++) {
       cols.push({
@@ -410,7 +455,15 @@ const OrgReports = () => {
         dataIndex: `day_${i}`,
         key: `day_${i}`,
         width: 110,
-        align: 'center'
+        align: 'center',
+        render: (text) => {
+          if (text === 'A') return <span style={{ color: '#ff4d4f', fontWeight: 'bold' }}>A</span>;
+          if (text === 'P') return <span style={{ color: '#52c41a', fontWeight: 'bold' }}>P</span>;
+          if (text === 'WO') return <span style={{ color: '#722ed1', fontWeight: 'bold' }}>WO</span>;
+          if (text === 'H') return <span style={{ color: '#fa8c16', fontWeight: 'bold' }}>H</span>;
+          if (text === 'HD') return <span style={{ color: '#fa8c16', fontWeight: 'bold' }}>HD</span>;
+          return text || '-';
+        }
       });
     }
     cols.push({ 
@@ -420,7 +473,7 @@ const OrgReports = () => {
       width: 100, 
       align: 'center',
       render: (val, record) => val > 0 ? (
-        <a style={{ fontWeight: 'bold' }} onClick={() => showHistory(record.id, record.staffName, 'ot')}>
+        <a style={{ fontWeight: 'bold', color: '#52c41a' }} onClick={() => showHistory(record.id, record.staffName, 'ot')}>
           {val}
         </a>
       ) : 0
@@ -445,7 +498,7 @@ const OrgReports = () => {
       title: 'Employee Name',
       dataIndex: 'employeeName',
       key: 'employeeName',
-      render: (text, record) => record.user?.profile?.name || 'N/A'
+      render: (text, record) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{record.user?.profile?.name || 'N/A'}</span>
     },
     {
       title: 'Phone Number',
@@ -482,13 +535,14 @@ const OrgReports = () => {
       key: 'days',
       render: (text, record) => {
         const days = Math.ceil((new Date(record.endDate) - new Date(record.startDate)) / (1000 * 60 * 60 * 24)) + 1;
-        return days;
+        return <span style={{ fontWeight: '600' }}>{days}</span>;
       }
     },
     {
       title: 'Status',
       dataIndex: 'status',
-      key: 'status'
+      key: 'status',
+      render: (v) => <span className="sales-status-tag sales-status-complete" style={{ textTransform: 'capitalize' }}>{v}</span>
     },
     {
       title: 'Reason',
@@ -503,7 +557,7 @@ const OrgReports = () => {
       title: 'Employee Name',
       dataIndex: 'employeeName',
       key: 'employeeName',
-      render: (text, record) => record.user?.profile?.name || 'N/A'
+      render: (text, record) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{record.user?.profile?.name || 'N/A'}</span>
     },
     {
       title: 'Phone Number',
@@ -538,14 +592,18 @@ const OrgReports = () => {
       key: 'days',
       render: (text, record) => {
         const days = Math.ceil((new Date(record.endDate) - new Date(record.startDate)) / (1000 * 60 * 60 * 24)) + 1;
-        return days;
+        return <span style={{ fontWeight: '600' }}>{days}</span>;
       }
     },
     {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: (text) => <Tag color={text === 'approved' ? 'green' : text === 'pending' ? 'orange' : 'red'}>{text?.toUpperCase()}</Tag>
+      render: (text) => {
+        const lower = String(text).toLowerCase();
+        const cls = lower === 'approved' ? 'sales-status-complete' : lower === 'pending' ? 'sales-status-pending' : 'sales-status-inactive';
+        return <span className={`sales-status-tag ${cls}`}>{text?.toUpperCase()}</span>;
+      }
     },
     {
       title: 'Applied On',
@@ -560,7 +618,7 @@ const OrgReports = () => {
       title: 'Employee Name',
       dataIndex: 'employeeName',
       key: 'employeeName',
-      render: (text, record) => text || record.user?.profile?.name || 'N/A'
+      render: (text, record) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{text || record.user?.profile?.name || 'N/A'}</span>
     },
     {
       title: 'Phone Number',
@@ -587,12 +645,14 @@ const OrgReports = () => {
     {
       title: 'Used',
       dataIndex: 'used',
-      key: 'used'
+      key: 'used',
+      render: (v) => <span style={{ color: v > 0 ? '#ff4d4f' : 'inherit', fontWeight: v > 0 ? '600' : 'normal' }}>{v}</span>
     },
     {
       title: 'Remaining',
       dataIndex: 'remaining',
-      key: 'remaining'
+      key: 'remaining',
+      render: (v) => <span style={{ color: '#52c41a', fontWeight: '600' }}>{v}</span>
     }
   ];
 
@@ -601,7 +661,7 @@ const OrgReports = () => {
       title: 'Employee Name',
       dataIndex: 'employeeName',
       key: 'employeeName',
-      render: (text, record) => record.user?.profile?.name || 'N/A'
+      render: (text, record) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{record.user?.profile?.name || 'N/A'}</span>
     },
     {
       title: 'Phone Number',
@@ -657,12 +717,12 @@ const OrgReports = () => {
       key: 'status',
       width: 120,
       render: (text) => {
-        let color = 'default';
-        if (text === 'PRESENT') color = 'success';
-        else if (text === 'ABSENT') color = 'error';
-        else if (text === 'HALF_DAY') color = 'warning';
-        else if (text === 'LEAVE') color = 'processing';
-        return <Tag color={color}>{text || 'N/A'}</Tag>;
+        let cls = 'sales-status-pending';
+        if (text === 'PRESENT') cls = 'sales-status-complete';
+        else if (text === 'ABSENT') cls = 'sales-status-inactive';
+        else if (text === 'HALF_DAY') cls = 'sales-status-pending';
+        else if (text === 'LEAVE') cls = 'sales-status-active';
+        return <span className={`sales-status-tag ${cls}`}>{text || 'N/A'}</span>;
       }
     }
   ];
@@ -671,7 +731,14 @@ const OrgReports = () => {
     const days = moment(month, 'YYYY-MM').daysInMonth();
     const cols = [
       { title: 'S.N.', dataIndex: 'sn', key: 'sn', fixed: 'left', width: 60 },
-      { title: 'Staff Name', dataIndex: 'staffName', key: 'staffName', fixed: 'left', width: 150 }
+      { 
+        title: 'Staff Name', 
+        dataIndex: 'staffName', 
+        key: 'staffName', 
+        fixed: 'left', 
+        width: 150,
+        render: (v) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{v}</span>
+      }
     ];
     for (let i = 1; i <= days; i++) {
       cols.push({
@@ -687,38 +754,50 @@ const OrgReports = () => {
 
   const getActivitiesColumns = () => [
     { title: 'Date', dataIndex: 'date', key: 'date', render: (text) => moment(text).format('DD MMM YYYY') },
-    { title: 'Staff Name', key: 'staffName', render: (_, r) => r.user?.profile?.name || r.user?.phone || 'N/A' },
+    { title: 'Staff Name', key: 'staffName', render: (_, r) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{r.user?.profile?.name || r.user?.phone || 'N/A'}</span> },
     { title: 'Department', key: 'department', render: (_, r) => r.user?.profile?.department || 'N/A' },
-    { title: 'Activity Title', dataIndex: 'title', key: 'title' },
+    { title: 'Activity Title', dataIndex: 'title', key: 'title', render: (v) => <span style={{ fontWeight: '500', color: '#262626' }}>{v}</span> },
     {
       title: 'Status', dataIndex: 'status', key: 'status',
-      render: (s) => <Tag color={s === 'DONE' ? 'green' : s === 'IN_PROGRESS' ? 'blue' : 'orange'}>{s}</Tag>
+      render: (s) => {
+        const cls = s === 'DONE' ? 'sales-status-complete' : s === 'IN_PROGRESS' ? 'sales-status-active' : 'sales-status-pending';
+        return <span className={`sales-status-tag ${cls}`}>{s}</span>;
+      }
     },
     { title: 'Last Remarks', dataIndex: 'remarks', key: 'remarks', ellipsis: true }
   ];
 
   const getTicketsColumns = () => [
     { title: 'Created At', dataIndex: 'createdAt', key: 'createdAt', render: (text) => moment(text).format('DD MMM YYYY HH:mm') },
-    { title: 'Allocated To', key: 'allocatedTo', render: (_, r) => r.assignee?.profile?.name || r.assignee?.phone || 'N/A' },
+    { title: 'Allocated To', key: 'allocatedTo', render: (_, r) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{r.assignee?.profile?.name || r.assignee?.phone || 'N/A'}</span> },
     { title: 'Department', key: 'department', render: (_, r) => r.assignee?.profile?.department || 'N/A' },
-    { title: 'Ticket Title', dataIndex: 'title', key: 'title' },
+    { title: 'Ticket Title', dataIndex: 'title', key: 'title', render: (v) => <span style={{ fontWeight: '500', color: '#262626' }}>{v}</span> },
     {
       title: 'Priority', dataIndex: 'priority', key: 'priority',
-      render: (p) => <Tag color={p === 'HIGH' ? 'red' : p === 'MEDIUM' ? 'orange' : 'blue'}>{p}</Tag>
+      render: (p) => {
+        const cls = p === 'HIGH' ? 'sales-status-inactive' : p === 'MEDIUM' ? 'sales-status-pending' : 'sales-status-active';
+        return <span className={`sales-status-tag ${cls}`}>{p}</span>;
+      }
     },
     {
       title: 'Status', dataIndex: 'status', key: 'status',
-      render: (s) => <Tag color={s === 'DONE' ? 'green' : s === 'IN_PROGRESS' ? 'blue' : 'orange'}>{s}</Tag>
+      render: (s) => {
+        const cls = s === 'DONE' ? 'sales-status-complete' : s === 'IN_PROGRESS' ? 'sales-status-active' : 'sales-status-pending';
+        return <span className={`sales-status-tag ${cls}`}>{s}</span>;
+      }
     },
     { title: 'Allocated By', key: 'allocatedBy', render: (_, r) => r.creator?.profile?.name || r.creator?.phone || 'Admin' }
   ];
 
   const getMeetingsColumns = () => [
     { title: 'Scheduled At', dataIndex: 'scheduledAt', key: 'scheduledAt', render: (text) => moment(text).format('DD MMM YYYY HH:mm') },
-    { title: 'Meeting Title', dataIndex: 'title', key: 'title' },
+    { title: 'Meeting Title', dataIndex: 'title', key: 'title', render: (v) => <span style={{ fontWeight: '500', color: '#262626' }}>{v}</span> },
     {
       title: 'Status', dataIndex: 'status', key: 'status',
-      render: (s) => <Tag color={s === 'DONE' ? 'green' : s === 'IN_PROGRESS' ? 'blue' : 'orange'}>{s}</Tag>
+      render: (s) => {
+        const cls = s === 'DONE' ? 'sales-status-complete' : s === 'IN_PROGRESS' ? 'sales-status-active' : 'sales-status-pending';
+        return <span className={`sales-status-tag ${cls}`}>{s}</span>;
+      }
     },
     { title: 'Created By', key: 'staffName', render: (_, r) => r.creator?.profile?.name || r.creator?.phone || 'N/A' },
     { title: 'Department', key: 'department', render: (_, r) => r.creator?.profile?.department || 'N/A' },
@@ -727,7 +806,14 @@ const OrgReports = () => {
   
   const getPerDaySalaryColumns = () => [
     { title: 'S.N.', dataIndex: 'sn', key: 'sn', width: 60, fixed: 'left' },
-    { title: 'Staff Name', dataIndex: 'staffName', key: 'staffName', width: 150, fixed: 'left' },
+    { 
+      title: 'Staff Name', 
+      dataIndex: 'staffName', 
+      key: 'staffName', 
+      width: 150, 
+      fixed: 'left',
+      render: (v) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{v}</span>
+    },
     { title: 'Staff ID', dataIndex: 'staffId', key: 'staffId', width: 100 },
     { title: 'Department', dataIndex: 'department', key: 'department', width: 120 },
     { title: 'Designation', dataIndex: 'designation', key: 'designation', width: 120 },
@@ -740,7 +826,7 @@ const OrgReports = () => {
       dataIndex: 'perDayAverage', 
       key: 'perDayAverage', 
       width: 120, 
-      render: (v) => <Text strong style={{ color: '#1890ff' }}>₹{Number(v).toLocaleString()}</Text>
+      render: (v) => <span style={{ fontWeight: '700', color: '#1677ff' }}>₹{Number(v).toLocaleString()}</span>
     }
   ];
 
@@ -750,7 +836,13 @@ const OrgReports = () => {
       fixed: 'left', 
       children: [
         { title: 'S.N.', dataIndex: 'sn', key: 'sn', width: 60 },
-        { title: 'Name', dataIndex: 'staffName', key: 'staffName', width: 150 },
+        { 
+          title: 'Name', 
+          dataIndex: 'staffName', 
+          key: 'staffName', 
+          width: 150,
+          render: (v) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{v}</span>
+        },
       ]
     },
     { 
@@ -761,7 +853,7 @@ const OrgReports = () => {
         { title: 'Current Month', dataIndex: ['salary', 'currentMonth'], key: 'salCurr', width: 120, render: (v) => `₹${v?.toLocaleString() || '0'}` },
         { 
           title: 'Difference', dataIndex: ['salary', 'diff'], key: 'salDiff', width: 100, 
-          render: (v) => <Text style={{ color: v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#8c8c8c' }}>{v > 0 ? '+' : ''}{v?.toLocaleString() || '0'}</Text>
+          render: (v) => <span style={{ fontWeight: '600', color: v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#8c8c8c' }}>{v > 0 ? '+' : ''}{v?.toLocaleString() || '0'}</span>
         },
       ]
     },
@@ -773,7 +865,7 @@ const OrgReports = () => {
         { title: 'Current Month', dataIndex: ['attendance', 'currentMonth'], key: 'attCurr', width: 110 },
         { 
           title: 'Diff', dataIndex: ['attendance', 'diff'], key: 'attDiff', width: 80,
-          render: (v) => <Text style={{ color: v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#8c8c8c' }}>{v > 0 ? '+' : ''}{v}</Text>
+          render: (v) => <span style={{ fontWeight: '600', color: v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#8c8c8c' }}>{v > 0 ? '+' : ''}{v}</span>
         },
       ]
     },
@@ -785,7 +877,7 @@ const OrgReports = () => {
         { title: 'Current Month', dataIndex: ['ot', 'currentMonth'], key: 'otCurr', width: 110, render: (v) => `₹${v?.toLocaleString() || '0'}` },
         { 
           title: 'Diff', dataIndex: ['ot', 'diff'], key: 'otDiff', width: 100,
-          render: (v) => <Text style={{ color: v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#8c8c8c' }}>{v > 0 ? '+' : ''}{v?.toLocaleString() || '0'}</Text>
+          render: (v) => <span style={{ fontWeight: '600', color: v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#8c8c8c' }}>{v > 0 ? '+' : ''}{v?.toLocaleString() || '0'}</span>
         },
       ]
     },
@@ -793,23 +885,37 @@ const OrgReports = () => {
 
   const getLatePenaltyColumns = () => [
     { title: 'S.N.', dataIndex: 'sn', key: 'sn', width: 60, fixed: 'left' },
-    { title: 'Staff Name', dataIndex: 'staffName', key: 'staffName', width: 150, fixed: 'left' },
+    { 
+      title: 'Staff Name', 
+      dataIndex: 'staffName', 
+      key: 'staffName', 
+      width: 150, 
+      fixed: 'left',
+      render: (v) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{v}</span>
+    },
     { title: 'Department', dataIndex: 'department', key: 'department', width: 120 },
     { title: 'Applied Rule', dataIndex: 'ruleName', key: 'ruleName', width: 150 },
     { title: 'Type', dataIndex: 'penaltyType', key: 'penaltyType', width: 120 },
-    { title: 'Late Days', dataIndex: 'lateInstances', key: 'lateInstances', width: 100, align: 'center' },
-    { title: 'Total Late Min', dataIndex: 'totalLateMinutes', key: 'totalLateMinutes', width: 120, align: 'center' },
-    { title: 'Total Penalty', dataIndex: 'totalPenaltyAmount', key: 'totalPenaltyAmount', width: 130, render: (v) => <Text style={{ color: '#ff4d4f' }}>₹{v?.toLocaleString() || '0'}</Text> },
+    { title: 'Late Days', dataIndex: 'lateInstances', key: 'lateInstances', width: 100, align: 'center', render: (v) => <span style={{ fontWeight: '500' }}>{v}</span> },
+    { title: 'Total Late Min', dataIndex: 'totalLateMinutes', key: 'totalLateMinutes', width: 120, align: 'center', render: (v) => <span style={{ fontWeight: '500' }}>{v} m</span> },
+    { title: 'Total Penalty', dataIndex: 'totalPenaltyAmount', key: 'totalPenaltyAmount', width: 130, render: (v) => <span style={{ fontWeight: '700', color: '#ff4d4f' }}>₹{v?.toLocaleString() || '0'}</span> },
   ];
 
   const getOTImpactColumns = () => [
     { title: 'S.N.', dataIndex: 'sn', key: 'sn', width: 60, fixed: 'left' },
-    { title: 'Staff Name', dataIndex: 'staffName', key: 'staffName', width: 150, fixed: 'left' },
+    { 
+      title: 'Staff Name', 
+      dataIndex: 'staffName', 
+      key: 'staffName', 
+      width: 150, 
+      fixed: 'left',
+      render: (v) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{v}</span>
+    },
     { title: 'Department', dataIndex: 'department', key: 'department', width: 120 },
     { title: 'Net (Without OT)', dataIndex: 'netWithoutOT', key: 'netWithoutOT', width: 140, render: (v) => `₹${v?.toLocaleString() || '0'}` },
-    { title: 'OT Pay', dataIndex: 'otPay', key: 'otPay', width: 120, render: (v) => <Text style={{ color: '#1890ff' }}>₹{v?.toLocaleString() || '0'}</Text> },
-    { title: 'Total Net (With OT)', dataIndex: 'totalNet', key: 'totalNet', width: 150, render: (v) => <Text strong style={{ color: '#52c41a' }}>₹{v?.toLocaleString() || '0'}</Text> },
-    { title: 'OT % of Base', dataIndex: 'otPercentage', key: 'otPercentage', width: 120, render: (v) => `${v}%` },
+    { title: 'OT Pay', dataIndex: 'otPay', key: 'otPay', width: 120, render: (v) => <span style={{ fontWeight: '600', color: '#1677ff' }}>₹{v?.toLocaleString() || '0'}</span> },
+    { title: 'Total Net (With OT)', dataIndex: 'totalNet', key: 'totalNet', width: 150, render: (v) => <span style={{ fontWeight: '700', color: '#52c41a' }}>₹{v?.toLocaleString() || '0'}</span> },
+    { title: 'OT % of Base', dataIndex: 'otPercentage', key: 'otPercentage', width: 120, render: (v) => <span style={{ fontWeight: '600', color: '#fa8c16' }}>{v}%</span> },
   ];
 
   const renderTable = () => (
@@ -827,14 +933,15 @@ const OrgReports = () => {
                           reportType[0] === 'meetings' ? getMeetingsColumns() :
                             reportType[0] === 'per-day-salary' ? getPerDaySalaryColumns() :
                               reportType[0] === 'comparison' ? getComparisonColumns() :
-                              reportType[0] === 'ot-impact' ? getOTImpactColumns() :
-                                reportType[0] === 'late-penalty' ? getLatePenaltyColumns() :
-                                  reportType[0] === 'salary-register' ? [] :
-                              reportType[0] === 'monthly-summary' ? [] :
-                                getSalesColumns()
+                                reportType[0] === 'ot-impact' ? getOTImpactColumns() :
+                                  reportType[0] === 'late-penalty' ? getLatePenaltyColumns() :
+                                    reportType[0] === 'salary-register' ? [] :
+                               reportType[0] === 'monthly-summary' ? [] :
+                                 getSalesColumns()
       }
       dataSource={data}
       rowKey={(record, index) => record.id || index}
+      className="sales-table"
       pagination={{
         pageSize: 50,
         showSizeChanger: true,
@@ -845,7 +952,7 @@ const OrgReports = () => {
           ? 'Preview not available for this detailed report. Please use "Download Excel" button above.'
           : 'No data available'
       }}
-      scroll={{ x: reportType === 'attendance' || reportType === 'punch-report' ? 'max-content' : 1200 }}
+      scroll={{ x: reportType[0] === 'attendance' || reportType[0] === 'punch-report' ? 'max-content' : 1200 }}
     />
   );
 
@@ -854,33 +961,23 @@ const OrgReports = () => {
       <Sidebar collapsed={collapsed} />
 
       <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
-        <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
-              style: { fontSize: '18px', padding: '0 24px', cursor: 'pointer' },
-              onClick: () => setCollapsed(!collapsed)
-            })}
-            <Title level={4} style={{ margin: 0, color: '#262626' }}>Organization Reports</Title>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', paddingRight: '24px' }}>
-            <LogoutOutlined
-              style={{ fontSize: '18px', cursor: 'pointer', color: '#666' }}
-              onClick={handleLogout}
-              title="Logout"
-            />
-          </div>
-        </Header>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Organization Reports" 
+        />
 
-        <Content style={{ margin: 0, overflow: 'auto', background: '#f0f2f5' }}>
-          <div style={{ padding: '24px' }}>
-            <Card style={{ marginBottom: '24px' }}>
-              <Row gutter={16} align="middle">
-                <Col span={5}>
-                  <Text strong>Report Scope:</Text>
+        <Content style={{ margin: '24px 16px', padding: 0, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+          <div style={{ paddingBottom: '24px' }}>
+            <Card className="sales-content-card" bodyStyle={{ padding: '20px' }} style={{ marginBottom: '24px' }}>
+              <Row gutter={[16, 16]} align="bottom">
+                <Col xs={24} sm={12} md={5}>
+                  <div className="modal-field-label">Report Scope:</div>
                   <Select
-                    style={{ width: '100%', marginTop: '8px' }}
+                    style={{ width: '100%' }}
                     value={reportScope}
                     onChange={setReportScope}
+                    dropdownStyle={{ borderRadius: '8px' }}
                   >
                     <Option value="all">All Employees</Option>
                     <Option value="selected">Selected Employees</Option>
@@ -888,61 +985,64 @@ const OrgReports = () => {
                 </Col>
 
                 {reportScope === 'selected' && (
-                  <Col span={6}>
-                    <Text strong>Select Employees:</Text>
+                  <Col xs={24} sm={12} md={6}>
+                    <div className="modal-field-label">Select Employees:</div>
                     <Select
                       mode="multiple"
-                      style={{ width: '100%', marginTop: '8px' }}
+                      style={{ width: '100%' }}
                       value={selectedEmployees}
                       onChange={setSelectedEmployees}
                       placeholder="Select employees..."
                       showSearch
                       optionFilterProp="label"
+                      dropdownStyle={{ borderRadius: '8px' }}
                       options={employees.map((emp) => ({
                         value: emp.id,
                         label: emp.name || emp.profile?.name || emp.staffProfile?.name || `Employee ${emp.id}`,
                       }))}
-                    >
-                    </Select>
+                    />
                   </Col>
                 )}
 
-                <Col span={7}>
-                  <Text strong>Report Type:</Text>
+                <Col xs={24} sm={12} md={7}>
+                  <div className="modal-field-label">Report Type:</div>
                   <Cascader
-                    style={{ width: '100%', marginTop: '8px' }}
+                    style={{ width: '100%' }}
                     options={reportOptions}
                     value={reportType}
                     onChange={setReportType}
                     placeholder="Select Report"
                     expandTrigger="hover"
+                    dropdownStyle={{ borderRadius: '8px' }}
                   />
                 </Col>
 
-                <Col span={5}>
-                  <Text strong>Month:</Text>
+                <Col xs={24} sm={12} md={5}>
+                  <div className="modal-field-label">Month:</div>
                   <Select
-                    style={{ width: '100%', marginTop: '8px' }}
+                    style={{ width: '100%' }}
                     value={month}
                     onChange={setMonth}
                     showSearch
                     optionFilterProp="children"
+                    dropdownStyle={{ borderRadius: '8px' }}
                   >
-                    {months.map(month => (
-                      <Option key={month.value} value={month.value}>
-                        {month.label}
+                    {months.map(m => (
+                      <Option key={m.value} value={m.value}>
+                        {m.label}
                       </Option>
                     ))}
                   </Select>
                 </Col>
 
-                <Col span={4}>
+                <Col xs={24} sm={12} md={reportScope === 'selected' ? 6 : 7} style={{ textAlign: 'right' }}>
                   <Button
                     type="primary"
+                    shape="round"
                     icon={<DownloadOutlined />}
                     loading={downloading}
                     onClick={downloadExcel}
-                    style={{ marginTop: '24px' }}
+                    style={{ width: '100%', height: '32px' }}
                   >
                     Download Excel
                   </Button>
@@ -950,26 +1050,28 @@ const OrgReports = () => {
               </Row>
             </Card>
 
-            <Card>
-              <Title level={4}>
-                {reportType[0] === 'attendance' ? 'Monthly Attendance Report' :
-                  reportType[0] === 'monthly-attendance' ? 'Monthly Detailed Attendance Report (Excel Only)' :
-                    reportType[0] === 'leave' ? 'Leave Report' :
-                      reportType[0] === 'applied-leave' ? 'Applied Leave Report' :
-                        reportType[0] === 'leave-balance' ? 'Leave Balance Report' :
-                          reportType[0] === 'punch-report' ? 'Monthly Punch Report' :
-                            reportType[0] === 'detailed-attendance' ? 'Detailed Attendance Report' :
-                              reportType[0] === 'activities' ? 'Activities Report' :
-                                reportType[0] === 'tickets' ? 'Tickets Report' :
-                                  reportType[0] === 'meetings' ? 'Meetings Report' :
-                                    reportType[0] === 'salary-register' ? 'Salary Register (Excel Only)' :
-                                      reportType[0] === 'monthly-summary' ? `Monthly Summary (${(reportType[1] || 'designation').toUpperCase()} WISE)` :
-                                        reportType[0] === 'per-day-salary' ? 'Per Day Salary Average Report' :
-                                          reportType[0] === 'comparison' ? 'Month-over-Month Comparison Report' :
-                                            reportType[0] === 'ot-impact' ? 'Overtime Impact Analysis' :
-                                              reportType[0] === 'late-penalty' ? 'Late Penalty Analysis Report' :
-                                                'Visit Report'} - {moment(month).format('MMMM YYYY')}
-              </Title>
+            <Card className="sales-content-card" bodyStyle={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <Title level={4} style={{ margin: 0, fontWeight: 600 }}>
+                  {reportType[0] === 'attendance' ? 'Monthly Attendance Report' :
+                    reportType[0] === 'monthly-attendance' ? 'Monthly Detailed Attendance Report (Excel Only)' :
+                      reportType[0] === 'leave' ? 'Leave Report' :
+                        reportType[0] === 'applied-leave' ? 'Applied Leave Report' :
+                          reportType[0] === 'leave-balance' ? 'Leave Balance Report' :
+                            reportType[0] === 'punch-report' ? 'Monthly Punch Report' :
+                              reportType[0] === 'detailed-attendance' ? 'Detailed Attendance Report' :
+                                reportType[0] === 'activities' ? 'Activities Report' :
+                                  reportType[0] === 'tickets' ? 'Tickets Report' :
+                                    reportType[0] === 'meetings' ? 'Meetings Report' :
+                                      reportType[0] === 'salary-register' ? 'Salary Register (Excel Only)' :
+                                        reportType[0] === 'monthly-summary' ? `Monthly Summary (${(reportType[1] || 'designation').toUpperCase()} WISE)` :
+                                          reportType[0] === 'per-day-salary' ? 'Per Day Salary Average Report' :
+                                            reportType[0] === 'comparison' ? 'Month-over-Month Comparison Report' :
+                                              reportType[0] === 'ot-impact' ? 'Overtime Impact Analysis' :
+                                                reportType[0] === 'late-penalty' ? 'Late Penalty Analysis Report' :
+                                                  'Visit Report'} - {moment(month).format('MMMM YYYY')}
+                </Title>
+              </div>
 
               <Spin spinning={loading}>
                 {renderTable()}
@@ -983,17 +1085,29 @@ const OrgReports = () => {
         title={historyTitle}
         open={historyModalVisible}
         onCancel={() => setHistoryModalVisible(false)}
-        footer={[<Button key="close" onClick={() => setHistoryModalVisible(false)}>Close</Button>]}
+        footer={[<Button key="close" type="primary" shape="round" onClick={() => setHistoryModalVisible(false)}>Close</Button>]}
+        className="sales-modal"
         width={600}
       >
         <Table 
           size="small"
           dataSource={historyItems}
           pagination={false}
+          className="sales-table"
           columns={[
-            { title: 'Date', dataIndex: 'date', key: 'date' },
-            { title: 'Status', dataIndex: 'status', key: 'status', align: 'center' },
-            { title: 'Minutes', dataIndex: 'minutes', key: 'minutes', align: 'right', render: (m) => <strong>{m} m</strong> }
+            { title: 'Date', dataIndex: 'date', key: 'date', render: (d) => moment(d).format('DD MMM YYYY') },
+            { 
+              title: 'Status', 
+              dataIndex: 'status', 
+              key: 'status', 
+              align: 'center',
+              render: (v) => {
+                const lower = String(v).toLowerCase();
+                const cls = lower === 'present' ? 'sales-status-complete' : lower === 'absent' ? 'sales-status-inactive' : 'sales-status-pending';
+                return <span className={`sales-status-tag ${cls}`} style={{ fontSize: '11px' }}>{v}</span>;
+              }
+            },
+            { title: 'Minutes', dataIndex: 'minutes', key: 'minutes', align: 'right', render: (m) => <span style={{ fontWeight: '700', color: '#1677ff' }}>{m} m</span> }
           ]}
         />
       </Modal>

@@ -3,6 +3,7 @@ import { Layout, Card, Button, Modal, Form, Input, Space, Table, Switch, InputNu
 import { PlusOutlined, EditOutlined, DeleteOutlined, ArrowLeftOutlined, MoreOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import api from '../api';
 
 const { Header, Content } = Layout;
@@ -138,6 +139,7 @@ const SitesEditor = ({ value = [], onChange }) => {
 };
 
 export default function GeofenceSettings() {
+  const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [assignedCounts, setAssignedCounts] = useState({});
@@ -327,31 +329,75 @@ export default function GeofenceSettings() {
   };
 
   const columns = useMemo(() => ([
-    { title: 'Name', dataIndex: 'name' },
-    { title: 'Active', dataIndex: 'active', render: (v) => v !== false ? 'Yes' : 'No' },
-    { title: 'Sites', dataIndex: 'sites', render: (sites) => Array.isArray(sites) ? sites.length : 0 },
+    { title: 'Template Name', dataIndex: 'name', key: 'name', render: (t) => <strong style={{ color: '#1e293b' }}>{t}</strong> },
+    { 
+      title: 'Active Status', 
+      dataIndex: 'active', 
+      key: 'active',
+      render: (v) => {
+        const active = v !== false;
+        const color = active ? '#52c41a' : '#ff4d4f';
+        return (
+          <span style={{ 
+              padding: '4px 10px', 
+              borderRadius: '20px', 
+              fontSize: '11px', 
+              fontWeight: '600', 
+              color: color, 
+              backgroundColor: `${color}10`, 
+              border: `1px solid ${color}30` 
+          }}>
+            {active ? 'Yes' : 'No'}
+          </span>
+        );
+      }
+    },
+    { 
+      title: 'Configured Sites', 
+      dataIndex: 'sites', 
+      key: 'sites',
+      render: (sites) => (
+        <span style={{ fontWeight: '600', color: '#475569' }}>
+          {Array.isArray(sites) ? sites.length : 0} Sites
+        </span>
+      )
+    },
     {
       title: 'Assigned Staff',
       key: 'assignedStaff',
       render: (_, row) => (
-        <Tag
-          color="blue"
+        <span
           onClick={() => openAssignedList(row)}
-          style={{ cursor: 'pointer', userSelect: 'none', marginInlineEnd: 0 }}
+          style={{ 
+            cursor: 'pointer', 
+            userSelect: 'none', 
+            padding: '4px 12px', 
+            borderRadius: '20px', 
+            fontSize: '11px', 
+            fontWeight: '700', 
+            color: '#1677ff', 
+            backgroundColor: '#e6f7ff', 
+            border: '1px solid #91d5ff'
+          }}
         >
-          {assignedCounts[row.id] || 0}
-        </Tag>
+          {assignedCounts[row.id] || 0} Staff
+        </span>
       ),
     },
     {
-      title: 'Actions', key: 'a', render: (_, row) => {
+      title: 'Actions', 
+      key: 'a', 
+      align: 'right',
+      render: (_, row) => {
         const menuItems = [
-          { key: 'edit', label: 'Edit', icon: <EditOutlined />, onClick: () => openEdit(row) },
-          { key: 'assign', label: 'Assign Staff', onClick: () => openAssign(row) },
+          { key: 'edit', label: 'Edit Template', icon: <EditOutlined />, onClick: () => openEdit(row) },
+          { key: 'assign', label: 'Assign Staff', icon: <PlusOutlined />, onClick: () => openAssign(row) },
           {
-            key: 'delete', label: (
+            key: 'delete', 
+            icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
+            label: (
               <Popconfirm title="Delete template?" onConfirm={() => remove(row)}>
-                <span style={{ color: '#ff4d4f' }}>Delete</span>
+                <span style={{ color: '#ff4d4f' }}>Delete Template</span>
               </Popconfirm>
             )
           },
@@ -362,8 +408,9 @@ export default function GeofenceSettings() {
               items: menuItems.map(it => ({ key: it.key, label: it.label, icon: it.icon, onClick: it.onClick }))
             }}
             trigger={["click"]}
+            dropdownStyle={{ borderRadius: '8px' }}
           >
-            <Button icon={<MoreOutlined />} />
+            <Button shape="circle" icon={<MoreOutlined />} />
           </Dropdown>
         );
       }
@@ -372,18 +419,56 @@ export default function GeofenceSettings() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sidebar />
-      <Layout style={{ marginLeft: 200, background: '#f5f7fb' }}>
-        <Header style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #f0f0f0' }}>
-          <Space>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/settings')}>Back to Settings</Button>
-            <Title level={4} style={{ margin: 0 }}>Attendance Geofence Settings</Title>
+      <Sidebar collapsed={collapsed} />
+      <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden', transition: 'margin-left 0.2s' }}>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Geofence Settings" 
+        />
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            {/* Navigation & Toolbar Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Button 
+                type="text" 
+                icon={<ArrowLeftOutlined />} 
+                onClick={() => navigate('/settings')}
+                style={{ fontWeight: 600, color: '#475569' }}
+                shape="round"
+              >
+                Back to Settings
+              </Button>
+            </div>
+
+            {/* Main Content Table Card */}
+            <Card 
+              className="sales-content-card"
+              title={<span style={{ fontWeight: '700', color: '#1e293b', fontSize: '15px' }}>Geofence Templates Registry</span>}
+              extra={
+                <Button 
+                  type="primary" 
+                  shape="round" 
+                  icon={<PlusOutlined />} 
+                  onClick={openCreate}
+                  style={{ boxShadow: '0 2px 6px rgba(22, 119, 255, 0.15)' }}
+                >
+                  New Template
+                </Button>
+              }
+              bodyStyle={{ padding: '24px' }}
+            >
+              <Table 
+                rowKey={(r) => r.id} 
+                loading={loading} 
+                dataSource={items} 
+                columns={columns} 
+                pagination={false} 
+                className="sales-table"
+                size="middle"
+              />
+            </Card>
           </Space>
-        </Header>
-        <Content style={{ padding: 24 }}>
-          <Card title="Geofence Templates" extra={<Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>New Template</Button>}>
-            <Table rowKey={(r) => r.id} loading={loading} dataSource={items} columns={columns} pagination={false} />
-          </Card>
         </Content>
       </Layout>
 

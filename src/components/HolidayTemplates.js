@@ -1,46 +1,111 @@
-import React, { useEffect, useState } from 'react';
-import { Layout, Card, Row, Col, Button, Input, Typography, Space, Tag, Modal, Form, Select, DatePicker, message } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined, MoreOutlined } from '@ant-design/icons';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Layout, Card, Row, Col, Button, Input, Typography, Space, Tag, Modal, Form, Select, DatePicker, message, Divider } from 'antd';
+import { ArrowLeftOutlined, PlusOutlined, MoreOutlined, SearchOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Table, Popconfirm } from 'antd';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import api from '../api';
 
-const { Header, Content } = Layout;
-const { Title, Text } = Typography;
+const { Content } = Layout;
 
 const MONTHS = [
   'January','February','March','April','May','June','July','August','September','October','November','December'
 ];
 
-function monthToNum(name){
-  const i = MONTHS.findIndex(m => m === name);
-  return i >= 0 ? i+1 : null;
-}
+const getInitials = (name) => {
+  if (!name) return 'ST';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+};
 
-const TemplateCard = ({ tpl, onEdit, onAssign }) => (
-  <Card bordered hoverable>
-    <Space direction="vertical" size={4} style={{ width: '100%' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <Text strong>{tpl.name}</Text>
-        <Space>
-          <Tag color={tpl.active ? 'green' : 'red'}>{tpl.active ? 'Active' : 'Inactive'}</Tag>
-          <Button size="small" onClick={() => onAssign?.openAssign?.(tpl)}>Assign</Button>
-          <Button size="small" icon={<MoreOutlined />} onClick={() => onEdit?.(tpl)} />
-        </Space>
+const TemplateCard = ({ tpl, onEdit, onAssign }) => {
+  const statusColor = tpl.active ? '#10b981' : '#dc2626';
+  return (
+    <Card 
+      className="sales-content-card" 
+      style={{ height: '100%', borderRadius: '12px' }}
+      bodyStyle={{ padding: '20px' }}
+      hoverable
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <div>
+            <div style={{ fontWeight: '700', fontSize: '15px', color: '#1e293b', textTransform: 'capitalize' }}>{tpl.name}</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px', fontWeight: '500' }}>
+              Active Period: {MONTHS[tpl.startMonth - 1] || 'Jan'} - {MONTHS[tpl.endMonth - 1] || 'Dec'}
+            </div>
+          </div>
+          <Space size={6}>
+            <span style={{ 
+                padding: '4px 10px', 
+                borderRadius: '20px', 
+                fontSize: '10px', 
+                fontWeight: '700', 
+                color: statusColor, 
+                backgroundColor: `${statusColor}12`, 
+                border: `1px solid ${statusColor}30`,
+                letterSpacing: '0.5px'
+            }}>
+              {tpl.active ? 'ACTIVE' : 'INACTIVE'}
+            </span>
+            <Button 
+              size="small" 
+              shape="circle" 
+              icon={<MoreOutlined style={{ fontSize: '13px' }} />} 
+              onClick={() => onEdit?.(tpl)} 
+            />
+          </Space>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#f8fafc', padding: '12px 14px', borderRadius: '10px', border: '1px solid #f1f5f9', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+            <span style={{ color: '#64748b', fontWeight: '500' }}>Holidays Included</span>
+            <span style={{ color: '#1e293b', fontWeight: '600' }}>{(tpl.holidays || []).length} days</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center' }}>
+            <span style={{ color: '#64748b', fontWeight: '500' }}>Assigned Staff</span>
+            <span 
+              onClick={() => onAssign?.openAssignedList?.(tpl)}
+              style={{ 
+                color: '#0284c7', 
+                fontWeight: '700', 
+                backgroundColor: '#e0f2fe',
+                padding: '2px 8px',
+                borderRadius: '20px',
+                fontSize: '11px',
+                cursor: 'pointer',
+                border: '1px solid #bae6fd',
+                boxShadow: '0 1px 2px rgba(3,105,161,0.05)',
+                transition: 'all 0.2s'
+              }}
+            >
+              {tpl.assignedCount || 0} staff
+            </span>
+          </div>
+        </div>
+
+        <Button 
+          type="primary" 
+          ghost 
+          shape="round" 
+          size="middle"
+          style={{ width: '100%', fontWeight: '600' }}
+          onClick={() => onAssign?.openAssign?.(tpl)}
+        >
+          Assign to Staff
+        </Button>
       </div>
-      <Text type="secondary" style={{ fontSize: 12 }}>Holidays: {(tpl.holidays || []).length}</Text>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-        <Text type="secondary" style={{ fontSize: 12 }}>Assigned Staff:</Text>
-        <Tag color="blue" style={{ cursor: 'pointer', margin: 0 }} onClick={() => onAssign?.openAssignedList?.(tpl)}>
-          {tpl.assignedCount || 0}
-        </Tag>
-      </div>
-    </Space>
-  </Card>
-);
+    </Card>
+  );
+};
 
 export default function HolidayTemplates(){
+  const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
+  const [search, setSearch] = useState('');
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -71,6 +136,12 @@ export default function HolidayTemplates(){
   };
 
   useEffect(() => { load(); }, []);
+
+  const filteredList = useMemo(() => {
+    const q = (search || '').trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(t => (t.name || '').toLowerCase().includes(q));
+  }, [list, search]);
 
   const openCreate = () => {
     setEditing(null);
@@ -118,7 +189,7 @@ export default function HolidayTemplates(){
       setOpen(false); setEditing(null);
       await load();
     } catch (e) {
-      if (e?.errorFields) return; // validation error
+      if (e?.errorFields) return;
       message.error(e?.response?.data?.message || 'Failed to save template');
     }
   };
@@ -188,165 +259,278 @@ export default function HolidayTemplates(){
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sidebar />
-      <Layout style={{ marginLeft: 200, background: '#f5f7fb' }}>
-        <Header style={{ background:'#fff', borderBottom: '1px solid #eee', padding: '12px 24px', display:'flex', alignItems:'center', gap:8 }}>
-          <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => window.history.back()} />
-          <Title level={4} style={{ margin: 0, flex: 1 }}>Holiday Templates</Title>
-          <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>New Template</Button>
+      <Sidebar collapsed={collapsed} />
+      <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden', transition: 'margin-left 0.2s' }}>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Holiday Templates" 
+        />
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            
+            {/* Toolbar Row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Button 
+                type="text" 
+                icon={<ArrowLeftOutlined />} 
+                onClick={() => navigate('/settings')}
+                style={{ fontWeight: 600, color: '#475569' }}
+                shape="round"
+              >
+                Back to Settings
+              </Button>
+            </div>
+
+            {/* Elegant Search and Action Card */}
+            <Card className="sales-content-card" bodyStyle={{ padding: '16px' }} style={{ borderRadius: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                <Input 
+                  prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                  placeholder="Search templates..." 
+                  allowClear 
+                  style={{ width: 280, borderRadius: '20px' }} 
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <Button 
+                  type="primary" 
+                  shape="round" 
+                  icon={<PlusOutlined />} 
+                  onClick={openCreate}
+                  style={{ boxShadow: '0 2px 6px rgba(22, 119, 255, 0.15)' }}
+                >
+                  New Template
+                </Button>
+              </div>
+            </Card>
+
+            {/* Templates Card List */}
+            <Row gutter={[16, 16]}>
+              {(filteredList || []).map((t) => (
+                <Col key={t.id} xs={24} sm={12} lg={8}>
+                  <TemplateCard tpl={t} onEdit={openEdit} onAssign={{ openAssign, openAssignedList }} />
+                </Col>
+              ))}
+            </Row>
           </Space>
-        </Header>
-        <Content style={{ padding: 24 }}>
-          <Card bodyStyle={{ padding: 12 }} style={{ marginBottom: 16 }}>
-            <Space>
-              <Input.Search placeholder="Search templates..." allowClear style={{ width: 280 }} />
-            </Space>
-          </Card>
-          <Row gutter={[16, 16]}>
-            {(list || []).map((t) => (
-              <Col key={t.id} xs={24} sm={12} lg={8}>
-                <TemplateCard tpl={t} onEdit={openEdit} onAssign={{ openAssign, openAssignedList }} />
-              </Col>
-            ))}
-          </Row>
         </Content>
 
         {/* Create/Edit Modal */}
-        <Modal title={editing ? 'Edit Holiday Template' : 'Create Holiday Template'} open={open} onCancel={() => { setOpen(false); setEditing(null); }} onOk={save} okText="Save">
-          <Form layout="vertical" form={form}>
-            <Form.Item name="name" label="Name" rules={[{ required: true }]}> 
-              <Input placeholder="Template Name" />
-            </Form.Item>
-            <Row gutter={12}>
-              <Col span={12}>
-                <Form.Item name="startMonth" label="Start Month">
-                  <Select placeholder="Select month" allowClear options={MONTHS.map((m,i)=>({ label:m, value:i+1 }))} />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="endMonth" label="End Month">
-                  <Select placeholder="Select month" allowClear options={MONTHS.map((m,i)=>({ label:m, value:i+1 }))} />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Form.Item name="active" label="Status" initialValue={true}>
-              <Select options={[{ value:true, label:'Active' }, { value:false, label:'Inactive' }]} />
-            </Form.Item>
+        <Modal 
+          title={<span style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>{editing ? 'Edit Holiday Template' : 'Create Holiday Template'}</span>} 
+          open={open} 
+          onCancel={() => { setOpen(false); setEditing(null); }} 
+          onOk={save} 
+          okText="Save"
+          cancelButtonProps={{ shape: 'round' }}
+          okButtonProps={{ shape: 'round' }}
+        >
+          <div style={{ paddingTop: '12px' }}>
+            <Form layout="vertical" form={form}>
+              <Form.Item name="name" label={<span style={{ fontWeight: '600', color: '#475569' }}>Template Name</span>} rules={[{ required: true, message: 'Template name is required' }]}> 
+                <Input placeholder="Template Name" style={{ borderRadius: '8px' }} />
+              </Form.Item>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="startMonth" label={<span style={{ fontWeight: '600', color: '#475569' }}>Start Month</span>}>
+                    <Select placeholder="Select month" allowClear options={MONTHS.map((m,i)=>({ label:m, value:i+1 }))} style={{ borderRadius: '8px' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="endMonth" label={<span style={{ fontWeight: '600', color: '#475569' }}>End Month</span>}>
+                    <Select placeholder="Select month" allowClear options={MONTHS.map((m,i)=>({ label:m, value:i+1 }))} style={{ borderRadius: '8px' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item name="active" label={<span style={{ fontWeight: '600', color: '#475569' }}>Status</span>} initialValue={true}>
+                <Select options={[{ value:true, label:'Active' }, { value:false, label:'Inactive' }]} style={{ borderRadius: '8px' }} />
+              </Form.Item>
 
-            <Form.Item label="List of Holidays" shouldUpdate>
-              <Form.List name="holidays">
-                {(fields, { add, remove }) => (
-                  <>
-                    {fields.map(({ key, name, ...rest }) => (
-                      <Row key={key} gutter={8} align="middle" style={{ marginBottom: 8 }}>
-                        <Col span={10}>
-                          <Form.Item {...rest} name={[name, 'name']} rules={[{ required: true, message: 'Holiday name required' }]}>
-                            <Input placeholder="Holiday Name" />
-                          </Form.Item>
-                        </Col>
-                        <Col span={10}>
-                          <Form.Item {...rest} name={[name, 'date']} rules={[{ required: true, message: 'Date required' }]}>
-                            <DatePicker style={{ width:'100%' }} />
-                          </Form.Item>
-                        </Col>
-                        <Col span={4}>
-                          <Button danger onClick={() => remove(name)}>Delete</Button>
-                        </Col>
-                      </Row>
-                    ))}
-                    <Button type="dashed" block onClick={() => add({ name:'', date:null })}>+ Add Holiday</Button>
-                  </>
-                )}
-              </Form.List>
-            </Form.Item>
-          </Form>
+              <Divider orientation="left" plain><span style={{ fontWeight: '600', color: '#475569' }}>Holidays List</span></Divider>
+              <Form.Item shouldUpdate style={{ marginBottom: 0 }}>
+                <Form.List name="holidays">
+                  {(fields, { add, remove }) => (
+                    <>
+                      {fields.map(({ key, name, ...rest }) => (
+                        <Row key={key} gutter={12} align="middle" style={{ marginBottom: 12, background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                          <Col span={11}>
+                            <Form.Item {...rest} name={[name, 'name']} rules={[{ required: true, message: 'Holiday name required' }]} style={{ marginBottom: 0 }}>
+                              <Input placeholder="Holiday Name" style={{ borderRadius: '8px' }} />
+                            </Form.Item>
+                          </Col>
+                          <Col span={11}>
+                            <Form.Item {...rest} name={[name, 'date']} rules={[{ required: true, message: 'Date required' }]} style={{ marginBottom: 0 }}>
+                              <DatePicker style={{ width:'100%', borderRadius: '8px' }} />
+                            </Form.Item>
+                          </Col>
+                          <Col span={2} style={{ display: 'flex', justifyContent: 'flex-end', height: '32px', alignItems: 'center' }}>
+                            <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                          </Col>
+                        </Row>
+                      ))}
+                      <Button 
+                        type="dashed" 
+                        block 
+                        onClick={() => add({ name:'', date:null })}
+                        icon={<PlusOutlined />}
+                        style={{ borderRadius: '8px', marginTop: '8px' }}
+                      >
+                        Add Holiday Date
+                      </Button>
+                    </>
+                  )}
+                </Form.List>
+              </Form.Item>
+            </Form>
+          </div>
         </Modal>
 
         {/* Assign Modal */}
-        <Modal title={assigningTpl ? `Assign Staff • ${assigningTpl.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
-          <Space direction="vertical" style={{ width:'100%' }} size={12}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button 
-                type="link" 
-                size="small" 
-                onClick={() => {
-                  if (selectedStaffIds.length === staffOptions.length) {
-                    setSelectedStaffIds([]);
-                  } else {
-                    setSelectedStaffIds(staffOptions.map(o => o.value));
-                  }
-                }}
-              >
-                {selectedStaffIds.length === staffOptions.length ? 'Deselect All' : 'Select All'}
-              </Button>
-            </div>
-            <Select
-              mode="multiple"
-              showSearch
-              optionFilterProp="label"
-              options={staffOptions}
-              value={selectedStaffIds}
-              onChange={setSelectedStaffIds}
-              style={{ width: '100%' }}
-              placeholder="Select staff to assign"
-            />
-            <Row gutter={8}>
-              <Col span={12}><DatePicker value={effectiveFrom} onChange={setEffectiveFrom} style={{ width:'100%' }} placeholder="Effective from" /></Col>
-              <Col span={12}><DatePicker value={effectiveTo} onChange={setEffectiveTo} style={{ width:'100%' }} placeholder="Effective to (optional)" /></Col>
-            </Row>
-          </Space>
+        <Modal 
+          title={<span style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>{assigningTpl ? `Assign Staff • ${assigningTpl.name}` : 'Assign Staff'}</span>} 
+          open={assignOpen} 
+          onCancel={() => setAssignOpen(false)} 
+          onOk={saveAssign} 
+          okText="Assign"
+          cancelButtonProps={{ shape: 'round' }}
+          okButtonProps={{ shape: 'round' }}
+        >
+          <div style={{ paddingTop: '12px' }}>
+            <Space direction="vertical" style={{ width:'100%' }} size={12}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button 
+                  type="link" 
+                  size="small" 
+                  onClick={() => {
+                    if (selectedStaffIds.length === staffOptions.length) {
+                      setSelectedStaffIds([]);
+                    } else {
+                      setSelectedStaffIds(staffOptions.map(o => o.value));
+                    }
+                  }}
+                  style={{ fontWeight: '600' }}
+                >
+                  {selectedStaffIds.length === staffOptions.length ? 'Deselect All' : 'Select All'}
+                </Button>
+              </div>
+              <Select
+                mode="multiple"
+                showSearch
+                optionFilterProp="label"
+                options={staffOptions}
+                value={selectedStaffIds}
+                onChange={setSelectedStaffIds}
+                style={{ width: '100%', borderRadius: '8px' }}
+                placeholder="Select staff to assign"
+              />
+              <Row gutter={12}>
+                <Col span={12}><DatePicker value={effectiveFrom} onChange={setEffectiveFrom} style={{ width:'100%', borderRadius: '8px' }} placeholder="Effective from" /></Col>
+                <Col span={12}><DatePicker value={effectiveTo} onChange={setEffectiveTo} style={{ width:'100%', borderRadius: '8px' }} placeholder="Effective to (optional)" /></Col>
+              </Row>
+            </Space>
+          </div>
         </Modal>
 
         {/* Assigned Staff List Modal */}
         <Modal
-          title={`Assigned Staff${assignedListTpl ? ` - ${assignedListTpl.name}` : ''}`}
+          title={<span style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>{`Assigned Staff${assignedListTpl ? ` - ${assignedListTpl.name}` : ''}`}</span>}
           open={assignedListOpen}
           onCancel={() => setAssignedListOpen(false)}
           footer={null}
-          width={1000}
+          width={900}
         >
-          <div style={{ marginBottom: 16 }}>
-            <Input.Search
-              placeholder="Search staff by name, ID or phone..."
-              allowClear
-              value={assignedSearch}
-              onChange={e => setAssignedSearch(e.target.value)}
-              onSearch={setAssignedSearch}
-              style={{ width: 350 }}
+          <div style={{ paddingTop: '12px' }}>
+            <div style={{ marginBottom: 16 }}>
+              <Input
+                prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                placeholder="Search staff by name, ID or phone..."
+                allowClear
+                value={assignedSearch}
+                onChange={e => setAssignedSearch(e.target.value)}
+                style={{ width: 320, borderRadius: '20px' }}
+              />
+            </div>
+            <Table
+              rowKey="id"
+              loading={assignedListLoading}
+              dataSource={(assignedListRows || []).filter(r => {
+                if (!assignedSearch) return true;
+                const s = assignedSearch.toLowerCase();
+                const name = (r.user?.profile?.name || '').toLowerCase();
+                const sid = (r.user?.profile?.staffId || '').toLowerCase();
+                const phone = (r.user?.phone || '').toLowerCase();
+                return name.includes(s) || sid.includes(s) || phone.includes(s);
+              })}
+              pagination={{ pageSize: 8 }}
+              bordered={false}
+              columns={[
+                { 
+                  title: 'Name', 
+                  render: (_, r) => {
+                    const name = r.user?.profile?.name || '-';
+                    const phone = r.user?.phone || '-';
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          backgroundColor: '#e0f2fe',
+                          color: '#0369a1',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          flexShrink: 0,
+                          boxShadow: '0 2px 4px rgba(3, 105, 161, 0.08)'
+                        }}>
+                          {getInitials(name)}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: '600', color: '#1e293b' }}>{name}</div>
+                          <div style={{ fontSize: '10px', color: '#64748b' }}>{phone}</div>
+                        </div>
+                      </div>
+                    );
+                  }
+                },
+                { 
+                  title: 'Staff ID', 
+                  render: (_, r) => <span style={{ fontWeight: '600', color: '#475569' }}>{r.user?.profile?.staffId || '—'}</span> 
+                },
+                { 
+                  title: 'Department', 
+                  render: (_, r) => <span style={{ color: '#475569', fontSize: '13px' }}>{r.user?.profile?.department || '—'}</span> 
+                },
+                { 
+                  title: 'Designation', 
+                  render: (_, r) => <span style={{ color: '#475569', fontSize: '13px' }}>{r.user?.profile?.designation || '—'}</span> 
+                },
+                { 
+                  title: 'Effective From', 
+                  dataIndex: 'effectiveFrom', 
+                  render: (v) => <span style={{ color: '#475569', fontWeight: '500', fontSize: '12px' }}>{v || '—'}</span> 
+                },
+                {
+                  title: 'Action',
+                  key: 'action',
+                  width: 100,
+                  render: (_, r) => (
+                    <Popconfirm title="Unassign this staff?" onConfirm={() => unassignStaff(r.id)}>
+                      <Button 
+                        shape="circle" 
+                        danger 
+                        icon={<DeleteOutlined style={{ fontSize: '13px' }} />} 
+                        style={{ border: '1px solid #ffccc7', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
+                      />
+                    </Popconfirm>
+                  )
+                },
+              ]}
             />
           </div>
-          <Table
-            rowKey="id"
-            loading={assignedListLoading}
-            dataSource={(assignedListRows || []).filter(r => {
-              if (!assignedSearch) return true;
-              const s = assignedSearch.toLowerCase();
-              const name = (r.user?.profile?.name || '').toLowerCase();
-              const sid = (r.user?.profile?.staffId || '').toLowerCase();
-              const phone = (r.user?.phone || '').toLowerCase();
-              return name.includes(s) || sid.includes(s) || phone.includes(s);
-            })}
-            size="small"
-            pagination={{ pageSize: 8 }}
-            columns={[
-              { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
-              { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
-              { title: 'Phone', render: (_, r) => r.user?.phone || '-' },
-              { title: 'Department', render: (_, r) => r.user?.profile?.department || '-' },
-              { title: 'Designation', render: (_, r) => r.user?.profile?.designation || '-' },
-              { title: 'Effective From', dataIndex: 'effectiveFrom', render: (v) => v || '-' },
-              {
-                title: 'Action',
-                key: 'action',
-                render: (_, r) => (
-                  <Popconfirm title="Unassign this staff?" onConfirm={() => unassignStaff(r.id)}>
-                    <Button danger size="small">Unassign</Button>
-                  </Popconfirm>
-                )
-              },
-            ]}
-          />
         </Modal>
       </Layout>
     </Layout>

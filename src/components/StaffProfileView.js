@@ -76,6 +76,7 @@ export default function StaffProfileView() {
   const [claimOpen, setClaimOpen] = useState(false);
   const [claimForm] = Form.useForm();
   const [claimFile, setClaimFile] = useState(null);
+  const [editingClaim, setEditingClaim] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [docOpen, setDocOpen] = useState(false);
@@ -191,9 +192,9 @@ export default function StaffProfileView() {
     entries.forEach(([k, v]) => {
       const nk = norm(k);
       if (nk) {
-        // If we have duplicates in 'entries' themselves (rare but possible), sum them
-        const existing = map.get(nk);
-        map.set(nk, { key: k, value: (existing ? existing.value : 0) + (Number(v) || 0) });
+        // If we have duplicates in 'entries' themselves, use the LAST/latest value (do NOT sum)
+        // Summing caused double-counting when both snake_case and camelCase keys existed
+        map.set(nk, { key: k, value: Number(v) || 0 });
       }
     });
 
@@ -293,7 +294,13 @@ export default function StaffProfileView() {
   const saveSalary = async () => {
     try {
       const v = await salaryForm.validateFields();
-      const toObj = (arr = []) => arr.reduce((o, it) => { if (it?.name) o[it.name] = Number(it.amount) || 0; return o; }, {});
+      // Normalize keys to snake_case: 'BASIC SALARY' → 'basic_salary' to avoid duplicate keys in DB
+      const toSnakeKey = (s) => (s || '').toString().trim().toLowerCase().replace(/[\s]+/g, '_').replace(/[^a-z0-9_]/g, '');
+      const toObj = (arr = []) => arr.reduce((o, it) => {
+        const k = toSnakeKey(it?.name);
+        if (k) o[k] = Number(it.amount) || 0;
+        return o;
+      }, {});
       const salaryValues = { earnings: toObj(v.earnings), deductions: toObj(v.deductions) };
       const payload = { salaryValues };
       // If saving from Salary Overview, send the visible month key (e.g., 'YYYY-MM')
@@ -384,9 +391,11 @@ export default function StaffProfileView() {
         Object.entries(normalizeDeductions(sv.deductions)).forEach(([k, v]) => { if (k) d[norm(k)] = v; });
       }
 
-      // If base earnings/deductions are empty, derive from numeric columns as fallback
-      let noBaseEarn = Object.keys(e).length === 0;
-      let noBaseDed = Object.keys(d).length === 0;
+      // If base earnings/deductions are completely empty, derive from numeric columns as fallback.
+      // We only fall back when ZERO keys exist to avoid merging stale numeric columns
+      // on top of already-correct salary_values JSON (which caused double-counting).
+      const noBaseEarn = Object.keys(e).length === 0;
+      const noBaseDed = Object.keys(d).length === 0;
 
       if (noBaseEarn || noBaseDed) {
         const base = baseFromNumerics();
@@ -1154,7 +1163,7 @@ export default function StaffProfileView() {
                     ) : (
                       <div>
                         {photoLoading ? <SyncOutlined spin /> : <PlusOutlined />}
-                        <div style={{ marginTop: 8 }}>Upload Photo</div>
+                        <div style={{ marginTop: 8, fontSize: '11px', color: '#8c8c8c' }}>Upload Photo<br/>(JPG/PNG, Max 2MB)</div>
                       </div>
                     )}
                   </Upload>
@@ -1212,13 +1221,14 @@ export default function StaffProfileView() {
         {
           title: 'Actions', key: 'actions', render: (_, r) => (
             <Space>
-              {r.status !== 'approved' && <Button size="small" type="primary" onClick={async () => {
+              <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>Edit</Button>
+              {r.status === 'pending' && <Button size="small" type="primary" onClick={async () => {
                 try {
                   await api.put(`/admin/expenses/${r.id}/status`, { status: 'approved', approvedAmount: r.amount });
                   const res = await api.get(`/admin/staff/${id}/expenses`); if (res.data?.success) setClaims(res.data.data || []);
                 } catch (e) { message.error(e?.response?.data?.message || 'Failed'); }
               }}>Approve</Button>}
-              {r.status !== 'rejected' && <Button size="small" danger onClick={async () => {
+              {r.status === 'pending' && <Button size="small" danger onClick={async () => {
                 try {
                   await api.put(`/admin/expenses/${r.id}/status`, { status: 'rejected' });
                   const res = await api.get(`/admin/staff/${id}/expenses`); if (res.data?.success) setClaims(res.data.data || []);
@@ -1230,8 +1240,25 @@ export default function StaffProfileView() {
       ];
 
       const openAdd = () => {
+        setEditingClaim(null);
         claimForm.resetFields();
-        claimForm.setFieldsValue({ expenseType: 'Travel', expenseDate: dayjs(), amount: null, billNumber: '', description: '', attachmentUrl: '' });
+        claimForm.setFieldsValue({ expenseType: 'Travel', expenseDate: dayjs(), amount: null, billNumber: '', description: '', attachmentUrl: '', status: 'pending' });
+        setClaimFile(null);
+        setClaimOpen(true);
+      };
+      const openEdit = (claim) => {
+        setEditingClaim(claim);
+        claimForm.resetFields();
+        claimForm.setFieldsValue({
+          expenseType: claim.expenseType || 'Travel',
+          expenseDate: claim.expenseDate ? dayjs(claim.expenseDate) : dayjs(),
+          amount: Number(claim.amount || 0),
+          approvedAmount: claim.approvedAmount !== null && claim.approvedAmount !== undefined ? Number(claim.approvedAmount) : undefined,
+          status: claim.status || 'pending',
+          billNumber: claim.billNumber || '',
+          description: claim.description || '',
+        });
+        setClaimFile(null);
         setClaimOpen(true);
       };
       const saveClaim = async () => {
@@ -1242,11 +1269,19 @@ export default function StaffProfileView() {
           fd.append('expenseDate', v.expenseDate?.format('YYYY-MM-DD'));
           if (v.billNumber) fd.append('billNumber', v.billNumber);
           fd.append('amount', String(Number(v.amount)));
+          if (v.status) fd.append('status', v.status);
+          if (v.approvedAmount !== undefined && v.approvedAmount !== null) fd.append('approvedAmount', v.approvedAmount);
           if (v.description) fd.append('description', v.description);
           if (claimFile) fd.append('attachment', claimFile);
-          await api.post(`/admin/staff/${id}/expenses`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-          message.success('Claim submitted');
+          if (editingClaim?.id) {
+            await api.put(`/admin/expenses/${editingClaim.id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+            message.success('Claim updated');
+          } else {
+            await api.post(`/admin/staff/${id}/expenses`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+            message.success('Claim submitted');
+          }
           setClaimOpen(false);
+          setEditingClaim(null);
           setClaimFile(null);
           const res = await api.get(`/admin/staff/${id}/expenses`);
           if (res.data?.success) setClaims(res.data.data || []);
@@ -1270,7 +1305,13 @@ export default function StaffProfileView() {
           </div>
           <Table rowKey={(r) => r.id} columns={columns} dataSource={claims} loading={claimsLoading} pagination={{ pageSize: 10 }} scroll={{ x: 'max-content' }} />
 
-          <Modal title="Add Claim" open={claimOpen} onCancel={() => { setClaimOpen(false); setClaimFile(null); }} onOk={saveClaim} okText="Submit">
+          <Modal
+            title={editingClaim ? `Edit Claim - ${editingClaim.claimId || ''}` : 'Add Claim'}
+            open={claimOpen}
+            onCancel={() => { setClaimOpen(false); setEditingClaim(null); setClaimFile(null); }}
+            onOk={saveClaim}
+            okText={editingClaim ? 'Update' : 'Submit'}
+          >
             <Form form={claimForm} layout="vertical">
               <Row gutter={12}>
                 <Col span={12}><Form.Item name="expenseType" label="Expense Type" rules={[{ required: true }]}>
@@ -1288,6 +1329,21 @@ export default function StaffProfileView() {
                   <InputNumber min={1} step={50} style={{ width: '100%' }} prefix="₹" />
                 </Form.Item></Col>
               </Row>
+              {editingClaim && (
+                <Row gutter={12}>
+                  <Col span={12}><Form.Item name="status" label="Status" rules={[{ required: true }]}>
+                    <Select options={[
+                      { value: 'pending', label: 'Pending' },
+                      { value: 'approved', label: 'Approved' },
+                      { value: 'rejected', label: 'Rejected' },
+                      { value: 'settled', label: 'Settled' },
+                    ]} />
+                  </Form.Item></Col>
+                  <Col span={12}><Form.Item name="approvedAmount" label="Approved Amount">
+                    <InputNumber min={0} step={50} style={{ width: '100%' }} prefix="₹" />
+                  </Form.Item></Col>
+                </Row>
+              )}
               <Form.Item name="description" label="Description">
                 <Input.TextArea rows={3} placeholder="Enter description" />
               </Form.Item>
@@ -2070,14 +2126,21 @@ export default function StaffProfileView() {
           title: 'Status',
           dataIndex: 'status',
           key: 'status',
-          render: (s, r) => (
-            <Space>
-              <Tag icon={getStatusIcon(s)} color={getStatusColor(s)}>
-                {(s || '').replace('_', ' ').toUpperCase()}
-              </Tag>
-              {r.isLate && <Tag color="orange" icon={<ClockCircleOutlined />}>LATE</Tag>}
-            </Space>
-          )
+          render: (s, r) => {
+            const hasAttended = !!r.checkIn;
+            const isOffDay = s === 'weekly_off' || s === 'holiday';
+            return (
+              <Space>
+                <Tag icon={getStatusIcon(s)} color={getStatusColor(s)}>
+                  {(s || '').replace('_', ' ').toUpperCase()}
+                </Tag>
+                {isOffDay && hasAttended && (
+                  <Tag color="success" icon={<CheckCircleOutlined />}>PRESENT</Tag>
+                )}
+                {r.isLate && <Tag color="orange" icon={<ClockCircleOutlined />}>LATE</Tag>}
+              </Space>
+            );
+          }
         },
         {
           title: 'Check In',
@@ -2086,6 +2149,15 @@ export default function StaffProfileView() {
             <Space size="small">
               <Text>{r.checkIn || '--:--'}</Text>
               {r.source === 'biometric' && <Tooltip title="Biometric Punch"><SyncOutlined style={{ fontSize: 10, color: '#1890ff' }} /></Tooltip>}
+            </Space>
+          )
+        },
+        {
+          title: 'Check Out',
+          key: 'checkOut',
+          render: (_, r) => (
+            <Space size="small">
+              <Text>{r.checkOut || '--:--'}</Text>
             </Space>
           )
         },
@@ -2126,7 +2198,7 @@ export default function StaffProfileView() {
             </Space>
           }
         >
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+          {/* <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col xs={12} sm={8} md={4}>
               <Card size="small" className="stat-card">
                 <Statistic title="Present" value={attStats.present || 0} valueStyle={{ color: '#3f8600' }} prefix={<CheckCircleOutlined />} />
@@ -2163,7 +2235,7 @@ export default function StaffProfileView() {
                 />
               </Card>
             </Col>
-          </Row>
+          </Row> */}
 
           <Table
             rowKey="date"
@@ -2214,7 +2286,8 @@ export default function StaffProfileView() {
         {
           title: 'File', dataIndex: 'fileUrl', key: 'fileUrl', render: (u) => {
             if (!u) return '-';
-            const href = `${api.defaults.baseURL}${String(u)}`;
+            const token = sessionStorage.getItem('impersonate_token') || localStorage.getItem('token');
+            const href = `${api.defaults.baseURL}${String(u)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
             return <a href={href} target="_blank" rel="noreferrer">View</a>;
           }
         },
@@ -2222,7 +2295,8 @@ export default function StaffProfileView() {
         { title: 'Expires On', dataIndex: 'expiresAt', key: 'expiresAt', render: (d) => d ? dayjs(d).format('DD MMM YYYY') : '-' },
         {
           title: 'Actions', key: 'actions', render: (_, r) => {
-            const fileHref = r.fileUrl ? `${api.defaults.baseURL}${String(r.fileUrl)}` : null;
+            const token = sessionStorage.getItem('impersonate_token') || localStorage.getItem('token');
+            const fileHref = r.fileUrl ? `${api.defaults.baseURL}${String(r.fileUrl)}${token ? `?token=${encodeURIComponent(token)}` : ''}` : null;
             const items = [
               fileHref ? { key: 'view', label: <a href={fileHref} target="_blank" rel="noreferrer">View</a> } : null,
               { key: 'edit', label: <span onClick={() => { setEditingDoc(r); docForm.resetFields(); docForm.setFieldsValue({ title: r.fileName || '', docType: r.docType || r.documentTypeId || undefined, expiresAt: r.expiresAt ? dayjs(r.expiresAt) : null, notes: r.notes || '' }); setDocFile(null); setDocOpen(true); }}>Edit</span> },
@@ -2293,13 +2367,26 @@ export default function StaffProfileView() {
               <Form.Item name="notes" label="Notes"><Input.TextArea rows={3} /></Form.Item>
               <Form.Item label="File">
                 <Upload.Dragger multiple={false} maxCount={1}
-                  beforeUpload={(file) => { setDocFile(file); return false; }}
+                  beforeUpload={(file) => {
+                    const isLt10M = file.size / 1024 / 1024 < 10;
+                    if (!isLt10M) {
+                      message.error('File must be smaller than 10MB!');
+                      return Upload.LIST_IGNORE;
+                    }
+                    const isAllowedType = file.type === 'application/pdf' || file.type.startsWith('image/');
+                    if (!isAllowedType) {
+                      message.error('You can only upload Images (JPG, PNG, etc.) or PDF files!');
+                      return Upload.LIST_IGNORE;
+                    }
+                    setDocFile(file);
+                    return false;
+                  }}
                   onRemove={() => { setDocFile(null); }}
                   accept="image/*,.pdf"
                 >
                   <p className="ant-upload-drag-icon">📄</p>
                   <p className="ant-upload-text">Click or drag file to upload</p>
-                  <p className="ant-upload-hint">Images or PDFs. Max 1 file.</p>
+                  <p className="ant-upload-hint">Images (JPG, PNG) or PDFs. Max size 10MB.</p>
                 </Upload.Dragger>
               </Form.Item>
             </Form>

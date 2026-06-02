@@ -7,21 +7,15 @@ import {
   Space,
   Input,
   Select,
-  Tag,
   Modal,
   Form,
   DatePicker,
   InputNumber,
-  Upload,
   message,
   Popconfirm,
-  Tooltip,
   Row,
   Col,
-  Statistic,
-  Progress,
   Layout,
-  Menu,
   Typography
 } from 'antd';
 import {
@@ -30,34 +24,24 @@ import {
   DeleteOutlined,
   UserOutlined,
   SearchOutlined,
-  UploadOutlined,
   InboxOutlined,
   ToolOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  ExclamationCircleOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  LogoutOutlined
+  CheckCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 
 const { Search } = Input;
 const { Option } = Select;
 const { TextArea } = Input;
-const { Title } = Typography;
+const { Title, Text } = Typography;
+const { Content } = Layout;
 
 const AssetsManagement = () => {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/');
-  };
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState(null);
@@ -81,8 +65,6 @@ const AssetsManagement = () => {
   const [form] = Form.useForm();
   const [assignForm] = Form.useForm();
   const [returnForm] = Form.useForm();
-
-  const { Header, Content } = Layout;
 
   // Load assets
   const loadAssets = async (params = {}) => {
@@ -270,39 +252,16 @@ const AssetsManagement = () => {
     setReturnModalVisible(true);
   };
 
-  // Status color mapping
-  const getStatusColor = (status) => {
-    const colors = {
-      available: 'green',
-      in_use: 'blue',
-      maintenance: 'orange',
-      retired: 'red',
-      lost: 'red'
-    };
-    return colors[status] || 'default';
-  };
-
-  // Condition color mapping
-  const getConditionColor = (condition) => {
-    const colors = {
-      excellent: 'green',
-      good: 'blue',
-      fair: 'orange',
-      poor: 'red'
-    };
-    return colors[condition] || 'default';
-  };
-
   const columns = [
     {
       title: 'Asset Name',
       dataIndex: 'name',
       key: 'name',
       render: (text, record) => (
-        <div>
-          <div style={{ fontWeight: 'bold' }}>{text}</div>
+        <div style={{ whiteSpace: 'nowrap' }}>
+          <div style={{ fontWeight: '600', color: '#1677ff' }}>{text}</div>
           {record.serialNumber && (
-            <div style={{ fontSize: '12px', color: '#666' }}>
+            <div style={{ fontSize: '11px', color: '#8c8c8c', marginTop: '2px' }}>
               S/N: {record.serialNumber}
             </div>
           )}
@@ -313,15 +272,15 @@ const AssetsManagement = () => {
       title: 'Category',
       dataIndex: 'category',
       key: 'category',
-      render: (text) => <Tag color="blue">{text}</Tag>,
+      render: (text) => <span className="sales-status-tag sales-status-active" style={{ fontSize: '12px', textTransform: 'capitalize' }}>{text}</span>,
     },
     {
       title: 'Brand/Model',
       key: 'brandModel',
       render: (text, record) => (
         <div>
-          {record.brand && <div>{record.brand}</div>}
-          {record.model && <div style={{ fontSize: '12px', color: '#666' }}>{record.model}</div>}
+          {record.brand && <div style={{ fontWeight: '500', color: '#262626' }}>{record.brand}</div>}
+          {record.model && <div style={{ fontSize: '11px', color: '#8c8c8c', marginTop: '1px' }}>{record.model}</div>}
         </div>
       ),
     },
@@ -329,78 +288,117 @@ const AssetsManagement = () => {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => (
-        <Tag color={getStatusColor(status)}>
-          {status?.replace('_', ' ').toUpperCase()}
-        </Tag>
-      ),
+      render: (status) => {
+        const map = {
+          available: 'sales-status-complete',
+          in_use: 'sales-status-active',
+          maintenance: 'sales-status-pending',
+          retired: 'sales-status-inactive',
+          lost: 'sales-status-inactive'
+        };
+        const cls = map[status] || 'sales-status-pending';
+        return (
+          <span className={`sales-status-tag ${cls}`} style={{ textTransform: 'capitalize', fontSize: '12px' }}>
+            {status?.replace('_', ' ')}
+          </span>
+        );
+      },
     },
     {
       title: 'Condition',
       dataIndex: 'condition',
       key: 'condition',
-      render: (condition) => (
-        <Tag color={getConditionColor(condition)}>
-          {condition?.toUpperCase()}
-        </Tag>
-      ),
+      render: (condition) => {
+        const map = {
+          excellent: 'sales-status-complete',
+          good: 'sales-status-active',
+          fair: 'sales-status-pending',
+          poor: 'sales-status-inactive'
+        };
+        const cls = map[condition] || 'sales-status-pending';
+        return (
+          <span className={`sales-status-tag ${cls}`} style={{ textTransform: 'capitalize', fontSize: '12px' }}>
+            {condition}
+          </span>
+        );
+      },
     },
     {
       title: 'Assigned To',
       key: 'assignedTo',
       render: (text, record) => {
         if (record.assignedUser) {
+          const name = record.assignedUser.profile?.name || 'Assigned User';
           return (
-            <div>
-              <div>{record.assignedUser.phone}</div>
-              {record.assignedUser.profile?.name && (
-                <div style={{ fontSize: '12px', color: '#666' }}>
-                  {record.assignedUser.profile.name}
-                </div>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                backgroundColor: '#e6f7ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: '8px',
+                color: '#1677ff',
+                fontWeight: '700',
+                fontSize: '12px',
+                boxShadow: '0 2px 6px rgba(22, 119, 255, 0.04)'
+              }}>
+                {name.charAt(0).toUpperCase()}
+              </div>
+              <div style={{ whiteSpace: 'nowrap' }}>
+                <div style={{ fontWeight: '600', color: '#1677ff', whiteSpace: 'nowrap' }}>{name}</div>
+                <div style={{ fontSize: '11px', color: '#8c8c8c', marginTop: '1px', whiteSpace: 'nowrap' }}>{record.assignedUser.phone}</div>
+              </div>
             </div>
           );
         }
-        return <span style={{ color: '#999' }}>Unassigned</span>;
+        return <span style={{ color: '#bfbfbf', fontStyle: 'italic' }}>Unassigned</span>;
       },
     },
     {
       title: 'Location',
       dataIndex: 'location',
       key: 'location',
-      render: (location) => location || <span style={{ color: '#999' }}>Not set</span>,
+      render: (location) => location || <span style={{ color: '#bfbfbf', fontStyle: 'italic' }}>Not set</span>,
     },
     {
       title: 'Actions',
       key: 'actions',
       render: (text, record) => (
-        <Space size="small">
-          <Tooltip title="Edit">
-            <Button
-              type="link"
-              icon={<EditOutlined />}
-              onClick={() => handleEdit(record)}
-            />
-          </Tooltip>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'nowrap', alignItems: 'center', whiteSpace: 'nowrap' }}>
+          <Button 
+            size="small" 
+            shape="round"
+            icon={<EditOutlined />} 
+            onClick={() => handleEdit(record)}
+          >
+            Edit
+          </Button>
 
           {record.status === 'available' && (
-            <Tooltip title="Assign">
-              <Button
-                type="link"
-                icon={<UserOutlined />}
-                onClick={() => handleAssignModal(record)}
-              />
-            </Tooltip>
+            <Button
+              size="small" 
+              shape="round"
+              type="primary"
+              icon={<UserOutlined />}
+              onClick={() => handleAssignModal(record)}
+            >
+              Assign
+            </Button>
           )}
 
           {record.status === 'in_use' && (
-            <Tooltip title="Return">
-              <Button
-                type="link"
-                icon={<CheckCircleOutlined />}
-                onClick={() => handleReturnModal(record)}
-              />
-            </Tooltip>
+            <Button
+              size="small" 
+              shape="round"
+              type="default"
+              icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+              onClick={() => handleReturnModal(record)}
+            >
+              Return
+            </Button>
           )}
 
           <Popconfirm
@@ -408,16 +406,19 @@ const AssetsManagement = () => {
             onConfirm={() => handleDelete(record.id)}
             okText="Yes"
             cancelText="No"
+            okButtonProps={{ shape: 'round' }}
+            cancelButtonProps={{ shape: 'round' }}
           >
-            <Tooltip title="Delete">
-              <Button
-                type="link"
-                danger
-                icon={<DeleteOutlined />}
-              />
-            </Tooltip>
+            <Button
+              size="small" 
+              shape="round"
+              danger
+              icon={<DeleteOutlined />}
+            >
+              Delete
+            </Button>
           </Popconfirm>
-        </Space>
+        </div>
       ),
     },
   ];
@@ -427,95 +428,88 @@ const AssetsManagement = () => {
       <Sidebar collapsed={collapsed} />
 
       <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
-        <Header
-          style={{
-            padding: 0,
-            background: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            position: 'sticky',
-            top: 0,
-            zIndex: 90
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <Button
-              type="text"
-              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={() => setCollapsed(!collapsed)}
-              style={{
-                fontSize: '18px',
-                padding: '0 24px'
-              }}
-            />
-            <Title level={4} style={{ margin: 0 }}>Assets Management</Title>
-          </div>
-          <Menu
-            theme="light"
-            mode="horizontal"
-            items={[{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout }]}
-          />
-        </Header>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Assets Management" 
+        />
 
         <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
           <div>
-            {/* Statistics Cards */}
+            {/* dynamic custom kpi card row with justifyContent: center centered icons */}
             {stats && (
-              <Row gutter={16} style={{ marginBottom: 24 }}>
-                <Col span={6}>
-                  <Card>
-                    <Statistic
-                      title="Total Assets"
-                      value={stats.total}
-                      prefix={<InboxOutlined />}
-                    />
+              <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                <Col xs={24} sm={12} md={6}>
+                  <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>Total Assets</div>
+                        <div style={{ fontSize: '28px', fontWeight: '700', color: '#262626', lineHeight: '1.2' }}>{stats.total}</div>
+                      </div>
+                      <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#e6f7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1677ff', fontSize: '20px', boxShadow: '0 4px 10px rgba(22, 119, 255, 0.1)' }}>
+                        <InboxOutlined />
+                      </div>
+                    </div>
                   </Card>
                 </Col>
-                <Col span={6}>
-                  <Card>
-                    <Statistic
-                      title="Available"
-                      value={stats.statusStats?.available || 0}
-                      valueStyle={{ color: '#3f8600' }}
-                      prefix={<CheckCircleOutlined />}
-                    />
+                <Col xs={24} sm={12} md={6}>
+                  <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>Available</div>
+                        <div style={{ fontSize: '28px', fontWeight: '700', color: '#52c41a', lineHeight: '1.2' }}>{stats.statusStats?.available || 0}</div>
+                      </div>
+                      <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#f6ffed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#52c41a', fontSize: '20px', boxShadow: '0 4px 10px rgba(82, 196, 26, 0.1)' }}>
+                        <CheckCircleOutlined />
+                      </div>
+                    </div>
                   </Card>
                 </Col>
-                <Col span={6}>
-                  <Card>
-                    <Statistic
-                      title="In Use"
-                      value={stats.statusStats?.in_use || 0}
-                      valueStyle={{ color: '#1890ff' }}
-                      prefix={<UserOutlined />}
-                    />
+                <Col xs={24} sm={12} md={6}>
+                  <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>In Use</div>
+                        <div style={{ fontSize: '28px', fontWeight: '700', color: '#722ed1', lineHeight: '1.2' }}>{stats.statusStats?.in_use || 0}</div>
+                      </div>
+                      <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#f9f0ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#722ed1', fontSize: '20px', boxShadow: '0 4px 10px rgba(114, 46, 209, 0.1)' }}>
+                        <UserOutlined />
+                      </div>
+                    </div>
                   </Card>
                 </Col>
-                <Col span={6}>
-                  <Card>
-                    <Statistic
-                      title="Maintenance Due"
-                      value={stats.maintenanceDue || 0}
-                      valueStyle={{ color: '#fa8c16' }}
-                      prefix={<ToolOutlined />}
-                    />
+                <Col xs={24} sm={12} md={6}>
+                  <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>Maintenance Due</div>
+                        <div style={{ fontSize: '28px', fontWeight: '700', color: '#fa8c16', lineHeight: '1.2' }}>{stats.maintenanceDue || 0}</div>
+                      </div>
+                      <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#fff7e6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fa8c16', fontSize: '20px', boxShadow: '0 4px 10px rgba(250, 140, 22, 0.1)' }}>
+                        <ToolOutlined />
+                      </div>
+                    </div>
                   </Card>
                 </Col>
               </Row>
             )}
 
             <Card
-              title="Assets Management"
-              extra={
-                <Space>
+              className="sales-content-card"
+              bodyStyle={{ padding: '24px' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: '16px' }}>
+                <Title level={4} style={{ margin: 0, fontWeight: 600 }}>Active Asset Inventory</Title>
+                <Space size={12}>
                   <Button
+                    shape="round"
                     icon={<UserOutlined />}
                     onClick={() => navigate('/assets-management/asset-assignments')}
                   >
                     Asset Assignments
                   </Button>
                   <Button
+                    shape="round"
                     icon={<ToolOutlined />}
                     onClick={() => navigate('/assets-management/asset-maintenance')}
                   >
@@ -523,6 +517,7 @@ const AssetsManagement = () => {
                   </Button>
                   <Button
                     type="primary"
+                    shape="round"
                     icon={<PlusOutlined />}
                     onClick={() => {
                       setSelectedAsset(null);
@@ -533,39 +528,37 @@ const AssetsManagement = () => {
                     Add Asset
                   </Button>
                 </Space>
-              }
-            >
-              {/* Filters */}
-              <Row gutter={16} style={{ marginBottom: 16 }}>
-                <Col span={6}>
+              </div>
+
+              {/* Filters Panel */}
+              <div className="sales-filter-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
                   <Search
                     placeholder="Search assets..."
                     value={filters.search}
                     onChange={(e) => handleFilterChange('search', e.target.value)}
                     onSearch={applyFilters}
-                    style={{ width: '100%' }}
+                    style={{ width: 250, borderRadius: '8px' }}
                   />
-                </Col>
-                <Col span={4}>
                   <Select
                     placeholder="Category"
                     value={filters.category || undefined}
                     onChange={(value) => handleFilterChange('category', value)}
                     allowClear
-                    style={{ width: '100%' }}
+                    style={{ width: 160 }}
+                    dropdownStyle={{ borderRadius: '8px' }}
                   >
                     {categories.map(cat => (
                       <Option key={cat} value={cat}>{cat}</Option>
                     ))}
                   </Select>
-                </Col>
-                <Col span={4}>
                   <Select
                     placeholder="Status"
                     value={filters.status || undefined}
                     onChange={(value) => handleFilterChange('status', value)}
                     allowClear
-                    style={{ width: '100%' }}
+                    style={{ width: 160 }}
+                    dropdownStyle={{ borderRadius: '8px' }}
                   >
                     <Option value="available">Available</Option>
                     <Option value="in_use">In Use</Option>
@@ -573,14 +566,13 @@ const AssetsManagement = () => {
                     <Option value="retired">Retired</Option>
                     <Option value="lost">Lost</Option>
                   </Select>
-                </Col>
-                <Col span={4}>
                   <Select
                     placeholder="Assigned To"
                     value={filters.assignedTo || undefined}
                     onChange={(value) => handleFilterChange('assignedTo', value)}
                     allowClear
-                    style={{ width: '100%' }}
+                    style={{ width: 180 }}
+                    dropdownStyle={{ borderRadius: '8px' }}
                   >
                     {staff.map(member => (
                       <Option key={member.id} value={member.id}>
@@ -588,16 +580,14 @@ const AssetsManagement = () => {
                       </Option>
                     ))}
                   </Select>
-                </Col>
-                <Col span={6}>
-                  <Space>
-                    <Button onClick={applyFilters} icon={<SearchOutlined />}>
-                      Search
-                    </Button>
-                    <Button onClick={resetFilters}>Reset</Button>
-                  </Space>
-                </Col>
-              </Row>
+                </div>
+                <Space>
+                  <Button type="primary" shape="round" onClick={applyFilters} icon={<SearchOutlined />}>
+                    Search
+                  </Button>
+                  <Button shape="round" onClick={resetFilters}>Reset</Button>
+                </Space>
+              </div>
 
               {/* Assets Table */}
               <Table
@@ -605,6 +595,7 @@ const AssetsManagement = () => {
                 dataSource={assets}
                 rowKey="id"
                 loading={loading}
+                className="sales-table"
                 pagination={{
                   ...pagination,
                   showSizeChanger: true,
@@ -617,7 +608,7 @@ const AssetsManagement = () => {
 
             {/* Add/Edit Asset Modal */}
             <Modal
-              title={selectedAsset ? 'Edit Asset' : 'Add New Asset'}
+              title={selectedAsset ? 'Edit Asset Particulars' : 'Add New Asset to Registry'}
               open={modalVisible}
               onCancel={() => {
                 setModalVisible(false);
@@ -626,17 +617,19 @@ const AssetsManagement = () => {
               }}
               footer={null}
               width={800}
+              className="sales-modal"
             >
               <Form
                 form={form}
                 layout="vertical"
                 onFinish={handleSubmit}
+                style={{ marginTop: '12px' }}
               >
                 <Row gutter={16}>
                   <Col span={12}>
                     <Form.Item
                       name="name"
-                      label="Asset Name"
+                      label={<span className="modal-field-label">Asset Name</span>}
                       rules={[{ required: true, message: 'Please enter asset name' }]}
                     >
                       <Input />
@@ -645,10 +638,10 @@ const AssetsManagement = () => {
                   <Col span={12}>
                     <Form.Item
                       name="category"
-                      label="Category"
+                      label={<span className="modal-field-label">Category</span>}
                       rules={[{ required: true, message: 'Please select category' }]}
                     >
-                      <Select>
+                      <Select dropdownStyle={{ borderRadius: '8px' }}>
                         <Option value="laptop">Laptop</Option>
                         <Option value="desktop">Desktop</Option>
                         <Option value="mobile">Mobile</Option>
@@ -668,17 +661,17 @@ const AssetsManagement = () => {
 
                 <Row gutter={16}>
                   <Col span={8}>
-                    <Form.Item name="serialNumber" label="Serial Number">
+                    <Form.Item name="serialNumber" label={<span className="modal-field-label">Serial Number</span>}>
                       <Input />
                     </Form.Item>
                   </Col>
                   <Col span={8}>
-                    <Form.Item name="brand" label="Brand">
+                    <Form.Item name="brand" label={<span className="modal-field-label">Brand</span>}>
                       <Input />
                     </Form.Item>
                   </Col>
                   <Col span={8}>
-                    <Form.Item name="model" label="Model">
+                    <Form.Item name="model" label={<span className="modal-field-label">Model</span>}>
                       <Input />
                     </Form.Item>
                   </Col>
@@ -686,12 +679,12 @@ const AssetsManagement = () => {
 
                 <Row gutter={16}>
                   <Col span={8}>
-                    <Form.Item name="purchaseDate" label="Purchase Date">
+                    <Form.Item name="purchaseDate" label={<span className="modal-field-label">Purchase Date</span>}>
                       <DatePicker style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
                   <Col span={8}>
-                    <Form.Item name="purchaseCost" label="Purchase Cost">
+                    <Form.Item name="purchaseCost" label={<span className="modal-field-label">Purchase Cost</span>}>
                       <InputNumber
                         style={{ width: '100%' }}
                         formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
@@ -700,7 +693,7 @@ const AssetsManagement = () => {
                     </Form.Item>
                   </Col>
                   <Col span={8}>
-                    <Form.Item name="currentValue" label="Current Value">
+                    <Form.Item name="currentValue" label={<span className="modal-field-label">Current Value</span>}>
                       <InputNumber
                         style={{ width: '100%' }}
                         formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
@@ -712,8 +705,8 @@ const AssetsManagement = () => {
 
                 <Row gutter={16}>
                   <Col span={8}>
-                    <Form.Item name="condition" label="Condition" initialValue="good">
-                      <Select>
+                    <Form.Item name="condition" label={<span className="modal-field-label">Condition</span>} initialValue="good">
+                      <Select dropdownStyle={{ borderRadius: '8px' }}>
                         <Option value="excellent">Excellent</Option>
                         <Option value="good">Good</Option>
                         <Option value="fair">Fair</Option>
@@ -722,8 +715,8 @@ const AssetsManagement = () => {
                     </Form.Item>
                   </Col>
                   <Col span={8}>
-                    <Form.Item name="status" label="Status" initialValue="available">
-                      <Select>
+                    <Form.Item name="status" label={<span className="modal-field-label">Status</span>} initialValue="available">
+                      <Select dropdownStyle={{ borderRadius: '8px' }}>
                         <Option value="available">Available</Option>
                         <Option value="in_use">In Use</Option>
                         <Option value="maintenance">Maintenance</Option>
@@ -733,7 +726,7 @@ const AssetsManagement = () => {
                     </Form.Item>
                   </Col>
                   <Col span={8}>
-                    <Form.Item name="location" label="Location">
+                    <Form.Item name="location" label={<span className="modal-field-label">Location</span>}>
                       <Input />
                     </Form.Item>
                   </Col>
@@ -741,36 +734,36 @@ const AssetsManagement = () => {
 
                 <Row gutter={16}>
                   <Col span={12}>
-                    <Form.Item name="warrantyExpiry" label="Warranty Expiry">
+                    <Form.Item name="warrantyExpiry" label={<span className="modal-field-label">Warranty Expiry</span>}>
                       <DatePicker style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
                   <Col span={12}>
-                    <Form.Item name="nextMaintenanceDate" label="Next Maintenance Date">
+                    <Form.Item name="nextMaintenanceDate" label={<span className="modal-field-label">Next Maintenance Date</span>}>
                       <DatePicker style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
                 </Row>
 
-                <Form.Item name="description" label="Description">
-                  <TextArea rows={3} />
+                <Form.Item name="description" label={<span className="modal-field-label">Description</span>}>
+                  <TextArea rows={3} placeholder="Describe the specifications of this asset..." />
                 </Form.Item>
 
-                <Form.Item name="notes" label="Notes">
-                  <TextArea rows={3} />
+                <Form.Item name="notes" label={<span className="modal-field-label">Notes</span>}>
+                  <TextArea rows={3} placeholder="Add optional operational notes..." />
                 </Form.Item>
 
-                <Form.Item>
-                  <Space>
-                    <Button type="primary" htmlType="submit">
-                      {selectedAsset ? 'Update' : 'Create'}
-                    </Button>
+                <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+                  <Space size={10}>
                     <Button onClick={() => {
                       setModalVisible(false);
                       form.resetFields();
                       setSelectedAsset(null);
-                    }}>
+                    }} shape="round">
                       Cancel
+                    </Button>
+                    <Button type="primary" htmlType="submit" shape="round">
+                      {selectedAsset ? 'Save Changes' : 'Add Asset'}
                     </Button>
                   </Space>
                 </Form.Item>
@@ -779,7 +772,7 @@ const AssetsManagement = () => {
 
             {/* Assign Asset Modal */}
             <Modal
-              title="Assign Asset"
+              title="Assign Asset to Employee"
               open={assignModalVisible}
               onCancel={() => {
                 setAssignModalVisible(false);
@@ -787,18 +780,20 @@ const AssetsManagement = () => {
                 setSelectedAsset(null);
               }}
               footer={null}
+              className="sales-modal"
             >
               <Form
                 form={assignForm}
                 layout="vertical"
                 onFinish={handleAssign}
+                style={{ marginTop: '12px' }}
               >
                 <Form.Item
                   name="assignedTo"
-                  label="Assign To"
+                  label={<span className="modal-field-label">Assign To</span>}
                   rules={[{ required: true, message: 'Please select staff member' }]}
                 >
-                  <Select placeholder="Select staff member">
+                  <Select placeholder="Select staff member" dropdownStyle={{ borderRadius: '8px' }}>
                     {staff.map(member => (
                       <Option key={member.id} value={member.id}>
                         {member.name} - {member.profile?.department || 'No department'}
@@ -807,21 +802,21 @@ const AssetsManagement = () => {
                   </Select>
                 </Form.Item>
 
-                <Form.Item name="notes" label="Notes">
-                  <TextArea rows={3} placeholder="Add any notes about this assignment..." />
+                <Form.Item name="notes" label={<span className="modal-field-label">Assignment Notes</span>}>
+                  <TextArea rows={3} placeholder="Add notes about this assignment (optional)..." />
                 </Form.Item>
 
-                <Form.Item>
-                  <Space>
-                    <Button type="primary" htmlType="submit">
-                      Assign Asset
-                    </Button>
+                <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+                  <Space size={10}>
                     <Button onClick={() => {
                       setAssignModalVisible(false);
                       assignForm.resetFields();
                       setSelectedAsset(null);
-                    }}>
+                    }} shape="round">
                       Cancel
+                    </Button>
+                    <Button type="primary" htmlType="submit" shape="round">
+                      Confirm Assignment
                     </Button>
                   </Space>
                 </Form.Item>
@@ -830,7 +825,7 @@ const AssetsManagement = () => {
 
             {/* Return Asset Modal */}
             <Modal
-              title="Return Asset"
+              title="Record Return of Company Asset"
               open={returnModalVisible}
               onCancel={() => {
                 setReturnModalVisible(false);
@@ -838,14 +833,16 @@ const AssetsManagement = () => {
                 setSelectedAsset(null);
               }}
               footer={null}
+              className="sales-modal"
             >
               <Form
                 form={returnForm}
                 layout="vertical"
                 onFinish={handleReturn}
+                style={{ marginTop: '12px' }}
               >
-                <Form.Item name="conditionAtReturn" label="Condition at Return" initialValue="good">
-                  <Select>
+                <Form.Item name="conditionAtReturn" label={<span className="modal-field-label">Condition at Return</span>} initialValue="good">
+                  <Select dropdownStyle={{ borderRadius: '8px' }}>
                     <Option value="excellent">Excellent</Option>
                     <Option value="good">Good</Option>
                     <Option value="fair">Fair</Option>
@@ -853,21 +850,21 @@ const AssetsManagement = () => {
                   </Select>
                 </Form.Item>
 
-                <Form.Item name="notes" label="Notes">
-                  <TextArea rows={3} placeholder="Add any notes about the return..." />
+                <Form.Item name="notes" label={<span className="modal-field-label">Return Notes</span>}>
+                  <TextArea rows={3} placeholder="Add feedback notes about the return condition (optional)..." />
                 </Form.Item>
 
-                <Form.Item>
-                  <Space>
-                    <Button type="primary" htmlType="submit">
-                      Return Asset
-                    </Button>
+                <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+                  <Space size={10}>
                     <Button onClick={() => {
                       setReturnModalVisible(false);
                       returnForm.resetFields();
                       setSelectedAsset(null);
-                    }}>
+                    }} shape="round">
                       Cancel
+                    </Button>
+                    <Button type="primary" htmlType="submit" shape="round">
+                      Process Return
                     </Button>
                   </Space>
                 </Form.Item>

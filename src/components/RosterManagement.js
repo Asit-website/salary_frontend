@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Layout, Table, Button, DatePicker, Select, Input, Popover, message, Tag, Space, Breadcrumb, Card, Typography, Spin, Divider, Menu, Modal, Form, Checkbox } from 'antd';
-import { LeftOutlined, RightOutlined, UserOutlined, SearchOutlined, CalendarOutlined, SaveOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, AppstoreAddOutlined } from '@ant-design/icons';
+import { Layout, Table, Button, DatePicker, Select, Input, Popover, message, Space, Card, Typography, Modal, Form, Checkbox, Divider } from 'antd';
+import { LeftOutlined, RightOutlined, SearchOutlined, CalendarOutlined, SaveOutlined, AppstoreAddOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 
-const { Header, Content } = Layout;
+const { Content } = Layout;
 const { Title, Text } = Typography;
 const { Option } = Select;
 const { RangePicker } = DatePicker;
@@ -88,22 +89,33 @@ const RosterManagement = () => {
     return rosterData.find(r => r.userId === userId && r.date === date);
   };
 
-  const updateRoster = async (userId, date, status, shiftTemplateId) => {
+  const updateRoster = async (userId, date, status, shiftTemplateId, forceHoliday = false) => {
     try {
       setSaving(userId);
       await api.post('/admin/roster', {
-        assessments: [{ userId, date, status, shiftTemplateId }]
+        assessments: [{ userId, date, status, shiftTemplateId }],
+        forceHoliday
       });
       fetchRoster();
       message.success('Roster updated');
     } catch (error) {
-      message.error('Failed to update roster');
+      if (error?.response?.data?.isHolidayWarning) {
+        Modal.confirm({
+          title: 'Public Holiday Warning',
+          content: error.response.data.message,
+          okText: 'Continue',
+          cancelText: 'Cancel',
+          onOk: () => updateRoster(userId, date, status, shiftTemplateId, true)
+        });
+      } else {
+        message.error(error?.response?.data?.message || 'Failed to update roster');
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  const handleBulkSave = async (values) => {
+  const handleBulkSave = async (values, forceHoliday = false) => {
     try {
       setBulkLoading(true);
       const { staffIds, dateRange, status, shiftTemplateId, selectedDays } = values;
@@ -142,7 +154,7 @@ const RosterManagement = () => {
         return;
       }
 
-      const res = await api.post('/admin/roster', { assessments });
+      const res = await api.post('/admin/roster', { assessments, isBulk: true, forceHoliday });
       if (res.data.success) {
         message.success(`Successfully updated roster for ${staffIds.length} staff over ${dates.length} days`);
         setIsBulkModalOpen(false);
@@ -151,7 +163,17 @@ const RosterManagement = () => {
       }
     } catch (error) {
       console.error('Bulk update error:', error);
-      message.error(error?.response?.data?.message || 'Failed to perform bulk roster update');
+      if (error?.response?.data?.isHolidayWarning) {
+        Modal.confirm({
+          title: 'Public Holiday Warning',
+          content: error.response.data.message,
+          okText: 'Continue',
+          cancelText: 'Cancel',
+          onOk: () => handleBulkSave(values, true)
+        });
+      } else {
+        message.error(error?.response?.data?.message || 'Failed to perform bulk roster update');
+      }
     } finally {
       setBulkLoading(false);
     }
@@ -196,14 +218,6 @@ const RosterManagement = () => {
           >
             Weekly Off
           </Button>
-          {/* <Button 
-            type={entry?.status === 'HOLIDAY' ? 'primary' : 'default'} 
-            block 
-            icon={<CalendarOutlined />}
-            onClick={() => updateRoster(userId, date, 'HOLIDAY', null)}
-          >
-            Holiday
-          </Button> */}
           
           {entry && (
             <Button 
@@ -220,20 +234,39 @@ const RosterManagement = () => {
       </div>
     );
 
-    let tagColor = 'default';
     let label = '-';
+    let bg = '#f8fafc';
+    let border = '1px dashed #cbd5e1';
+    let color = '#94a3b8';
+    let fontWeight = '500';
+
     if (entry) {
       if (entry.status === 'SHIFT') {
-        tagColor = 'blue';
-        const startText = entry.shiftTemplate?.startTime ? dayjs(`2000-01-01 ${entry.shiftTemplate.startTime}`).format('h A') : '';
-        const endText = entry.shiftTemplate?.endTime ? dayjs(`2000-01-01 ${entry.shiftTemplate.endTime}`).format('h A') : '';
+        const formatT = (t) => {
+          if (!t) return '';
+          const d = dayjs(`2000-01-01 ${t}`);
+          return d.minute() === 0 ? d.format('h A') : d.format('h:mm A');
+        };
+        const startText = formatT(entry.shiftTemplate?.startTime);
+        const endText = formatT(entry.shiftTemplate?.endTime);
         label = startText && endText ? `${startText} - ${endText}` : (entry.shiftTemplate?.name || 'Shift');
+        
+        bg = '#e6f7ff';
+        border = '1px solid #91d5ff';
+        color = '#1890ff';
+        fontWeight = '600';
       } else if (entry.status === 'WEEKLY_OFF') {
-        tagColor = 'orange';
-        label = 'Off';
+        label = 'WEEKLY OFF';
+        bg = '#fff7e6';
+        border = '1px solid #ffd591';
+        color = '#fa8c16';
+        fontWeight = '600';
       } else if (entry.status === 'HOLIDAY') {
-        tagColor = 'purple';
-        label = 'Holiday';
+        label = 'HOLIDAY';
+        bg = '#f9f0ff';
+        border = '1px solid #d3adf7';
+        color = '#722ed1';
+        fontWeight = '600';
       }
     }
 
@@ -241,17 +274,29 @@ const RosterManagement = () => {
       <Popover content={content} trigger="click" placement="bottom">
         <div style={{ 
           cursor: 'pointer', 
-          padding: '8px', 
+          padding: '8px 10px', 
           textAlign: 'center', 
-          background: entry ? '#f0f5ff' : 'transparent',
-          borderRadius: '4px',
-          border: '1px dashed #d9d9d9',
-          minHeight: '40px',
+          background: bg,
+          borderRadius: '10px',
+          border: border,
+          minHeight: '42px',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          transition: 'all 0.25s',
+          boxShadow: entry ? '0 2px 6px rgba(22, 119, 255, 0.05)' : 'none'
         }}>
-          <Tag color={tagColor} style={{ margin: 0 }}>{label}</Tag>
+          <span style={{ 
+            margin: 0, 
+            fontSize: '11px', 
+            fontWeight: fontWeight, 
+            color: color,
+            textTransform: entry?.status && entry.status !== 'SHIFT' ? 'uppercase' : 'none',
+            letterSpacing: entry?.status && entry.status !== 'SHIFT' ? '0.5px' : 'normal',
+            whiteSpace: 'nowrap'
+          }}>
+            {label}
+          </span>
         </div>
       </Popover>
     );
@@ -260,26 +305,51 @@ const RosterManagement = () => {
   const columns = [
     {
       title: 'Staff Member',
-      dataIndex: 'name',
       key: 'staff',
       fixed: 'left',
-      width: 200,
-      render: (text, record) => (
-        <Space>
-          <UserOutlined style={{ color: '#1890ff' }} />
-          <div>
-            <div style={{ fontWeight: '600' }}>{record.profile?.name || 'Unknown'}</div>
-            {record.shiftTemplate && (
-              <div style={{ fontSize: '11px', color: '#52c41a' }}>
-                {dayjs(`2000-01-01 ${record.shiftTemplate.startTime}`).format('h A')} - {dayjs(`2000-01-01 ${record.shiftTemplate.endTime}`).format('h A')}
-              </div>
-            )}
-            {!record.shiftTemplate && (
-              <div style={{ fontSize: '11px', color: '#8c8c8c' }}>No regular shift</div>
-            )}
+      width: 220,
+      render: (text, record) => {
+        const name = record.profile?.name || 'Unknown';
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              flexShrink: 0,
+              borderRadius: '10px',
+              backgroundColor: '#e6f7ff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: '12px',
+              color: '#1677ff',
+              fontWeight: '700',
+              fontSize: '14px',
+              boxShadow: '0 2px 6px rgba(22, 119, 255, 0.06)'
+            }}>
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ whiteSpace: 'nowrap' }}>
+              <div style={{ fontWeight: '600', color: '#1677ff', whiteSpace: 'nowrap' }}>{name}</div>
+              {record.shiftTemplate && (
+                <div style={{ fontSize: '11px', color: '#52c41a', marginTop: '1px', whiteSpace: 'nowrap' }}>
+                  {(() => {
+                    const formatT = (t) => {
+                      if (!t) return '';
+                      const d = dayjs(`2000-01-01 ${t}`);
+                      return d.minute() === 0 ? d.format('h A') : d.format('h:mm A');
+                    };
+                    return `${formatT(record.shiftTemplate.startTime)} - ${formatT(record.shiftTemplate.endTime)}`;
+                  })()}
+                </div>
+              )}
+              {!record.shiftTemplate && (
+                <div style={{ fontSize: '11px', color: '#8c8c8c', marginTop: '1px', whiteSpace: 'nowrap' }}>No regular shift</div>
+              )}
+            </div>
           </div>
-        </Space>
-      )
+        );
+      }
     },
     ...[0, 1, 2, 3, 4, 5, 6].map(offset => ({
       title: getDayLabel(offset),
@@ -298,88 +368,71 @@ const RosterManagement = () => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} />
-      <Layout style={{ marginLeft: collapsed ? 80 : 200, transition: 'all 0.2s' }}>
-        <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
-              className: 'trigger',
-              onClick: () => setCollapsed(!collapsed),
-              style: { fontSize: '18px', padding: '0 24px' }
-            })}
-            <Space size="large">
-              <Title level={4} style={{ margin: 0 }}>Roster Management</Title>
-              <Divider type="vertical" />
-              <Breadcrumb>
-                <Breadcrumb.Item>Staff Management</Breadcrumb.Item>
-                <Breadcrumb.Item>Roster</Breadcrumb.Item>
-              </Breadcrumb>
-            </Space>
-          </div>
-          <Menu
-            theme="light"
-            mode="horizontal"
-            items={[
-              {
-                key: 'logout',
-                icon: <LogoutOutlined />,
-                label: 'Logout',
-                onClick: handleLogout
-              }
-            ]}
-          />
-        </Header>
+      <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden', transition: 'margin-left 0.2s' }}>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Roster Management" 
+        />
 
-        <Content style={{ margin: '24px', background: '#fff', borderRadius: '8px', padding: '24px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            <Card bodyStyle={{ padding: '16px' }} style={{ border: '1px solid #f0f0f0' }}>
+            {/* Elegant Toolbar Card */}
+            <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
                 <Space size="middle">
                   <Input 
                     prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />} 
                     placeholder="Search staff..." 
-                    style={{ width: 250 }} 
+                    style={{ width: 220, borderRadius: '20px' }} 
                     value={searchText}
                     onChange={e => setSearchText(e.target.value)}
                     allowClear
                   />
-                  <div style={{ display: 'flex', alignItems: 'center', background: '#f5f5f5', padding: '4px', borderRadius: '6px' }}>
-                    <Button type="text" icon={<LeftOutlined />} onClick={() => handleWeekChange('prev')} />
-                    <div style={{ padding: '0 16px', fontWeight: 'bold', minWidth: '200px', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '2px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+                    <Button type="text" shape="circle" icon={<LeftOutlined style={{ fontSize: '12px' }} />} onClick={() => handleWeekChange('prev')} />
+                    <div style={{ padding: '0 12px', fontWeight: '700', minWidth: '180px', textAlign: 'center', fontSize: '13px', color: '#334155' }}>
                       {currentWeekStart.format('DD MMM')} - {currentWeekStart.add(6, 'day').format('DD MMM YYYY')}
                     </div>
-                    <Button type="text" icon={<RightOutlined />} onClick={() => handleWeekChange('next')} />
+                    <Button type="text" shape="circle" icon={<RightOutlined style={{ fontSize: '12px' }} />} onClick={() => handleWeekChange('next')} />
                   </div>
                   <DatePicker 
                     picker="week" 
                     value={currentWeekStart} 
                     onChange={val => val && setCurrentWeekStart(val.startOf('week'))}
                     allowClear={false}
+                    style={{ borderRadius: '20px' }}
                   />
                 </Space>
                 <Space>
                   <Button 
                     type="primary" 
+                    shape="round"
                     icon={<AppstoreAddOutlined />} 
                     onClick={() => setIsBulkModalOpen(true)}
-                    style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                    style={{ background: '#52c41a', borderColor: '#52c41a', boxShadow: '0 2px 6px rgba(82, 196, 26, 0.15)' }}
                   >
                     Bulk Roster
                   </Button>
-                  <Button icon={<SaveOutlined />} onClick={fetchRoster}>Refresh</Button>
+                  <Button shape="round" icon={<SaveOutlined />} onClick={fetchRoster}>Refresh</Button>
                 </Space>
               </div>
             </Card>
 
-            <Table 
-              columns={columns} 
-              dataSource={filteredStaff} 
-              rowKey="id" 
-              loading={loading}
-              bordered
-              scroll={{ x: 1000 }}
-              pagination={{ pageSize: 15, showSizeChanger: true }}
-              style={{ border: '1px solid #f0f0f0', borderRadius: '8px' }}
-            />
+            {/* Elegant Table Card */}
+            <Card className="sales-content-card" bodyStyle={{ padding: '24px' }}>
+              <Table 
+                columns={columns} 
+                dataSource={filteredStaff} 
+                rowKey="id" 
+                loading={loading}
+                scroll={{ x: 1100 }}
+                pagination={{ pageSize: 15, showSizeChanger: true }}
+                style={{ borderRadius: '8px' }}
+                className="sales-table"
+                size="middle"
+              />
+            </Card>
           </Space>
         </Content>
 

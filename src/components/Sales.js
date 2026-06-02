@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 // import { Layout, Typography, Tabs, Button, Card, Table, Space, message, Modal, Form, Input, Select, DatePicker, Dropdown, Tag } from 'antd';
 import { Layout, Typography, Tabs, Button, Card, Table, Space, message, Modal, Form, Input, Select, DatePicker, Dropdown, Tag, Switch, Menu, InputNumber } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined, MoreOutlined, LogoutOutlined, EnvironmentOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, PlusOutlined, MoreOutlined, LogoutOutlined, EnvironmentOutlined, FileExcelOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
@@ -81,7 +81,8 @@ export default function Sales() {
   const [approvalSearch, setApprovalSearch] = useState('');
   const [approvalDeptFilter, setApprovalDeptFilter] = useState(null);
   const [approvalStaffFilter, setApprovalStaffFilter] = useState(null);
-  const [clientSearch, setClientSearch] = useState('');
+   const [clientSearch, setClientSearch] = useState('');
+   const [clientStatusFilter, setClientStatusFilter] = useState('all');
 
   // Incentive Approvals
   const [approvals, setApprovals] = useState([]);
@@ -96,6 +97,42 @@ export default function Sales() {
   const [visitDetailLoading, setVisitDetailLoading] = useState(false);
 
   const printRef = React.useRef(null);
+
+  const exportVisits = async () => {
+    try {
+      message.loading({ content: 'Generating Visits Excel...', key: 'export_visits' });
+      const response = await api.get('/admin/sales/visits/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `sales-visits-${dayjs().format('YYYY-MM-DD')}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      message.success({ content: 'Visits Excel exported successfully!', key: 'export_visits' });
+    } catch (e) {
+      console.error(e);
+      message.error({ content: 'Failed to export visits', key: 'export_visits' });
+    }
+  };
+
+  const exportOrders = async () => {
+    try {
+      message.loading({ content: 'Generating Orders Excel...', key: 'export_orders' });
+      const response = await api.get('/admin/sales/orders/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `sales-orders-${dayjs().format('YYYY-MM-DD')}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      message.success({ content: 'Orders Excel exported successfully!', key: 'export_orders' });
+    } catch (e) {
+      console.error(e);
+      message.error({ content: 'Failed to export orders', key: 'export_orders' });
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -203,7 +240,7 @@ export default function Sales() {
         const deptFn = list.find(f => String(f.name || '').toLowerCase() === 'department');
         const vals = Array.isArray(deptFn?.values) ? deptFn.values : [];
         setDepartments(vals.filter(v => v?.value).map(v => v.value));
-      } catch (_) {}
+      } catch (_) { }
     })();
   }, []);
 
@@ -255,6 +292,7 @@ export default function Sales() {
       phone: row.phone || '',
       clientType: row.clientType || '',
       location: row.location || '',
+      staffIds: row.staffIds || [],
     });
     setClientOpen(true);
   };
@@ -280,6 +318,7 @@ export default function Sales() {
         phone: v.phone,
         clientType: v.clientType,
         location: v.location,
+        staffIds: v.staffIds,
       };
       let resp;
       if (editingClient && editingClient.id) {
@@ -553,11 +592,23 @@ export default function Sales() {
 
   // Clients table columns
   const clientColumns = [
-    { title: 'Name', dataIndex: 'name' },
+    { title: 'Name', dataIndex: 'name', render: (v) => <span style={{ fontWeight: 600, color: '#262626' }}>{v}</span> },
     { title: 'Phone', dataIndex: 'phone' },
-    { title: 'Type', dataIndex: 'clientType' },
+    { title: 'Type', dataIndex: 'clientType', render: (v) => v ? <Tag color="default" style={{ borderRadius: 6 }}>{v}</Tag> : '-' },
     { title: 'Location', dataIndex: 'location' },
-    { title: 'Active', dataIndex: 'active', render: (v) => v ? <Tag color="green">Active</Tag> : <Tag color="red">Inactive</Tag> },
+    { 
+      title: 'Assigned Staff', 
+      key: 'staff', 
+      render: (_, row) => (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {(row.assignedStaff || []).map(s => (
+            <Tag key={s.id} color="blue" style={{ borderRadius: 6, fontWeight: 500 }}>{s.name}</Tag>
+          ))}
+          {(!row.assignedStaff || row.assignedStaff.length === 0) && '-'}
+        </div>
+      )
+    },
+    { title: 'Active', dataIndex: 'active', render: (v) => v ? <Tag className="sales-status-tag sales-status-active">Active</Tag> : <Tag className="sales-status-tag sales-status-inactive">Inactive</Tag> },
     {
       title: 'Actions',
       key: 'actions',
@@ -573,7 +624,7 @@ export default function Sales() {
               ]
             }}
           >
-            <Button icon={<MoreOutlined />} />
+            <Button className="sales-action-btn" type="text" icon={<MoreOutlined />} />
           </Dropdown>
         );
       }
@@ -582,10 +633,18 @@ export default function Sales() {
 
   // Assignments table columns
   const assignmentColumns = [
-    { title: 'Client', dataIndex: 'clientName' },
+    { title: 'Client', dataIndex: 'clientName', render: (v) => <span style={{ fontWeight: 600, color: '#262626' }}>{v}</span> },
     { title: 'Staff', dataIndex: 'staffName', render: (_, r) => getRecordStaffName(r) || '-' },
     { title: 'Title', dataIndex: 'title' },
-    { title: 'Status', dataIndex: 'status' },
+    { 
+      title: 'Status', 
+      dataIndex: 'status', 
+      render: (v) => {
+        const normalized = String(v || '').toLowerCase();
+        const tagClass = `sales-status-tag sales-status-${normalized}`;
+        return <Tag className={tagClass}>{v}</Tag>;
+      } 
+    },
     { title: 'Assigned On', dataIndex: 'assignedOn', render: (v) => v ? dayjs(v).format('DD MMMM YYYY hh:mm A') : '' },
     { title: 'Due Date', dataIndex: 'dueDate', render: (v) => v ? dayjs(v).format('DD MMMM YYYY hh:mm A') : '' },
     {
@@ -601,7 +660,7 @@ export default function Sales() {
           }}
           trigger={['click']}
         >
-          <Button icon={<MoreOutlined />} />
+          <Button className="sales-action-btn" type="text" icon={<MoreOutlined />} />
         </Dropdown>
       )
     },
@@ -624,11 +683,11 @@ export default function Sales() {
 
   // Targets table columns
   const targetsColumns = [
-    { title: 'Staff', dataIndex: 'staffName', render: (v, r) => v || staffById[r.staffUserId] || (r.staffUserId ? `User #${r.staffUserId}` : '') },
-    { title: 'Period', dataIndex: 'period', render: (v) => String(v || '').toUpperCase() },
+    { title: 'Staff', dataIndex: 'staffName', render: (v, r) => <span style={{ fontWeight: 600 }}>{v || staffById[r.staffUserId] || (r.staffUserId ? `User #${r.staffUserId}` : '')}</span> },
+    { title: 'Period', dataIndex: 'period', render: (v) => <Tag color="purple" style={{ borderRadius: 6, fontWeight: 600 }}>{String(v || '').toUpperCase()}</Tag> },
     { title: 'Period Date', dataIndex: 'periodDate', render: (v) => v ? dayjs(v).format('DD MMMM YYYY') : '' },
-    { title: 'Target', render: (_, r) => `${r.targetAmount ? `₹${r.targetAmount}` : 0}${r.targetOrders ? ` • ${r.targetOrders} orders` : ''}` },
-    { title: 'Achieved', render: (_, r) => `${r.achievedAmount ? `₹${r.achievedAmount}` : 0}${r.achievedOrders ? ` • ${r.achievedOrders} orders` : ''}` },
+    { title: 'Target', render: (_, r) => <span style={{ fontWeight: 600, color: '#1677ff' }}>{`${r.targetAmount ? `₹${r.targetAmount}` : '₹0'}${r.targetOrders ? ` • ${r.targetOrders} orders` : ''}`}</span> },
+    { title: 'Achieved', render: (_, r) => <span style={{ fontWeight: 600, color: '#52c41a' }}>{`${r.achievedAmount ? `₹${r.achievedAmount}` : '₹0'}${r.achievedOrders ? ` • ${r.achievedOrders} orders` : ''}`}</span> },
     {
       title: 'Actions', key: 't_actions', render: (_, row) => (
         <Dropdown
@@ -640,7 +699,7 @@ export default function Sales() {
             ]
           }}
         >
-          <Button icon={<MoreOutlined />} />
+          <Button className="sales-action-btn" type="text" icon={<MoreOutlined />} />
         </Dropdown>
       )
     },
@@ -648,9 +707,9 @@ export default function Sales() {
 
   const visitColumns = [
     { title: 'Date', dataIndex: 'visitDate', render: (v) => v ? dayjs(v).format('DD MMMM YYYY') : '' },
-    { title: 'Staff', dataIndex: 'staffName', render: (v, r) => v || staffById[(r.userId || r.user_id || r.staffUserId)] || '' },
-    { title: 'Client', dataIndex: 'clientName' },
-    { title: 'Type', dataIndex: 'visitType' },
+    { title: 'Staff', dataIndex: 'staffName', render: (v, r) => <span style={{ fontWeight: 600 }}>{v || staffById[(r.userId || r.user_id || r.staffUserId)] || ''}</span> },
+    { title: 'Client', dataIndex: 'clientName', render: (v) => <span style={{ fontWeight: 500, color: '#434343' }}>{v}</span> },
+    { title: 'Type', dataIndex: 'visitType', render: (v) => v ? <Tag color="blue" style={{ borderRadius: 6 }}>{v}</Tag> : '-' },
     {
       title: 'Location',
       dataIndex: 'location',
@@ -662,9 +721,9 @@ export default function Sales() {
         const hasGeo = Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
         return (
           <div>
-            <div>{addr || '-'}</div>
+            <div style={{ color: '#262626' }}>{addr || '-'}</div>
             {hasGeo ? (
-              <div style={{ color: '#8c8c8c', fontSize: 12 }}>
+              <div style={{ color: '#8c8c8c', fontSize: 12, marginTop: 4 }}>
                 {`Lat: ${lat}, Lng: ${lng}`}{alt ? `, Alt: ${alt}m` : ''}
               </div>
             ) : null}
@@ -704,7 +763,7 @@ export default function Sales() {
           trigger={['click']}
           menu={{ items: [{ key: 'view', label: 'View', onClick: () => openViewVisit(row) }] }}
         >
-          <Button icon={<MoreOutlined />} />
+          <Button className="sales-action-btn" type="text" icon={<MoreOutlined />} />
         </Dropdown>
       ),
     }
@@ -714,20 +773,20 @@ export default function Sales() {
     {
       title: 'Staff Member',
       key: 'staff',
-      render: (_, record) => record.staff?.profile?.name || record.staff?.phone || 'Unknown'
+      render: (_, record) => <span style={{ fontWeight: 600 }}>{record.staff?.profile?.name || record.staff?.phone || 'Unknown'}</span>
     },
-    { title: 'Rule', dataIndex: ['rule', 'name'], key: 'rule' },
-    { title: 'Achieved', dataIndex: 'achievedAmount', key: 'achieved', render: (v) => `Rs ${v}` },
+    { title: 'Rule', dataIndex: ['rule', 'name'], key: 'rule', render: (v) => <Tag color="cyan" style={{ borderRadius: 6 }}>{v}</Tag> },
+    { title: 'Achieved', dataIndex: 'achievedAmount', key: 'achieved', render: (v) => <span style={{ fontWeight: 600, color: '#52c41a' }}>₹{v}</span> },
     {
       title: 'Incentive',
       key: 'incentive',
       render: (_, record) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>Rs</span>
+          <span style={{ fontWeight: 500 }}>₹</span>
           <InputNumber
             size="small"
             value={record.incentiveAmount}
-            style={{ width: 100 }}
+            style={{ width: 100, borderRadius: 6 }}
             onChange={(v) => handleUpdateIncentiveAmount(record.id, v)}
             disabled={record.status !== 'pending'}
           />
@@ -739,11 +798,12 @@ export default function Sales() {
       dataIndex: 'status',
       key: 'status',
       render: (v) => {
-        const colors = { pending: 'orange', approved: 'green', rejected: 'red' };
-        return <Tag color={colors[v]}>{v?.toUpperCase()}</Tag>;
+        const normalized = String(v || '').toLowerCase();
+        const tagClass = `sales-status-tag sales-status-${normalized === 'approved' ? 'complete' : normalized === 'rejected' ? 'inactive' : 'pending'}`;
+        return <Tag className={tagClass}>{v?.toUpperCase()}</Tag>;
       }
     },
-    { title: 'Date', dataIndex: 'createdAt', key: 'date', render: (v) => new Date(v).toLocaleDateString() },
+    { title: 'Date', dataIndex: 'createdAt', key: 'date', render: (v) => new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) },
     {
       title: 'Actions',
       key: 'actions',
@@ -753,9 +813,9 @@ export default function Sales() {
             <Button
               type="primary" size="small"
               onClick={() => handleUpdateApprovalStatus(record.id, 'approved')}
-              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a', borderRadius: 6, fontWeight: 500 }}
             >Approve</Button>
-            <Button danger size="small" onClick={() => handleUpdateApprovalStatus(record.id, 'rejected')}>
+            <Button danger size="small" onClick={() => handleUpdateApprovalStatus(record.id, 'rejected')} style={{ borderRadius: 6, fontWeight: 500 }}>
               Reject
             </Button>
           </Space>
@@ -766,9 +826,26 @@ export default function Sales() {
 
   const orderColumns = [
     { title: 'Order Date', dataIndex: 'orderDate', render: (v) => v ? dayjs(v).format('DD MMMM YYYY') : '' },
-    { title: 'Staff', dataIndex: 'staffName', render: (v, r) => v || staffById[(r.userId || r.user_id || r.staffUserId)] || '' },
-    { title: 'Client', dataIndex: 'clientName', render: (v) => v || '' },
-    { title: 'Items', dataIndex: 'items' },
+    { title: 'Staff', dataIndex: 'staffName', render: (v, r) => <span style={{ fontWeight: 600 }}>{v || staffById[(r.userId || r.user_id || r.staffUserId)] || ''}</span> },
+    { title: 'Client', dataIndex: 'clientName', render: (v) => <span style={{ fontWeight: 500, color: '#434343' }}>{v || ''}</span> },
+    {
+      title: 'Items',
+      dataIndex: 'items',
+      render: (items) => {
+        if (!Array.isArray(items) || items.length === 0) return '-';
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {items.map((it, idx) => (
+              <div key={idx} style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
+                <span style={{ fontWeight: 500, color: '#262626' }}>{it.name || 'N/A'}</span>
+                {it.size ? ` (${it.size})` : ''}
+                <span style={{ color: '#8c8c8c' }}>{` x ${it.qty || 1}`}</span>
+              </div>
+            ))}
+          </div>
+        );
+      }
+    },
     {
       title: 'Location',
       render: (_, r) => {
@@ -779,9 +856,9 @@ export default function Sales() {
         const hasGeo = Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
         return (
           <div>
-            <div>{addr || '-'}</div>
+            <div style={{ color: '#434343' }}>{addr || '-'}</div>
             {hasGeo ? (
-              <div style={{ color: '#8c8c8c', fontSize: 12 }}>
+              <div style={{ color: '#8c8c8c', fontSize: 12, marginTop: 4 }}>
                 {`Lat: ${lat}, Lng: ${lng}`}{alt ? `, Alt: ${alt}m` : ''}
               </div>
             ) : null}
@@ -789,9 +866,9 @@ export default function Sales() {
         );
       }
     },
-    { title: 'Net Amount', dataIndex: 'netAmount', render: (v) => v ? `₹${v}` : 0 },
-    { title: 'GST Amount', dataIndex: 'gstAmount', render: (v) => v ? `₹${v}` : 0 },
-    { title: 'Total Amount', dataIndex: 'totalAmount', render: (v) => v ? `₹${v}` : 0 },
+    { title: 'Net Amount', dataIndex: 'netAmount', render: (v) => <span style={{ fontWeight: 600 }}>{v ? `₹${v}` : 0}</span> },
+    { title: 'GST Amount', dataIndex: 'gstAmount', render: (v) => <span style={{ color: '#8c8c8c' }}>{v ? `₹${v}` : 0}</span> },
+    { title: 'Total Amount', dataIndex: 'totalAmount', render: (v) => <span style={{ fontWeight: 700, color: '#1677ff' }}>{v ? `₹${v}` : 0}</span> },
     {
       title: 'Actions',
       key: 'o_actions',
@@ -800,7 +877,7 @@ export default function Sales() {
           trigger={['click']}
           menu={{ items: [{ key: 'view', label: 'View', onClick: () => openViewOrder(row) }] }}
         >
-          <Button icon={<MoreOutlined />} />
+          <Button className="sales-action-btn" type="text" icon={<MoreOutlined />} />
         </Dropdown>
       ),
     }
@@ -834,30 +911,45 @@ export default function Sales() {
       key: 'clients',
       label: 'Clients',
       children: (() => {
-        const filtered = clients.filter(c => 
-          (c.name || '').toLowerCase().includes(clientSearch.toLowerCase()) || 
-          (c.phone || '').toLowerCase().includes(clientSearch.toLowerCase()) ||
-          (c.location || '').toLowerCase().includes(clientSearch.toLowerCase())
-        );
+        const filtered = clients.filter(c => {
+          const matchesSearch = (c.name || '').toLowerCase().includes(clientSearch.toLowerCase()) ||
+            (c.phone || '').toLowerCase().includes(clientSearch.toLowerCase()) ||
+            (c.location || '').toLowerCase().includes(clientSearch.toLowerCase());
+          if (!matchesSearch) return false;
+
+          if (clientStatusFilter === 'active') return c.active === true;
+          if (clientStatusFilter === 'inactive') return c.active !== true;
+          return true;
+        });
         return (
-          <Card title="Clients" extra={<Button type="primary" icon={<PlusOutlined />} onClick={openNewClient}>New Client</Button>}>
-            <div style={{ marginBottom: 16 }}>
-              <Input.Search 
-                placeholder="Search by name, phone or location" 
-                allowClear 
-                style={{ width: 300 }} 
-                value={clientSearch} 
-                onChange={e => setClientSearch(e.target.value)} 
+          <Card className="sales-content-card" title="Clients" extra={<Button type="primary" shape="round" icon={<PlusOutlined />} onClick={openNewClient}>New Client</Button>}>
+            <div className="sales-filter-row">
+              <Input.Search
+                placeholder="Search by name, phone or location"
+                allowClear
+                style={{ width: 300 }}
+                value={clientSearch}
+                onChange={e => setClientSearch(e.target.value)}
+              />
+              <Select
+                value={clientStatusFilter}
+                onChange={v => setClientStatusFilter(v)}
+                style={{ width: 160 }}
+                options={[
+                  { value: 'all', label: 'All Statuses' },
+                  { value: 'active', label: 'Active Clients' },
+                  { value: 'inactive', label: 'Inactive Clients' }
+                ]}
               />
             </div>
-            <Table rowKey={(r) => r.id} loading={clientsLoading} columns={clientColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
+            <Table className="sales-table" rowKey={(r) => r.id} loading={clientsLoading} columns={clientColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
           </Card>
         );
       })()
     },
     {
       key: 'assignments',
-      label: 'Assign Staff',
+      label: 'Assigned Job',
       children: (() => {
         const deptOptions = departments.map(d => ({ label: d, value: d }));
         const filtered = assignments.filter(a => {
@@ -866,13 +958,13 @@ export default function Sales() {
             && (!assignStaffFilter || a.staffUserId === assignStaffFilter || a.staffUserId === Number(assignStaffFilter));
         });
         return (
-          <Card title="Client Assignments" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => openAssign(null)}>Assign Staff</Button>}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <Card className="sales-content-card" title="Assigned Jobs" extra={<Button type="primary" shape="round" icon={<PlusOutlined />} onClick={() => openAssign(null)}>Assign Job</Button>}>
+            <div className="sales-filter-row">
               <Input.Search placeholder="Search by employee" allowClear style={{ width: 220 }} value={assignSearch} onChange={e => setAssignSearch(e.target.value)} />
               <Select placeholder="Filter by Department" allowClear style={{ width: 200 }} value={assignDeptFilter} onChange={v => setAssignDeptFilter(v ?? null)} options={deptOptions} />
               <Select placeholder="Filter by Employee" allowClear showSearch style={{ width: 200 }} value={assignStaffFilter} onChange={v => setAssignStaffFilter(v ?? null)} options={staffOptions} filterOption={(inp, opt) => (opt?.label ?? '').toLowerCase().includes(inp.toLowerCase())} />
             </div>
-            <Table rowKey={(r) => r.id} loading={assignmentsLoading} columns={assignmentColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
+            <Table className="sales-table" rowKey={(r) => r.id} loading={assignmentsLoading} columns={assignmentColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
           </Card>
         );
       })()
@@ -888,13 +980,13 @@ export default function Sales() {
             && (!targetStaffFilter || t.staffUserId === targetStaffFilter || t.staffUserId === Number(targetStaffFilter));
         });
         return (
-          <Card title="Sales Targets" extra={<Button type="primary" icon={<PlusOutlined />} onClick={openNewTarget}>New Target</Button>}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <Card className="sales-content-card" title="Sales Targets" extra={<Button type="primary" shape="round" icon={<PlusOutlined />} onClick={openNewTarget}>New Target</Button>}>
+            <div className="sales-filter-row">
               <Input.Search placeholder="Search by employee" allowClear style={{ width: 220 }} value={targetSearch} onChange={e => setTargetSearch(e.target.value)} />
               <Select placeholder="Filter by Department" allowClear style={{ width: 200 }} value={targetDeptFilter} onChange={v => setTargetDeptFilter(v ?? null)} options={deptOptions} />
               <Select placeholder="Filter by Employee" allowClear showSearch style={{ width: 200 }} value={targetStaffFilter} onChange={v => setTargetStaffFilter(v ?? null)} options={staffOptions} filterOption={(inp, opt) => (opt?.label ?? '').toLowerCase().includes(inp.toLowerCase())} />
             </div>
-            <Table rowKey={(r) => r.id} loading={targetsLoading} columns={targetsColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
+            <Table className="sales-table" rowKey={(r) => r.id} loading={targetsLoading} columns={targetsColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
           </Card>
         );
       })()
@@ -907,16 +999,16 @@ export default function Sales() {
         const deptOptions = departments.map(d => ({ label: d, value: d }));
 
         const filteredVisits = visits.filter(v => {
-          const matchStaff   = visitStaffFilter ? (v.staffUserId === visitStaffFilter || v.staffUserId === Number(visitStaffFilter)) : true;
-          const matchSearch  = visitSearch ? getRecordStaffName(v).toLowerCase().includes(visitSearch.toLowerCase()) : true;
-          const matchDept    = visitDeptFilter ? (v.department || v.staffDepartment || '') === visitDeptFilter : true;
+          const matchStaff = visitStaffFilter ? (v.staffUserId === visitStaffFilter || v.staffUserId === Number(visitStaffFilter)) : true;
+          const matchSearch = visitSearch ? getRecordStaffName(v).toLowerCase().includes(visitSearch.toLowerCase()) : true;
+          const matchDept = visitDeptFilter ? (v.department || v.staffDepartment || '') === visitDeptFilter : true;
           return matchStaff && matchSearch && matchDept;
         });
 
         return (
-          <Card title="Visits">
+          <Card className="sales-content-card" title="Visits" extra={<Button type="primary" shape="round" style={{ backgroundColor: '#107C41', borderColor: '#107C41' }} icon={<FileExcelOutlined />} onClick={exportVisits}>Export Excel</Button>}>
             {/* Filter toolbar */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div className="sales-filter-row">
               <Input.Search
                 placeholder="Search by employee name"
                 allowClear
@@ -944,6 +1036,7 @@ export default function Sales() {
               />
             </div>
             <Table
+              className="sales-table"
               rowKey={(r) => r.id}
               loading={visitsLoading}
               columns={visitColumns}
@@ -965,13 +1058,13 @@ export default function Sales() {
             && (!orderStaffFilter || o.userId === orderStaffFilter || o.userId === Number(orderStaffFilter) || o.staffUserId === orderStaffFilter || o.staffUserId === Number(orderStaffFilter));
         });
         return (
-          <Card title="Orders">
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <Card className="sales-content-card" title="Orders" extra={<Button type="primary" shape="round" style={{ backgroundColor: '#107C41', borderColor: '#107C41' }} icon={<FileExcelOutlined />} onClick={exportOrders}>Export Excel</Button>}>
+            <div className="sales-filter-row">
               <Input.Search placeholder="Search by employee" allowClear style={{ width: 220 }} value={orderSearch} onChange={e => setOrderSearch(e.target.value)} />
               <Select placeholder="Filter by Department" allowClear style={{ width: 200 }} value={orderDeptFilter} onChange={v => setOrderDeptFilter(v ?? null)} options={deptOptions} />
               <Select placeholder="Filter by Employee" allowClear showSearch style={{ width: 200 }} value={orderStaffFilter} onChange={v => setOrderStaffFilter(v ?? null)} options={staffOptions} filterOption={(inp, opt) => (opt?.label ?? '').toLowerCase().includes(inp.toLowerCase())} />
             </div>
-            <Table rowKey={(r) => r.id} loading={ordersLoading} columns={orderColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
+            <Table className="sales-table" rowKey={(r) => r.id} loading={ordersLoading} columns={orderColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
           </Card>
         );
       })()
@@ -987,29 +1080,29 @@ export default function Sales() {
             && (!approvalStaffFilter || a.staffUserId === approvalStaffFilter || a.staffUserId === Number(approvalStaffFilter));
         });
         return (
-          <Card title="Incentive Approvals">
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <Card className="sales-content-card" title="Incentive Approvals">
+            <div className="sales-filter-row">
               <Input.Search placeholder="Search by staff" allowClear style={{ width: 220 }} value={approvalSearch} onChange={e => setApprovalSearch(e.target.value)} />
               <Select placeholder="Filter by Department" allowClear style={{ width: 200 }} value={approvalDeptFilter} onChange={v => setApprovalDeptFilter(v ?? null)} options={deptOptions} />
               <Select placeholder="Filter by Employee" allowClear showSearch style={{ width: 200 }} value={approvalStaffFilter} onChange={v => setApprovalStaffFilter(v ?? null)} options={staffOptions} filterOption={(inp, opt) => (opt?.label ?? '').toLowerCase().includes(inp.toLowerCase())} />
             </div>
-            <Table rowKey={(r) => r.id} loading={loadingApprovals} columns={approvalColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
+            <Table className="sales-table" rowKey={(r) => r.id} loading={loadingApprovals} columns={approvalColumns} dataSource={filtered} pagination={{ pageSize: 10, showSizeChanger: true }} />
           </Card>
         );
       })()
     },
-  ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading, visits, visitsLoading, orders, ordersLoading, approvals, loadingApprovals, departments, staffOptions, assignSearch, assignDeptFilter, assignStaffFilter, targetSearch, targetDeptFilter, targetStaffFilter, visitSearch, visitDeptFilter, visitStaffFilter, orderSearch, orderDeptFilter, orderStaffFilter, approvalSearch, approvalDeptFilter, approvalStaffFilter, clientSearch, getRecordStaffName]);
+  ]), [clients, clientsLoading, assignments, assignmentsLoading, targets, targetsLoading, visits, visitsLoading, orders, ordersLoading, approvals, loadingApprovals, departments, staffOptions, assignSearch, assignDeptFilter, assignStaffFilter, targetSearch, targetDeptFilter, targetStaffFilter, visitSearch, visitDeptFilter, visitStaffFilter, orderSearch, orderDeptFilter, orderStaffFilter, approvalSearch, approvalDeptFilter, approvalStaffFilter, clientSearch, clientStatusFilter, getRecordStaffName]);
 
   return (
     <Layout style={{ minHeight: '100vh', marginLeft: 200 }}>
       <Sidebar />
       <Layout>
-        <Header style={{ background: '#fff', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
+        <Header className="sales-header">
+          <div className="sales-header-left">
+            <Button className="sales-header-back-btn" type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
               Back to Dashboard
             </Button>
-            <Title level={4} style={{ margin: 0 }}>Sales</Title>
+            <Title level={4} className="sales-header-title">Sales</Title>
           </div>
           <Menu
             theme="light"
@@ -1026,12 +1119,13 @@ export default function Sales() {
           />
         </Header>
         <Content style={{ padding: 24 }}>
-          <Tabs defaultActiveKey="clients" items={tabs} />
+          <Tabs className="sales-tabs" defaultActiveKey="clients" items={tabs} />
         </Content>
       </Layout>
 
       {/* Client Modal */}
       <Modal
+        className="sales-modal"
         open={clientOpen}
         title={editingClient ? 'Edit Client' : 'New Client'}
         onCancel={() => setClientOpen(false)}
@@ -1053,13 +1147,24 @@ export default function Sales() {
           <Form.Item name="location" label="Location">
             <Input placeholder="e.g., Jaipur, Rajasthan" />
           </Form.Item>
+          <Form.Item name="staffIds" label="Assigned Staff">
+            <Select
+              mode="multiple"
+              placeholder="Select staff members"
+              options={staffOptions}
+              showSearch
+              optionFilterProp="label"
+              allowClear
+            />
+          </Form.Item>
         </Form>
       </Modal>
 
       {/* Assignment Modal */}
       <Modal
+        className="sales-modal"
         open={assignOpen}
-        title={editingAssignment ? 'Edit Assignment' : 'Assign Staff'}
+        title={editingAssignment ? 'Edit Job' : 'Assign Job'}
         onCancel={() => setAssignOpen(false)}
         onOk={saveAssignment}
         confirmLoading={assignSaving}
@@ -1109,6 +1214,7 @@ export default function Sales() {
 
       {/* New Target Modal */}
       <Modal
+        className="sales-modal"
         open={targetOpen}
         title={editingTarget ? 'Edit Sales Target' : 'New Sales Target'}
         onCancel={() => { setTargetOpen(false); setEditingTarget(null); }}
@@ -1143,6 +1249,7 @@ export default function Sales() {
       </Modal>
 
       <Modal
+        className="sales-modal"
         open={viewOpen}
         title={`Order #${viewOrder?.id || ''}`}
         onCancel={() => { setViewOpen(false); setViewOrder(null); }}
@@ -1229,6 +1336,7 @@ export default function Sales() {
 
       {/* Visit Detail Modal */}
       <Modal
+        className="sales-modal"
         open={visitDetailOpen}
         title={`Visit Details #${selectedVisit?.id || ''}`}
         onCancel={() => { setVisitDetailOpen(false); setSelectedVisit(null); }}

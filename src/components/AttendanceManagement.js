@@ -13,19 +13,20 @@ import {
   CoffeeOutlined,
   FilterOutlined,
   EnvironmentOutlined,
-  PhoneOutlined
+  PhoneOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 
 dayjs.extend(customParseFormat);
 
-const { Header, Content } = Layout;
+const { Content } = Layout;
 const { Title, Text } = Typography;
-const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 const parseTimeValue = (value) => {
@@ -42,12 +43,17 @@ const parseTimeValue = (value) => {
   return null;
 };
 
-const formatWorkingHours = (checkInRaw, checkOutRaw) => {
+const formatWorkingHours = (checkInRaw, checkOutRaw, totalWorkHours) => {
+  const hours = Number(totalWorkHours);
+  if (Number.isFinite(hours) && hours > 0) {
+    return `${hours.toFixed(2)}h`;
+  }
   const checkIn = parseTimeValue(checkInRaw);
   const checkOut = parseTimeValue(checkOutRaw);
   if (!checkIn || !checkOut) return '-';
-  const minutes = checkOut.diff(checkIn, 'minute');
-  if (!Number.isFinite(minutes) || minutes < 0) return '-';
+  let minutes = checkOut.diff(checkIn, 'minute');
+  if (minutes < 0) minutes += 1440; // Add 24 hours for night shifts
+  if (!Number.isFinite(minutes)) return '-';
   return `${(minutes / 60).toFixed(2)}h`;
 };
 
@@ -67,7 +73,7 @@ const AttendanceManagement = () => {
   const [markOpen, setMarkOpen] = useState(false);
   const [bulkMarkOpen, setBulkMarkOpen] = useState(false);
   const [markForm] = Form.useForm();
-  const [bulkMarkForm] = Form.useForm();
+  const [bulkForm] = Form.useForm();
   const [bulkRows, setBulkRows] = useState([]);   // per-staff rows: [{userId, name, status, checkIn, checkOut}]
   const [bulkDate, setBulkDate] = useState(dayjs());
   const [effectiveTemplate, setEffectiveTemplate] = useState(null);
@@ -81,6 +87,8 @@ const AttendanceManagement = () => {
   const [logsData, setLogsData] = useState(null);
   const [staffOnLeave, setStaffOnLeave] = useState(false);
   const [staffOffMsg, setStaffOffMsg] = useState(null);
+  const [selectedStaffDeactivated, setSelectedStaffDeactivated] = useState(false);
+  const [approvedLeaves, setApprovedLeaves] = useState([]);
 
   const navigate = useNavigate();
 
@@ -88,12 +96,13 @@ const AttendanceManagement = () => {
     fetchStaff();
     fetchDepartments();
     fetchAttendance();
+    fetchApprovedLeaves();
   }, []);
-
 
   useEffect(() => {
     fetchStaff();
     fetchAttendance();
+    fetchApprovedLeaves();
   }, [selectedDate, selectedStaff]);
 
   // Load effective template when a specific staff is selected
@@ -123,7 +132,6 @@ const AttendanceManagement = () => {
     try {
       const response = await api.get('/admin/staff?module=attendance');
       if (response.data.success) {
-        // Backend returns { success, staff: [...], data: [...] }
         const arr = Array.isArray(response.data.staff) ? response.data.staff : (Array.isArray(response.data.data) ? response.data.data : []);
         setStaffList(arr);
       } else {
@@ -167,10 +175,8 @@ const AttendanceManagement = () => {
   const openMarkModal = (staffRow = null) => {
     markForm.resetFields();
 
-    // If called from a table row context, use that staff; otherwise use the sidebar filter
     const staffId = staffRow?.userId ?? staffRow?.id ?? (selectedStaff !== 'all' ? selectedStaff : undefined);
 
-    // Auto-fill from existing attendance record if available
     const existingRecord = staffId
       ? attendance.find(a => (a.userId === staffId || a.userId === Number(staffId)) && a.date === selectedDate.format('YYYY-MM-DD'))
       : null;
@@ -184,9 +190,9 @@ const AttendanceManagement = () => {
       overtimeMinutes: null,
     });
 
-    // If staff is selected and no record, try to fetch shift to update times
     if (staffId && !existingRecord) {
-      api.get(`/admin/shifts/effective/${staffId}`).then(res => {
+      const dateStr = selectedDate.format('YYYY-MM-DD');
+      api.get(`/admin/shifts/effective/${staffId}?date=${dateStr}`).then(res => {
         const shift = res.data?.shift;
         if (shift) {
           markForm.setFieldsValue({
@@ -194,20 +200,38 @@ const AttendanceManagement = () => {
             checkOut: parseTimeValue(shift.endTime) || parseTimeValue('18:00'),
           });
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
+    const staffInfo = staffList.find(s => s.id === staffId || s.id === Number(staffId));
+    if (staffInfo && staffInfo.active === false) {
+      message.warning(`Warning: ${staffInfo.name} is currently deactivated. Attendance marked for deactivated staff may be restricted.`);
+    }
+
     setMarkOpen(true);
     setStaffOnLeave(false);
     setStaffOffMsg(null);
+    setSelectedStaffDeactivated(false);
   };
 
   const submitMark = async () => {
     try {
       const values = await markForm.validateFields();
-      if (values.checkIn && values.checkOut && values.checkOut.isBefore(values.checkIn)) {
-        message.error('Check-out time cannot be earlier than check-in time');
-        return;
+      if (values.date && values.date.isSame(dayjs(), 'day') && values.checkIn && values.checkOut) {
+        const isNightShift = values.checkOut.isBefore(values.checkIn);
+        
+        if (!isNightShift) {
+          const now = dayjs();
+          const checkOutTime = now.hour(values.checkOut.hour()).minute(values.checkOut.minute()).second(values.checkOut.second());
+          
+          if (checkOutTime.isAfter(now)) {
+            const nowStr = now.format('hh:mm A');
+            const checkOutStr = values.checkOut.format('hh:mm A');
+            message.error(`Current time is ${nowStr}. You can set check-out time as ${checkOutStr} only after it is ${checkOutStr}.`);
+            return;
+          }
+        }
       }
+
       const payload = {
         staffId: values.staffId,
         date: values.date?.format('YYYY-MM-DD'),
@@ -232,7 +256,6 @@ const AttendanceManagement = () => {
     setBulkMarkOpen(true);
   };
 
-  // When a staff is selected in the bulk dropdown, add a row with prefilled data
   const handleBulkStaffSelect = async (uid) => {
     const staffInfo = staffList.find(s => s.id === uid || s.id === Number(uid));
     const rec = attendance.find(
@@ -242,7 +265,8 @@ const AttendanceManagement = () => {
     let hasAutoOT = false;
     let shiftData = null;
     try {
-      const sRes = await api.get(`/admin/shifts/effective/${uid}`);
+      const dateStr = bulkDate.format('YYYY-MM-DD');
+      const sRes = await api.get(`/admin/shifts/effective/${uid}?date=${dateStr}`);
       shiftData = sRes.data?.shift;
       if (shiftData && Number(shiftData.overtimeStartMinutes) > 0) {
         hasAutoOT = true;
@@ -260,14 +284,16 @@ const AttendanceManagement = () => {
         hasAutoOT,
       }
     ]);
+
+    if (staffInfo && staffInfo.active === false) {
+      message.warning(`Warning: ${staffInfo.name} is currently deactivated.`);
+    }
   };
 
-  // When a staff is deselected from bulk dropdown, remove their row
   const handleBulkStaffDeselect = (uid) => {
     setBulkRows(prev => prev.filter(r => r.userId !== uid && r.userId !== Number(uid)));
   };
 
-  // Update a specific field in a specific staff's row
   const updateBulkRow = (userId, field, value) => {
     setBulkRows(prev => prev.map(r =>
       (r.userId === userId || r.userId === Number(userId)) ? { ...r, [field]: value } : r
@@ -275,15 +301,32 @@ const AttendanceManagement = () => {
   };
 
   const submitBulkMark = async () => {
-    if (bulkRows.length === 0) { message.warning('Please select at least one staff'); return; }
+    if (bulkRows.length === 0) {
+      message.warning('Please select at least one staff');
+      return;
+    }
     try {
-      const invalidRow = bulkRows.find(r => r.checkIn && r.checkOut && r.checkOut.isBefore(r.checkIn));
-      if (invalidRow) {
-        message.error(`Invalid times for ${invalidRow.name}: Check-out cannot be earlier than check-in`);
-        return;
+      if (bulkDate && bulkDate.isSame(dayjs(), 'day')) {
+        const now = dayjs();
+        const futureRow = bulkRows.find(r => {
+          if (!r.checkIn || !r.checkOut) return false;
+          
+          const isNightShift = r.checkOut.isBefore(r.checkIn);
+          if (isNightShift) return false;
+          
+          const checkOutTime = now.hour(r.checkOut.hour()).minute(r.checkOut.minute()).second(r.checkOut.second());
+          return checkOutTime.isAfter(now);
+        });
+
+        if (futureRow) {
+          const nowStr = now.format('hh:mm A');
+          const checkOutStr = futureRow.checkOut.format('hh:mm A');
+          message.error(`For ${futureRow.name}: Current time is ${nowStr}. You can set check-out time as ${checkOutStr} only after it is ${checkOutStr}.`);
+          return;
+        }
       }
+
       const dateStr = bulkDate.format('YYYY-MM-DD');
-      // Send individual attendance for each staff row
       await Promise.all(bulkRows.map(row =>
         api.post('/admin/attendance', {
           staffId: row.userId,
@@ -331,10 +374,17 @@ const AttendanceManagement = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/');
+  const fetchApprovedLeaves = async () => {
+    if (!selectedDate) { setApprovedLeaves([]); return; }
+    try {
+      const dateStr = selectedDate.format('YYYY-MM-DD');
+      const res = await api.get('/leave', { params: { status: 'APPROVED' } });
+      const all = Array.isArray(res.data?.leaves) ? res.data.leaves : [];
+      const forDate = all.filter(l => l.startDate <= dateStr && l.endDate >= dateStr);
+      setApprovedLeaves(forDate);
+    } catch (_) {
+      setApprovedLeaves([]);
+    }
   };
 
   const handleExport = async () => {
@@ -369,7 +419,6 @@ const AttendanceManagement = () => {
     setSelectedRecord(record);
     noteForm.resetFields();
 
-    // Ensure we have the correct staff ID
     const staffId = record.userId || record.user?.id || record.id;
 
     noteForm.setFieldsValue({
@@ -411,6 +460,16 @@ const AttendanceManagement = () => {
     }
   };
 
+  const getStatusClass = (status) => {
+    const s = String(status || '').toLowerCase();
+    if (['present', 'overtime'].includes(s)) return 'sales-status-complete';
+    if (['absent'].includes(s)) return 'sales-status-inactive';
+    if (['half_day'].includes(s)) return 'sales-status-pending';
+    if (['leave', 'on_leave'].includes(s)) return 'sales-status-active';
+    if (['weekly_off'].includes(s)) return 'sales-status-inprogress';
+    return 'sales-status-active';
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'present': return 'green';
@@ -418,6 +477,7 @@ const AttendanceManagement = () => {
       case 'absent': return 'red';
       case 'half_day': return 'orange';
       case 'leave': return 'blue';
+      case 'on_leave': return 'blue';
       default: return 'default';
     }
   };
@@ -432,23 +492,63 @@ const AttendanceManagement = () => {
     const matchesDate = dateFilter ? row.date === dateFilter.format('YYYY-MM-DD') : true;
     return matchesSearch && matchesDept && matchesDate;
   });
+
   const filteredActiveStaff = staffList.filter(s => {
     if (!s.active) return false;
     const q = search.trim().toLowerCase();
     const matchesSearch = q
       ? (s.name || '').toLowerCase().includes(q) ||
-        (s.staffId || '').toString().toLowerCase().includes(q)
+      (s.staffId || '').toString().toLowerCase().includes(q)
       : true;
     const matchesDept = departmentFilter === 'all' ? true : (s.department || '') === departmentFilter;
     return matchesSearch && matchesDept;
   });
+
   const activeStaffCount = filteredActiveStaff.length;
-
   const presentCount = baseForCounts.filter(a => ['present', 'overtime', 'half_day'].includes(a.status?.toLowerCase())).length;
-  const leaveCount = baseForCounts.filter(a => a.status?.toLowerCase() === 'leave').length;
-  const absentCount = Math.max(0, activeStaffCount - presentCount);
 
-  const filtered = attendance.filter(row => {
+  const attendanceLeaveUserIds = new Set(
+    baseForCounts.filter(a => a.status?.toLowerCase() === 'leave').map(a => a.userId)
+  );
+  const approvedLeaveUserIds = new Set(
+    approvedLeaves
+      .filter(l => selectedStaff === 'all' || String(l.userId) === String(selectedStaff))
+      .map(l => l.userId)
+  );
+  const allLeaveUserIds = new Set([...attendanceLeaveUserIds, ...approvedLeaveUserIds]);
+  const leaveCount = allLeaveUserIds.size;
+  const absentCount = Math.max(0, activeStaffCount - presentCount - leaveCount);
+
+  const attendanceDateStr = selectedDate?.format('YYYY-MM-DD');
+  const attendanceUserIdSet = new Set(attendance.map(a => a.userId));
+  const leaveRows = approvedLeaves
+    .filter(l => !attendanceUserIdSet.has(l.userId) && !attendanceUserIdSet.has(Number(l.userId)))
+    .map(l => {
+      const staffInfo = staffList.find(s => s.id === l.userId || s.id === Number(l.userId));
+      return {
+        id: `leave-req-${l.id}`,
+        userId: l.userId,
+        date: attendanceDateStr,
+        status: 'leave',
+        checkIn: null,
+        checkOut: null,
+        breakTotalSeconds: null,
+        totalWorkHours: null,
+        user: { name: l.user?.profile?.name || staffInfo?.name || 'Unknown', id: l.userId },
+        staffProfile: {
+          staffId: l.user?.profile?.staffId || staffInfo?.staffId || 'N/A',
+          department: staffInfo?.department || l.user?.profile?.department || '',
+        },
+        _isLeaveRequest: true,
+        leaveType: l.leaveType,
+        categoryKey: l.categoryKey,
+        categoryName: l.categoryName,
+      };
+    });
+
+  const allRows = [...attendance, ...leaveRows];
+
+  const filtered = allRows.filter(row => {
     const q = search.trim().toLowerCase();
     const matchesSearch = q
       ? (row.user?.name || '').toLowerCase().includes(q) ||
@@ -469,29 +569,48 @@ const AttendanceManagement = () => {
         const name = record.user?.name || 'Unknown';
         const staffId = record.staffProfile?.staffId || 'N/A';
         return (
-          <div>
-            <div>{name} ({staffId})</div>
-            <Space size={8}>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => openNoteModal(record)}
-                style={{ padding: 0, height: 'auto', fontSize: '12px' }}
-              >
-                {record.note ? 'Edit Note' : '+ Add Note'}
-              </Button>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => {
-                  setLogsData(record);
-                  setLogsModalOpen(true);
-                }}
-                style={{ padding: 0, height: 'auto', fontSize: '12px' }}
-              >
-                View Logs
-              </Button>
-            </Space>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              backgroundColor: '#e6f7ff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: '12px',
+              color: '#1677ff',
+              fontSize: '16px',
+              fontWeight: '700',
+              boxShadow: '0 2px 6px rgba(22, 119, 255, 0.08)'
+            }}>
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: '#1677ff' }}>{name}</div>
+              <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '2px' }}>ID: {staffId}</div>
+              <Space size={8} style={{ marginTop: '4px' }}>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => openNoteModal(record)}
+                  style={{ padding: 0, height: 'auto', fontSize: '11px' }}
+                >
+                  {record.note ? 'Edit Note' : '+ Add Note'}
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => {
+                    setLogsData(record);
+                    setLogsModalOpen(true);
+                  }}
+                  style={{ padding: 0, height: 'auto', fontSize: '11px' }}
+                >
+                  View Logs
+                </Button>
+              </Space>
+            </div>
           </div>
         );
       },
@@ -535,46 +654,58 @@ const AttendanceManagement = () => {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: (status, record) => (
-        <Space direction="vertical" size={2}>
-          <Tag color={getStatusColor(status)}>
-            {status?.replace('_', ' ').toUpperCase() || 'ABSENT'}
-          </Tag>
-          {status === 'overtime' && record.overtimeMinutes > 0 && (
-            <Text type="secondary" style={{ fontSize: '11px' }}>
-              ({record.overtimeMinutes} min OT)
-            </Text>
-          )}
-          {record.isLate && record.latePenaltyText && (
-            <Tag color="error" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
-              Late: {record.latePenaltyText}
-              {record.bufferMinutes > 0 && ` (Buffer: ${record.bufferMinutes}m applied)`}
-            </Tag>
-          )}
-          {!record.latePenaltyText && record.latePunchInMinutes > 0 && (
-            <Tag color="error" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
-              Late by {record.latePunchInMinutes} min
-              {record.bufferMinutes > 0 && ` (Buffer: ${record.bufferMinutes}m applicable)`}
-            </Tag>
-          )}
-          {record.earlyExitMinutes > 0 && (
-            <Tag color="warning" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
-              Early Exit: {record.earlyExitMinutes} min
-            </Tag>
-          )}
-          {record.earlyOvertimeMinutes > 0 && (
-            <Tag color="cyan" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
-              Early OT: {record.earlyOvertimeMinutes} min
-            </Tag>
-          )}
-        </Space>
-      ),
+      render: (status, record) => {
+        const isLeave = ['leave', 'on_leave'].includes(String(status || '').toLowerCase());
+        const leaveCategoryLabel = record.categoryName || record.categoryKey || record.leaveType;
+        let statusLabel = isLeave && leaveCategoryLabel
+          ? `Leave (${String(leaveCategoryLabel).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())})`
+          : (status?.replace('_', ' ').toUpperCase() || 'ABSENT');
+
+        if (String(status || '').toLowerCase() === 'weekly_off' && record.source === 'roster') {
+          statusLabel = 'WEEKLY OFF (Assign from roster)';
+        }
+
+        return (
+          <Space direction="vertical" size={2}>
+            <span className={`sales-status-tag ${getStatusClass(status)}`}>
+              {statusLabel}
+            </span>
+            {status === 'overtime' && record.overtimeMinutes > 0 && (
+              <Text type="secondary" style={{ fontSize: '11px', display: 'block', marginTop: 2 }}>
+                ({record.overtimeMinutes} min OT)
+              </Text>
+            )}
+            {record.isLate && record.latePenaltyText && (
+              <Tag color="error" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
+                Late: {record.latePenaltyText}
+                {record.bufferMinutes > 0 && ` (Buffer: ${record.bufferMinutes}m applied)`}
+              </Tag>
+            )}
+            {!record.latePenaltyText && record.latePunchInMinutes > 0 && (
+              <Tag color="error" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
+                Late by {record.latePunchInMinutes} min
+                {record.bufferMinutes > 0 && ` (Buffer: ${record.bufferMinutes}m applicable)`}
+              </Tag>
+            )}
+            {record.earlyExitMinutes > 0 && (
+              <Tag color="warning" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
+                Early Exit: {record.earlyExitMinutes} min
+              </Tag>
+            )}
+            {record.earlyOvertimeMinutes > 0 && (
+              <Tag color="cyan" style={{ fontSize: '10px', marginTop: 2, whiteSpace: 'normal', height: 'auto', padding: '2px 4px' }}>
+                Early OT: {record.earlyOvertimeMinutes} min
+              </Tag>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: 'Working Hours',
       key: 'workingHours',
       render: (_, record) => {
-        return formatWorkingHours(record.checkIn, record.checkOut);
+        return formatWorkingHours(record.checkIn, record.checkOut, record.totalWorkHours);
       },
     },
     {
@@ -587,7 +718,8 @@ const AttendanceManagement = () => {
         return (
           <Button
             type="text"
-            icon={<EnvironmentOutlined style={{ color: '#125EC9', fontSize: '18px' }} />}
+            className="sales-action-btn"
+            icon={<EnvironmentOutlined style={{ color: '#1677ff', fontSize: '16px' }} />}
             onClick={() => {
               const perms = record.user?.permissions || [];
               if (perms.includes('geolocation_access')) {
@@ -608,115 +740,145 @@ const AttendanceManagement = () => {
       <Sidebar collapsed={collapsed} />
 
       <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
-        <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
-              className: 'trigger',
-              onClick: () => setCollapsed(!collapsed),
-              style: { fontSize: '18px', padding: '0 24px' }
-            })}
-            <Title level={4} style={{ margin: 0 }}>Attendance Management</Title>
-          </div>
-          <Menu
-            theme="light"
-            mode="horizontal"
-            items={[
-              {
-                key: 'logout',
-                icon: <LogoutOutlined />,
-                label: 'Logout',
-                onClick: handleLogout
-              }
-            ]}
-          />
-        </Header>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Attendance Management" 
+        />
 
-        <Content style={{ margin: '24px 24px', padding: 24, background: '#fff', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+          
+          {/* Top Stats Cards */}
+          <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+            <Col xs={24} sm={8}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Present</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '26px', fontWeight: '700', lineHeight: 1 }}>{presentCount}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#f6ffed',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(82, 196, 26, 0.1)'
+                  }}>
+                    <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '20px' }} />
+                  </div>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={8}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Absent</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '26px', fontWeight: '700', lineHeight: 1 }}>{absentCount}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#fff1f0',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(255, 77, 79, 0.1)'
+                  }}>
+                    <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: '20px' }} />
+                  </div>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={8}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>On Leave</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '26px', fontWeight: '700', lineHeight: 1 }}>{leaveCount}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#e6f7ff',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(24, 144, 255, 0.1)'
+                  }}>
+                    <CoffeeOutlined style={{ color: '#1677ff', fontSize: '20px' }} />
+                  </div>
+                </div>
+              </Card>
+            </Col>
+          </Row>
+
           <Card
-            className="att-card"
-            title={
-              <div className="att-header">
-                <span className="att-title">Attendance</span>
-              </div>
-            }
-            extra={
-              <Space>
+            className="sales-content-card"
+            bodyStyle={{ padding: '24px' }}
+          >
+            {/* Sleek Filter & Action Row */}
+            <div className="sales-filter-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <DatePicker
                   value={selectedDate}
                   onChange={(date) => setSelectedDate(date || dayjs())}
                   picker="date"
                   format="DD MMM YYYY"
                   placeholder="Select date"
+                  style={{ width: 140 }}
                 />
-                <Button type="primary" onClick={openMarkModal}>Mark Attendance</Button>
-                <Button type="primary" onClick={openBulkMarkModal}>Bulk Mark Attendance</Button>
-                <Button icon={<ExportOutlined />} onClick={handleExport}>Export</Button>
-              </Space>
-            }
-          >
-            {selectedStaff !== 'all' && (
-              <div style={{ marginBottom: 12, background: '#fafafa', padding: 12, border: '1px solid #f0f0f0', borderRadius: 6 }}>
-                <Space size={24} wrap>
-                  <span><strong>Effective Template:</strong> {effectiveTemplate?.name || '—'}</span>
-                  <span><strong>Mode:</strong> {(effectiveTemplate?.attendanceMode || '').replace(/_/g, ' ') || '—'}</span>
-                  <span><strong>Holidays:</strong> {effectiveTemplate?.holidaysRule || '—'}</span>
-                  <span><strong>Track In/Out:</strong> {effectiveTemplate?.trackInOutEnabled ? 'Yes' : 'No'}</span>
-                  <span><strong>Require Punch Out:</strong> {effectiveTemplate?.requirePunchOut ? 'Yes' : 'No'}</span>
-                  <span><strong>Multiple Punches:</strong> {effectiveTemplate?.allowMultiplePunches ? 'Allowed' : 'Not Allowed'}</span>
-                </Space>
-              </div>
-            )}
-            <div className="att-stats" style={{ marginBottom: 12 }}>
-              <div className="att-stat">
-                <span className="att-stat-icon present"><img src="https://res.cloudinary.com/dgif730br/image/upload/v1768896898/Container_tcew9a.png" alt="Present" /></span>
-                <div>
-                  <div className="att-stat-label">Total Present</div>
-                  <div className="att-stat-value">{presentCount}</div>
-                </div>
-              </div>
-              <div className="att-stat">
-                <span className="att-stat-icon absent"><img src="https://res.cloudinary.com/dgif730br/image/upload/v1768896898/Container_1_rlb3bu.png" alt="Absent" /></span>
-                <div>
-                  <div className="att-stat-label">Absent</div>
-                  <div className="att-stat-value">{absentCount}</div>
-                </div>
-              </div>
-              <div className="att-stat">
-                <span className="att-stat-icon leave"><img src="https://res.cloudinary.com/dgif730br/image/upload/v1768896898/Container_2_k4chlk.png" alt="On Leave" /></span>
-                <div>
-                  <div className="att-stat-label">On Leave</div>
-                  <div className="att-stat-value">{leaveCount}</div>
-                </div>
-              </div>
-            </div>
-            <div className="att-toolbar">
-              <div className="att-toolbar-left">
                 <Input
-                  className="att-search"
                   placeholder="Search staff..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  style={{ width: 180 }}
+                  prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                  allowClear
                 />
-              </div>
-              <div className="att-toolbar-right">
                 <Select
                   value={departmentFilter}
                   onChange={setDepartmentFilter}
-                  className="att-filter"
+                  style={{ width: 150 }}
                 >
                   <Option value="all">Department</Option>
-                  {departments.length > 0 ? (
-                    departments.map(dep => (
-                      <Option key={dep.id || dep.name} value={dep.name}>{dep.name}</Option>
-                    ))
-                  ) : (
-                    <Option value="" disabled>No departments available</Option>
-                  )}
+                  {departments.map(dep => (
+                    <Option key={dep.id || dep.name} value={dep.name}>{dep.name}</Option>
+                  ))}
                 </Select>
                 <Select
                   value={statusFilter}
                   onChange={setStatusFilter}
-                  className="att-filter"
+                  style={{ width: 120 }}
                 >
                   <Option value="all">Status</Option>
                   <Option value="present">Present</Option>
@@ -729,7 +891,7 @@ const AttendanceManagement = () => {
                   showSearch
                   value={staffNameFilter}
                   onChange={setStaffNameFilter}
-                  className="att-filter"
+                  style={{ width: 160 }}
                   placeholder="Staff Name"
                   optionFilterProp="children"
                   filterOption={(input, option) =>
@@ -744,29 +906,59 @@ const AttendanceManagement = () => {
                   ))}
                 </Select>
               </div>
+              <Space wrap size={8}>
+                <Button type="primary" onClick={() => openMarkModal()} shape="round">
+                  Mark Attendance
+                </Button>
+                <Button type="primary" style={{ background: '#52c41a', borderColor: '#52c41a' }} onClick={openBulkMarkModal} shape="round">
+                  Bulk Mark Attendance
+                </Button>
+                <Button icon={<ExportOutlined />} onClick={handleExport} shape="round">
+                  Export
+                </Button>
+              </Space>
             </div>
+
+            {selectedStaff !== 'all' && (
+              <div style={{ marginBottom: 20, background: '#fafafa', padding: 12, border: '1px solid #f0f0f0', borderRadius: 8 }}>
+                <Space size={24} wrap>
+                  <span><strong>Effective Template:</strong> {effectiveTemplate?.name || '—'}</span>
+                  <span><strong>Mode:</strong> {(effectiveTemplate?.attendanceMode || '').replace(/_/g, ' ') || '—'}</span>
+                  <span><strong>Holidays:</strong> {effectiveTemplate?.holidaysRule || '—'}</span>
+                  <span><strong>Track In/Out:</strong> {effectiveTemplate?.trackInOutEnabled ? 'Yes' : 'No'}</span>
+                  <span><strong>Require Punch Out:</strong> {effectiveTemplate?.requirePunchOut ? 'Yes' : 'No'}</span>
+                  <span><strong>Multiple Punches:</strong> {effectiveTemplate?.allowMultiplePunches ? 'Allowed' : 'Not Allowed'}</span>
+                </Space>
+              </div>
+            )}
 
             <Table
               columns={columns}
               dataSource={filtered}
               loading={loading}
               rowKey="id"
+              className="sales-table"
               pagination={{
                 pageSize: 50,
                 showSizeChanger: true,
                 showQuickJumper: true,
+                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
               }}
             />
           </Card>
+
+          {/* Modals styled with .sales-modal */}
           <Modal
             title="Mark Attendance"
             open={markOpen}
             onCancel={() => setMarkOpen(false)}
             onOk={submitMark}
             okText="Save Record"
+            className="sales-modal"
+            destroyOnClose
           >
             <Form form={markForm} layout="vertical">
-              <Form.Item name="staffId" label="Select Staff Member" rules={[{ required: true, message: 'Please select staff' }]} >
+              <Form.Item name="staffId" label={<span className="modal-field-label">Select Staff Member</span>} rules={[{ required: true, message: 'Please select staff' }]} >
                 <Select
                   showSearch
                   placeholder="Select staff"
@@ -776,6 +968,15 @@ const AttendanceManagement = () => {
                   }
                   onSelect={async (uid) => {
                     const dateStr = selectedDate.format('YYYY-MM-DD');
+
+                    const staffInfo = staffList.find(s => s.id === uid || s.id === Number(uid));
+                    if (staffInfo && staffInfo.active === false) {
+                      setSelectedStaffDeactivated(true);
+                      message.warning(`⚠️ ${staffInfo.name} is deactivated. Attendance can still be marked but this account is inactive.`);
+                    } else {
+                      setSelectedStaffDeactivated(false);
+                    }
+
                     try {
                       const res = await api.get(`/admin/attendance/check-leave?userId=${uid}&date=${dateStr}`);
                       if (res.data.onLeave) {
@@ -806,8 +1007,7 @@ const AttendanceManagement = () => {
                         checkOut: parseTimeValue('18:00'),
                       });
                     }
-                    // Fetch shift for this specific user to check OT rules and update times
-                    api.get(`/admin/shifts/effective/${uid}`).then(res => {
+                    api.get(`/admin/shifts/effective/${uid}?date=${dateStr}`).then(res => {
                       const shift = res.data?.shift;
                       setEffectiveShift(shift || null);
                       if (!rec && shift) {
@@ -825,6 +1025,12 @@ const AttendanceManagement = () => {
                 </Select>
               </Form.Item>
 
+              {selectedStaffDeactivated && (
+                <div style={{ marginBottom: 16, padding: '8px 12px', background: '#fff1f0', border: '1px solid #ff4d4f', borderRadius: 4, color: '#cf1322', fontWeight: 600 }}>
+                  ⚠️ Warning: This staff member is currently <strong>deactivated</strong>. Their account is inactive in this organization.
+                </div>
+              )}
+
               {staffOnLeave && (
                 <div style={{ marginBottom: 16, padding: '8px 12px', background: '#fff1f0', border: '1px solid #ffa39e', borderRadius: 4, color: '#cf1322', fontWeight: 500 }}>
                   today this staff is on paid leave
@@ -837,10 +1043,10 @@ const AttendanceManagement = () => {
                 </div>
               )}
 
-              <Form.Item name="date" label="Date" rules={[{ required: true, message: 'Please choose date' }]} >
+              <Form.Item name="date" label={<span className="modal-field-label">Date</span>} rules={[{ required: true, message: 'Please choose date' }]} >
                 <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
               </Form.Item>
-              <Form.Item name="status" label="Status" rules={[{ required: true }]}>
+              <Form.Item name="status" label={<span className="modal-field-label">Status</span>} rules={[{ required: true }]}>
                 <Radio.Group>
                   <Radio value="present">Present</Radio>
                   <Radio value="overtime">Overtime</Radio>
@@ -857,7 +1063,7 @@ const AttendanceManagement = () => {
                     return (
                       <Form.Item
                         name="overtimeMinutes"
-                        label="Overtime Minutes"
+                        label={<span className="modal-field-label">Overtime Minutes</span>}
                         rules={[{ required: false }]}
                       >
                         <AntInput type="number" min={0} placeholder="Enter OT minutes if needed" />
@@ -867,14 +1073,15 @@ const AttendanceManagement = () => {
                   return null;
                 }}
               </Form.Item>
-              <Form.Item name="checkIn" label="Check-in Time">
+              <Form.Item name="checkIn" label={<span className="modal-field-label">Check-in Time</span>}>
                 <TimePicker style={{ width: '100%' }} format="HH:mm" needConfirm={false} />
               </Form.Item>
-              <Form.Item name="checkOut" label="Check-out Time">
+              <Form.Item name="checkOut" label={<span className="modal-field-label">Check-out Time</span>}>
                 <TimePicker style={{ width: '100%' }} format="HH:mm" needConfirm={false} />
               </Form.Item>
             </Form>
           </Modal>
+
           <Modal
             title="Bulk Mark Attendance"
             open={bulkMarkOpen}
@@ -882,21 +1089,23 @@ const AttendanceManagement = () => {
             onOk={submitBulkMark}
             okText="Save Bulk Attendance"
             width={900}
+            className="sales-modal"
+            destroyOnClose
           >
             {/* Date picker */}
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontWeight: 500 }}>Date: </label>
+            <div style={{ marginBottom: 16 }}>
+              <span className="modal-field-label">Select Date</span>
               <DatePicker
                 value={bulkDate}
                 onChange={(d) => setBulkDate(d)}
                 format="DD MMM YYYY"
-                style={{ marginLeft: 8 }}
+                style={{ width: 200 }}
               />
             </div>
 
             {/* Staff selector */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontWeight: 500 }}>Select Staff Members:</label>
+            <div style={{ marginBottom: 20 }}>
+              <span className="modal-field-label">Select Staff Members</span>
               <Select
                 mode="multiple"
                 showSearch
@@ -921,17 +1130,17 @@ const AttendanceManagement = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
-                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Staff</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Status</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Check-in</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Check-out</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Staff</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Status</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-in</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-out</th>
                   </tr>
                 </thead>
                 <tbody>
                   {bulkRows.map(row => (
                     <tr key={row.userId} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                      <td style={{ padding: '8px 6px', fontWeight: 500 }}>{row.name}</td>
-                      <td style={{ padding: '8px 6px' }}>
+                      <td style={{ padding: '12px 8px', fontWeight: 500 }}>{row.name}</td>
+                      <td style={{ padding: '12px 8px' }}>
                         <Select
                           size="small"
                           value={row.status}
@@ -951,11 +1160,11 @@ const AttendanceManagement = () => {
                             placeholder="OT minutes"
                             value={row.overtimeMinutes ?? ''}
                             onChange={(e) => updateBulkRow(row.userId, 'overtimeMinutes', e.target.value)}
-                            style={{ width: 120, marginTop: 6 }}
+                            style={{ width: 120, marginTop: 6, display: 'block' }}
                           />
                         ) : null}
                       </td>
-                      <td style={{ padding: '8px 6px' }}>
+                      <td style={{ padding: '12px 8px' }}>
                         <TimePicker
                           size="small"
                           value={row.checkIn}
@@ -965,7 +1174,7 @@ const AttendanceManagement = () => {
                           style={{ width: 120 }}
                         />
                       </td>
-                      <td style={{ padding: '8px 6px' }}>
+                      <td style={{ padding: '12px 8px' }}>
                         <TimePicker
                           size="small"
                           value={row.checkOut}
@@ -984,6 +1193,7 @@ const AttendanceManagement = () => {
               <div style={{ textAlign: 'center', color: '#999', padding: 24 }}>Select staff members above to add their rows</div>
             )}
           </Modal>
+
           <Modal
             title={selectedRecord?.note ? 'Edit Note' : 'Add Note'}
             open={noteOpen}
@@ -991,17 +1201,19 @@ const AttendanceManagement = () => {
             onOk={submitNote}
             okText={selectedRecord?.note ? 'Update Note' : 'Save Note'}
             width={500}
+            className="sales-modal"
+            destroyOnClose
           >
             <Form form={noteForm} layout="vertical">
               <Form.Item name="staffId" label="Staff Member" style={{ display: "none" }}>
                 <AntInput disabled />
               </Form.Item>
-              <Form.Item name="date" label="Date">
+              <Form.Item name="date" label={<span className="modal-field-label">Date</span>}>
                 <DatePicker style={{ width: '100%' }} disabled />
               </Form.Item>
               <Form.Item
                 name="note"
-                label="Note"
+                label={<span className="modal-field-label">Note</span>}
                 rules={[{ required: true, message: 'Please enter a note' }]}
               >
                 <Input.TextArea
@@ -1013,19 +1225,22 @@ const AttendanceManagement = () => {
               </Form.Item>
             </Form>
           </Modal>
+
           <Modal
             title="Location Details"
             open={locationModalOpen}
             onCancel={() => setLocationModalOpen(false)}
             footer={[
-              <Button key="close" onClick={() => setLocationModalOpen(false)}>Close</Button>
+              <Button key="close" onClick={() => setLocationModalOpen(false)} shape="round">Close</Button>
             ]}
             width={700}
+            className="sales-modal"
+            destroyOnClose
           >
             {locationData && (
               <div style={{ padding: '10px 0' }}>
                 <div style={{ marginBottom: 20, paddingBottom: 15, borderBottom: '1px solid #f0f0f0' }}>
-                  <Title level={5}><UserOutlined style={{ color: '#125EC9' }} /> {locationData.user?.name || 'Staff'}</Title>
+                  <Title level={5}><UserOutlined style={{ color: '#1677ff' }} /> {locationData.user?.name || 'Staff'}</Title>
                   <Space direction="vertical" size={2}>
                     <Text type="secondary">ID: {locationData.staffProfile?.staffId || 'N/A'}</Text>
                     {locationData.staffProfile?.phone && (
@@ -1045,7 +1260,7 @@ const AttendanceManagement = () => {
                     {Number.isFinite(Number(locationData.latitude)) && Number.isFinite(Number(locationData.longitude)) && (
                       <div>
                         <Text strong>Coordinates:</Text>
-                        <div style={{ marginTop: 4, color: '#125EC9', fontSize: '13px' }}>
+                        <div style={{ marginTop: 4, color: '#1677ff', fontSize: '13px' }}>
                           <a
                             href={`https://www.google.com/maps?q=${locationData.latitude},${locationData.longitude}`}
                             target="_blank"
@@ -1069,7 +1284,7 @@ const AttendanceManagement = () => {
                     {Number.isFinite(Number(locationData.punchOutLatitude)) && Number.isFinite(Number(locationData.punchOutLongitude)) && (
                       <div>
                         <Text strong>Coordinates:</Text>
-                        <div style={{ marginTop: 4, color: '#125EC9', fontSize: '13px' }}>
+                        <div style={{ marginTop: 4, color: '#1677ff', fontSize: '13px' }}>
                           <a
                             href={`https://www.google.com/maps?q=${locationData.punchOutLatitude},${locationData.punchOutLongitude}`}
                             target="_blank"
@@ -1086,20 +1301,23 @@ const AttendanceManagement = () => {
               </div>
             )}
           </Modal>
+
           <Modal
             title={`Attendance Logs - ${logsData?.user?.name || 'Staff'}`}
             open={logsModalOpen}
             onCancel={() => setLogsModalOpen(false)}
             footer={[
-              <Button key="close" onClick={() => setLogsModalOpen(false)}>Close</Button>
+              <Button key="close" onClick={() => setLogsModalOpen(false)} shape="round">Close</Button>
             ]}
             width={700}
+            className="sales-modal"
+            destroyOnClose
           >
             {logsData && (
               <div style={{ padding: '10px 0' }}>
                 <Row gutter={16}>
                   <Col span={12}>
-                    <Card size="small" title="Punch In Photo" borderless>
+                    <Card size="small" title={<span style={{ fontWeight: 600 }}>Punch In Photo</span>} bordered={false} style={{ background: '#fafafa', borderRadius: '12px' }}>
                       <div style={{ textAlign: 'center' }}>
                         {logsData.punchInPhotoUrl ? (
                           <Image
@@ -1108,7 +1326,7 @@ const AttendanceManagement = () => {
                             style={{ maxWidth: '100%', borderRadius: '4px' }}
                           />
                         ) : (
-                          <div style={{ padding: '20px', background: '#f5f5f5', borderRadius: '4px', color: '#8c8c8c' }}>
+                          <div style={{ padding: '20px', background: '#f0f0f0', borderRadius: '4px', color: '#8c8c8c' }}>
                             No punch-in photo
                           </div>
                         )}
@@ -1120,7 +1338,7 @@ const AttendanceManagement = () => {
                     </Card>
                   </Col>
                   <Col span={12}>
-                    <Card size="small" title="Punch Out Photo" borderless>
+                    <Card size="small" title={<span style={{ fontWeight: 600 }}>Punch Out Photo</span>} bordered={false} style={{ background: '#fafafa', borderRadius: '12px' }}>
                       <div style={{ textAlign: 'center' }}>
                         {logsData.punchOutPhotoUrl ? (
                           <Image
@@ -1129,7 +1347,7 @@ const AttendanceManagement = () => {
                             style={{ maxWidth: '100%', borderRadius: '4px' }}
                           />
                         ) : (
-                          <div style={{ padding: '20px', background: '#f5f5f5', borderRadius: '4px', color: '#8c8c8c' }}>
+                          <div style={{ padding: '20px', background: '#f0f0f0', borderRadius: '4px', color: '#8c8c8c' }}>
                             No punch-out photo
                           </div>
                         )}

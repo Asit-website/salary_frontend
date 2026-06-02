@@ -14,11 +14,7 @@ import {
   message, 
   Row, 
   Col, 
-  Statistic,
   Descriptions,
-  Tag,
-  Tooltip,
-  Menu,
   Typography
 } from 'antd';
 import { 
@@ -27,20 +23,17 @@ import {
   DeleteOutlined, 
   EyeOutlined,
   BankOutlined,
-  CalendarOutlined,
-  UserOutlined,
-  MenuUnfoldOutlined,
-  MenuFoldOutlined,
-  LogoutOutlined
+  CalendarOutlined
 } from '@ant-design/icons';
 import moment from 'moment';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 
-const { Header, Content } = Layout;
+const { Content } = Layout;
 const { Option } = Select;
 const { TextArea } = Input;
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 const Loans = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -51,12 +44,6 @@ const Loans = () => {
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [form] = Form.useForm();
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/';
-  };
   const [emiAmount, setEmiAmount] = useState(0);
   const [pagination, setPagination] = useState({
     current: 1,
@@ -193,12 +180,34 @@ const Loans = () => {
     {
       title: 'Staff Member',
       key: 'staff',
-      render: (text, record) => (
-        <div>
-          <div style={{ fontWeight: 'bold' }}>{record.staffMember?.profile?.name}</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>{record.staffMember?.phone}</div>
-        </div>
-      ),
+      render: (text, record) => {
+        const name = record.staffMember?.profile?.name || 'No Name';
+        const phone = record.staffMember?.phone || 'No phone';
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
+              backgroundColor: '#e6f7ff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: '10px',
+              color: '#1677ff',
+              fontWeight: '700',
+              fontSize: '14px',
+              boxShadow: '0 2px 6px rgba(22, 119, 255, 0.06)'
+            }}>
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ whiteSpace: 'nowrap' }}>
+              <div style={{ fontWeight: '600', color: '#1677ff', whiteSpace: 'nowrap' }}>{name}</div>
+              <div style={{ fontSize: '11px', color: '#8c8c8c', marginTop: '1px', whiteSpace: 'nowrap' }}>{phone}</div>
+            </div>
+          </div>
+        );
+      }
     },
     {
       title: 'Loan Amount',
@@ -206,7 +215,8 @@ const Loans = () => {
       key: 'amount',
       render: (amount) => {
         const numAmount = parseFloat(amount);
-        return isNaN(numAmount) ? '₹0.00' : `₹${numAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const val = isNaN(numAmount) ? 0 : numAmount;
+        return <span style={{ fontWeight: '500', color: '#262626' }}>₹{val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
       },
     },
     {
@@ -227,7 +237,8 @@ const Loans = () => {
       key: 'emiAmount',
       render: (emi) => {
         const numEmi = parseFloat(emi);
-        return isNaN(numEmi) ? '₹0.00' : `₹${numEmi.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const val = isNaN(numEmi) ? 0 : numEmi;
+        return <span style={{ fontWeight: '600', color: '#262626' }}>₹{val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
       },
     },
     {
@@ -235,12 +246,17 @@ const Loans = () => {
       dataIndex: 'status',
       key: 'status',
       render: (status) => {
-        const colors = {
-          active: 'green',
-          completed: 'blue',
-          defaulted: 'red'
+        const map = {
+          active: 'sales-status-active',
+          completed: 'sales-status-complete',
+          defaulted: 'sales-status-inactive'
         };
-        return <Tag color={colors[status] || 'default'}>{status?.toUpperCase()}</Tag>;
+        const cls = map[status] || 'sales-status-pending';
+        return (
+          <span className={`sales-status-tag ${cls}`} style={{ textTransform: 'capitalize', fontSize: '12px' }}>
+            {status || 'pending'}
+          </span>
+        );
       },
     },
     {
@@ -253,30 +269,33 @@ const Loans = () => {
       title: 'Actions',
       key: 'actions',
       render: (text, record) => (
-        <Space size="small">
-          <Tooltip title="View Details">
-            <Button 
-              type="link" 
-              icon={<EyeOutlined />} 
-              onClick={() => handleViewDetails(record)}
-            />
-          </Tooltip>
-          <Tooltip title="Edit">
-            <Button 
-              type="link" 
-              icon={<EditOutlined />} 
-              onClick={() => handleEdit(record)}
-            />
-          </Tooltip>
-          <Tooltip title="Delete">
-            <Button 
-              type="link" 
-              danger 
-              icon={<DeleteOutlined />} 
-              onClick={() => handleDelete(record.id)}
-            />
-          </Tooltip>
-        </Space>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'nowrap', alignItems: 'center', whiteSpace: 'nowrap' }}>
+          <Button 
+            size="small" 
+            shape="round"
+            icon={<EyeOutlined />} 
+            onClick={() => handleViewDetails(record)}
+          >
+            Details
+          </Button>
+          <Button 
+            size="small" 
+            shape="round"
+            icon={<EditOutlined />} 
+            onClick={() => handleEdit(record)}
+          >
+            Edit
+          </Button>
+          <Button 
+            size="small" 
+            shape="round"
+            danger
+            icon={<DeleteOutlined />} 
+            onClick={() => handleDelete(record.id)}
+          >
+            Delete
+          </Button>
+        </div>
       ),
     },
   ];
@@ -291,93 +310,92 @@ const Loans = () => {
       <Sidebar collapsed={collapsed} />
       
       <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
-        <Header
-          style={{
-            padding: 0,
-            background: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            position: 'sticky',
-            top: 0,
-            zIndex: 90
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <Button
-              type="text"
-              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={() => setCollapsed(!collapsed)}
-              style={{
-                fontSize: '18px',
-                padding: '0 24px'
-              }}
-            />
-            <Title level={4} style={{ margin: 0 }}>Loans Management</Title>
-          </div>
-          <Menu
-            theme="light"
-            mode="horizontal"
-            items={[{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout }]}
-          />
-        </Header>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Loans Management" 
+        />
         
         <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
           <div>
-            {/* Statistics Cards */}
-            <Row gutter={16} style={{ marginBottom: 24 }}>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Total Loans"
-                    value={loans.length}
-                    prefix={<BankOutlined />}
-                  />
+            {/* Elegant Dynamic Statistics Cards */}
+            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+              <Col xs={24} sm={12} md={6}>
+                <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>Total Loans</div>
+                      <div style={{ fontSize: '28px', fontWeight: '700', color: '#262626', lineHeight: '1.2' }}>{loans.length}</div>
+                    </div>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#e6f7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1677ff', fontSize: '20px', boxShadow: '0 4px 10px rgba(22, 119, 255, 0.1)' }}>
+                      <BankOutlined />
+                    </div>
+                  </div>
                 </Card>
               </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Active Loans"
-                    value={loans.filter(l => l.status === 'active').length}
-                    valueStyle={{ color: '#3f8600' }}
-                  />
+              <Col xs={24} sm={12} md={6}>
+                <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>Active Loans</div>
+                      <div style={{ fontSize: '28px', fontWeight: '700', color: '#52c41a', lineHeight: '1.2' }}>
+                        {loans.filter(l => l.status === 'active').length}
+                      </div>
+                    </div>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#f6ffed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#52c41a', fontSize: '20px', boxShadow: '0 4px 10px rgba(82, 196, 26, 0.1)' }}>
+                      <span style={{ fontWeight: 'bold' }}>✓</span>
+                    </div>
+                  </div>
                 </Card>
               </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Total Amount"
-                    value={loans.reduce((sum, loan) => sum + (parseFloat(loan.amount || 0)), 0)}
-                    prefix="₹"
-                    formatter={(value) => value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  />
+              <Col xs={24} sm={12} md={6}>
+                <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>Total Amount</div>
+                      <div style={{ fontSize: '24px', fontWeight: '700', color: '#262626', lineHeight: '1.4' }}>
+                        ₹{loans.reduce((sum, loan) => sum + (parseFloat(loan.amount || 0)), 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#fff7e6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fa8c16', fontSize: '20px', boxShadow: '0 4px 10px rgba(250, 140, 22, 0.1)' }}>
+                      <span>₹</span>
+                    </div>
+                  </div>
                 </Card>
               </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Monthly EMI"
-                    value={loans.filter(l => l.status === 'active').reduce((sum, loan) => sum + (parseFloat(loan.emiAmount || 0)), 0)}
-                    prefix="₹"
-                    formatter={(value) => value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  />
+              <Col xs={24} sm={12} md={6}>
+                <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>Monthly EMI</div>
+                      <div style={{ fontSize: '24px', fontWeight: '700', color: '#722ed1', lineHeight: '1.4' }}>
+                        ₹{loans.filter(l => l.status === 'active').reduce((sum, loan) => sum + (parseFloat(loan.emiAmount || 0)), 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#f9f0ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#722ed1', fontSize: '20px', boxShadow: '0 4px 10px rgba(114, 46, 209, 0.1)' }}>
+                      <CalendarOutlined />
+                    </div>
+                  </div>
                 </Card>
               </Col>
             </Row>
 
             <Card
-              title="Loans Management"
-              extra={
-                <Space>
+              className="sales-content-card"
+              bodyStyle={{ padding: '24px' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <Title level={4} style={{ margin: 0, fontWeight: 600 }}>Active Loan Registry</Title>
+                <Space size={12}>
                   <Button 
-                    icon={<PlusOutlined />}
+                    shape="round"
                     onClick={loadLoans}
                   >
                     Refresh
                   </Button>
                   <Button 
                     type="primary" 
+                    shape="round"
                     icon={<PlusOutlined />}
                     onClick={() => {
                       setSelectedLoan(null);
@@ -388,13 +406,14 @@ const Loans = () => {
                     Create Loan
                   </Button>
                 </Space>
-              }
-            >
+              </div>
+
               <Table
                 columns={columns}
                 dataSource={loans}
                 rowKey="id"
                 loading={loading}
+                className="sales-table"
                 pagination={{
                   ...pagination,
                   showSizeChanger: true,
@@ -410,7 +429,7 @@ const Loans = () => {
 
             {/* Loan Form Modal */}
             <Modal
-              title={selectedLoan ? 'Edit Loan' : 'Create Loan'}
+              title={selectedLoan ? 'Edit Loan Entry' : 'Issue New Staff Loan'}
               open={modalVisible}
               onCancel={() => {
                 setModalVisible(false);
@@ -419,21 +438,23 @@ const Loans = () => {
               }}
               footer={null}
               width={800}
+              className="sales-modal"
             >
               <Form
                 form={form}
                 layout="vertical"
                 onFinish={handleSubmit}
                 onValuesChange={handleFormValuesChange}
+                style={{ marginTop: '12px' }}
               >
                 <Row gutter={16}>
                   <Col span={12}>
                     <Form.Item
                       name="staffId"
-                      label="Staff Member"
+                      label={<span className="modal-field-label">Staff Member</span>}
                       rules={[{ required: true, message: 'Please select staff member' }]}
                     >
-                      <Select placeholder="Select staff member">
+                      <Select placeholder="Select staff member" dropdownStyle={{ borderRadius: '8px' }}>
                         {staff.map(member => (
                           <Option key={member.id} value={member.id}>
                             {member.name} - {member.phone}
@@ -445,7 +466,7 @@ const Loans = () => {
                   <Col span={12}>
                     <Form.Item
                       name="loanType"
-                      label="Loan Type"
+                      label={<span className="modal-field-label">Loan Type</span>}
                       rules={[{ required: true, message: 'Please enter loan type' }]}
                     >
                       <Input placeholder="e.g., Personal, Car, Home" />
@@ -457,7 +478,7 @@ const Loans = () => {
                   <Col span={8}>
                     <Form.Item
                       name="amount"
-                      label="Loan Amount"
+                      label={<span className="modal-field-label">Loan Amount</span>}
                       rules={[{ required: true, message: 'Please enter loan amount' }]}
                     >
                       <InputNumber
@@ -472,7 +493,7 @@ const Loans = () => {
                   <Col span={8}>
                     <Form.Item
                       name="interestRate"
-                      label="Interest Rate (%)"
+                      label={<span className="modal-field-label">Interest Rate (%)</span>}
                       rules={[{ required: true, message: 'Please enter interest rate' }]}
                     >
                       <InputNumber
@@ -488,7 +509,7 @@ const Loans = () => {
                   <Col span={8}>
                     <Form.Item
                       name="tenure"
-                      label="Tenure (Months)"
+                      label={<span className="modal-field-label">Tenure (Months)</span>}
                       rules={[{ required: true, message: 'Please enter tenure' }]}
                     >
                       <InputNumber
@@ -496,7 +517,7 @@ const Loans = () => {
                         placeholder="0"
                         min={1}
                         max={360}
-                        suffix="months"
+                        suffix=" months"
                       />
                     </Form.Item>
                   </Col>
@@ -504,9 +525,9 @@ const Loans = () => {
                 
                 <Row gutter={16}>
                   <Col span={8}>
-                    <Form.Item label="EMI Amount">
+                    <Form.Item label={<span className="modal-field-label">Calculated EMI Amount</span>}>
                       <InputNumber
-                        style={{ width: '100%' }}
+                        style={{ width: '100%', background: '#fafafa', color: '#1677ff', fontWeight: 'bold' }}
                         value={emiAmount}
                         disabled
                         precision={2}
@@ -515,11 +536,8 @@ const Loans = () => {
                       />
                     </Form.Item>
                   </Col>
-                  <Col span={8}>
-                    {/* Empty column for spacing */}
-                  </Col>
-                  <Col span={8}>
-                    {/* Empty column for spacing */}
+                  <Col span={16}>
+                    {/* Spacing alignment */}
                   </Col>
                 </Row>
                 
@@ -527,7 +545,7 @@ const Loans = () => {
                   <Col span={12}>
                     <Form.Item
                       name="issueDate"
-                      label="Issue Date"
+                      label={<span className="modal-field-label">Issue Date</span>}
                       rules={[{ required: true, message: 'Please select issue date' }]}
                     >
                       <DatePicker style={{ width: '100%' }} />
@@ -536,7 +554,7 @@ const Loans = () => {
                   <Col span={12}>
                     <Form.Item
                       name="startDate"
-                      label="EMI Start Date"
+                      label={<span className="modal-field-label">EMI Start Date</span>}
                       rules={[{ required: true, message: 'Please select start date' }]}
                     >
                       <DatePicker style={{ width: '100%' }} />
@@ -546,7 +564,7 @@ const Loans = () => {
                 
                 <Form.Item
                   name="purpose"
-                  label="Purpose"
+                  label={<span className="modal-field-label">Purpose</span>}
                   rules={[{ required: true, message: 'Please enter purpose' }]}
                 >
                   <TextArea rows={3} placeholder="Describe the purpose of this loan" />
@@ -554,22 +572,22 @@ const Loans = () => {
                 
                 <Form.Item
                   name="notes"
-                  label="Notes"
+                  label={<span className="modal-field-label">Notes</span>}
                 >
                   <TextArea rows={2} placeholder="Additional notes (optional)" />
                 </Form.Item>
                 
-                <Form.Item>
-                  <Space>
-                    <Button type="primary" htmlType="submit">
-                      {selectedLoan ? 'Update' : 'Create'} Loan
-                    </Button>
+                <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+                  <Space size={10}>
                     <Button onClick={() => {
                       setModalVisible(false);
                       setSelectedLoan(null);
                       form.resetFields();
-                    }}>
+                    }} shape="round">
                       Cancel
+                    </Button>
+                    <Button type="primary" htmlType="submit" shape="round">
+                      {selectedLoan ? 'Save Changes' : 'Issue Loan'}
                     </Button>
                   </Space>
                 </Form.Item>
@@ -578,27 +596,28 @@ const Loans = () => {
 
             {/* Loan Details Modal */}
             <Modal
-              title="Loan Details"
+              title="Overview of Loan Agreement"
               open={detailsModalVisible}
               onCancel={() => {
                 setDetailsModalVisible(false);
                 setSelectedLoan(null);
               }}
               footer={[
-                <Button key="close" onClick={() => {
+                <Button key="close" type="primary" shape="round" onClick={() => {
                   setDetailsModalVisible(false);
                   setSelectedLoan(null);
                 }}>
-                  Close
+                  Dismiss Details
                 </Button>
               ]}
               width={800}
+              className="sales-modal"
             >
               {selectedLoan && (
-                <div>
-                  <Descriptions bordered column={2}>
+                <div style={{ marginTop: '16px' }}>
+                  <Descriptions bordered column={2} className="sales-descriptions" contentStyle={{ fontSize: '13px', color: '#434343' }} labelStyle={{ fontWeight: '600', color: '#595959', fontSize: '13px', width: '150px' }}>
                     <Descriptions.Item label="Staff Member">
-                      {selectedLoan.staffMember?.profile?.name}
+                      <span style={{ fontWeight: 'bold', color: '#1677ff' }}>{selectedLoan.staffMember?.profile?.name}</span>
                     </Descriptions.Item>
                     <Descriptions.Item label="Staff Phone">
                       {selectedLoan.staffMember?.phone}
@@ -607,12 +626,22 @@ const Loans = () => {
                       {selectedLoan.loanType}
                     </Descriptions.Item>
                     <Descriptions.Item label="Status">
-                      <Tag color={selectedLoan.status === 'active' ? 'green' : 'default'}>
-                        {selectedLoan.status?.toUpperCase()}
-                      </Tag>
+                      {(() => {
+                        const map = {
+                          active: 'sales-status-active',
+                          completed: 'sales-status-complete',
+                          defaulted: 'sales-status-inactive'
+                        };
+                        const cls = map[selectedLoan.status] || 'sales-status-pending';
+                        return (
+                          <span className={`sales-status-tag ${cls}`} style={{ textTransform: 'capitalize', fontSize: '11px' }}>
+                            {selectedLoan.status || 'pending'}
+                          </span>
+                        );
+                      })()}
                     </Descriptions.Item>
                     <Descriptions.Item label="Loan Amount">
-                      ₹{parseFloat(selectedLoan.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <span style={{ fontWeight: '600', color: '#262626' }}>₹{parseFloat(selectedLoan.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </Descriptions.Item>
                     <Descriptions.Item label="Interest Rate">
                       {parseFloat(selectedLoan.interestRate || 0).toFixed(2)}%
@@ -621,7 +650,7 @@ const Loans = () => {
                       {selectedLoan.tenure} months
                     </Descriptions.Item>
                     <Descriptions.Item label="EMI Amount">
-                      ₹{parseFloat(selectedLoan.emiAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <span style={{ fontWeight: '700', color: '#1677ff' }}>₹{parseFloat(selectedLoan.emiAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </Descriptions.Item>
                     <Descriptions.Item label="Issue Date">
                       {moment(selectedLoan.issueDate).format('DD MMM YYYY')}
@@ -633,7 +662,7 @@ const Loans = () => {
                       {selectedLoan.purpose}
                     </Descriptions.Item>
                     <Descriptions.Item label="Notes" span={2}>
-                      {selectedLoan.notes || '-'}
+                      {selectedLoan.notes || <Text type="secondary" style={{ fontStyle: 'italic' }}>No additional notes</Text>}
                     </Descriptions.Item>
                   </Descriptions>
                 </div>

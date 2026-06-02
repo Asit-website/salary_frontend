@@ -54,6 +54,12 @@ export default function SuperadminPlans() {
       recruitmentEnabled: rec.recruitmentEnabled,
       communityEnabled: rec.communityEnabled,
       maxGeolocationStaff: rec.maxGeolocationStaff,
+      salaryRegisterEnabled: rec.salaryRegisterEnabled !== undefined ? !!rec.salaryRegisterEnabled : true,
+      monthlySummaryEnabled: rec.monthlySummaryEnabled !== undefined ? !!rec.monthlySummaryEnabled : true,
+      perDaySalaryEnabled: rec.perDaySalaryEnabled !== undefined ? !!rec.perDaySalaryEnabled : true,
+      comparisonEnabled: rec.comparisonEnabled !== undefined ? !!rec.comparisonEnabled : true,
+      otImpactEnabled: rec.otImpactEnabled !== undefined ? !!rec.otImpactEnabled : true,
+      latePenaltyEnabled: rec.latePenaltyEnabled !== undefined ? !!rec.latePenaltyEnabled : true,
       active: rec.active,
     });
     setOpen(true);
@@ -216,6 +222,41 @@ export default function SuperadminPlans() {
             </Col>
             <Col span={8}>
               <Form.Item label="Community Enabled" name="communityEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={24} style={{ marginTop: 8, marginBottom: 8 }}>
+              <div style={{ fontWeight: 600, color: '#1890ff', borderBottom: '1px solid #f0f0f0', paddingBottom: 4, marginBottom: 12 }}>
+                Report Visibilities
+              </div>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Salary Register" name="salaryRegisterEnabled" valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Monthly Summary" name="monthlySummaryEnabled" valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Per Day Average" name="perDaySalaryEnabled" valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="MoM Comparison" name="comparisonEnabled" valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="OT Impact" name="otImpactEnabled" valuePropName="checked" initialValue={true}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Late Penalty" name="latePenaltyEnabled" valuePropName="checked" initialValue={true}>
                 <Switch />
               </Form.Item>
             </Col>

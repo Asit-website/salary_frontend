@@ -30,6 +30,8 @@ export default function TaskManagement() {
     const [isAssignModalVisible, setIsAssignModalVisible] = useState(false);
     const [selectedObserver, setSelectedObserver] = useState(null);
     const [assignedStaffIds, setAssignedStaffIds] = useState([]);
+    const [statusFilter, setStatusFilter] = useState(null);
+    const [activeTab, setActiveTab] = useState('activities');
 
     // History Modal states
     const [isHistoryModalVisible, setIsHistoryModalVisible] = useState(false);
@@ -59,7 +61,8 @@ export default function TaskManagement() {
         title: '',
         description: '',
         date: null,
-        turnAroundTime: ''
+        turnAroundTime: '',
+        turnAroundDate: null
     });
     const [isActivityEditMode, setIsActivityEditMode] = useState(false);
     const [editingActivityId, setEditingActivityId] = useState(null);
@@ -128,7 +131,9 @@ export default function TaskManagement() {
                 matchesDate = itemDate.isAfter(dateRange[0].startOf('day')) && itemDate.isBefore(dateRange[1].endOf('day'));
             }
 
-            return matchesStaff && matchesDate;
+            const matchesStatus = !statusFilter || item.status === statusFilter || (statusFilter === 'CLOSED' && item.isClosed);
+
+            return matchesStaff && matchesDate && matchesStatus;
         });
     };
 
@@ -217,7 +222,8 @@ export default function TaskManagement() {
             title: record.title,
             description: record.description,
             date: record.date ? dayjs(record.date) : null,
-            turnAroundTime: record.turnAroundTime ? dayjs(record.turnAroundTime, 'HH:mm') : null
+            turnAroundTime: record.turnAroundTime ? dayjs(record.turnAroundTime, 'HH:mm') : null,
+            turnAroundDate: record.turnAroundDate ? dayjs(record.turnAroundDate) : null
         });
         setIsActivityModalVisible(true);
     };
@@ -292,7 +298,8 @@ export default function TaskManagement() {
             const payload = {
                 ...newActivity,
                 date: newActivity.date ? newActivity.date.format('YYYY-MM-DD') : null,
-                turnAroundTime: newActivity.turnAroundTime ? newActivity.turnAroundTime.format('HH:mm') : ''
+                turnAroundTime: newActivity.turnAroundTime ? newActivity.turnAroundTime.format('HH:mm') : '',
+                turnAroundDate: newActivity.turnAroundDate ? newActivity.turnAroundDate.format('YYYY-MM-DD') : null
             };
             const resp = isActivityEditMode
                 ? await api.patch(`/admin/task-management/activities/${editingActivityId}`, payload)
@@ -308,7 +315,8 @@ export default function TaskManagement() {
                     title: '',
                     description: '',
                     date: null,
-                    turnAroundTime: ''
+                    turnAroundTime: '',
+                    turnAroundDate: null
                 });
                 fetchInitialData();
             }
@@ -434,14 +442,20 @@ export default function TaskManagement() {
         {
             title: 'Status',
             onCell: () => ({ style: { whiteSpace: 'nowrap' } }),
-            render: (_, r) => (
-                <Space>
-                    <Tag color={r.status === 'DONE' ? 'green' : r.status === 'SCHEDULE' ? 'blue' : 'orange'}>{r.status}</Tag>
-                    {r.isClosed && <Tag color="magenta">CLOSED</Tag>}
-                </Space>
-            )
+            render: (_, r) => {
+                const normStatus = String(r.status || '').toLowerCase();
+                const tagClass = `sales-status-tag sales-status-${normStatus === 'done' ? 'complete' : normStatus === 'schedule' ? 'active' : 'pending'}`;
+                return (
+                    <Space>
+                        <Tag className={tagClass}>{r.status}</Tag>
+                        {r.isClosed && <Tag className="sales-status-tag sales-status-inactive">CLOSED</Tag>}
+                    </Space>
+                );
+            }
         },
-        { title: 'Date', dataIndex: 'date', onCell: () => ({ style: { whiteSpace: 'nowrap' } }), render: (d) => dayjs(d).format('DD MMM YYYY') },
+        { title: 'Date', dataIndex: 'date', onCell: () => ({ style: { whiteSpace: 'nowrap' } }), render: (d) => d ? dayjs(d).format('DD MMM YYYY') : '-' },
+        { title: 'Target Date', dataIndex: 'turnAroundDate', onCell: () => ({ style: { whiteSpace: 'nowrap' } }), render: (d) => d ? dayjs(d).format('DD MMM YYYY') : '-' },
+        { title: 'Target Time', dataIndex: 'turnAroundTime', onCell: () => ({ style: { whiteSpace: 'nowrap' } }), render: (t) => t || '-' },
         { title: 'Shared With', onCell: () => ({ style: { whiteSpace: 'nowrap' } }), render: (_, r) => r.transferredTo?.profile?.name || '-' },
         {
             title: 'Mark Close',
@@ -460,6 +474,7 @@ export default function TaskManagement() {
                         icon={r.isClosed ? <CheckOutlined /> : null}
                         size="small"
                         disabled={r.isClosed}
+                        style={{ borderRadius: 6 }}
                     >
                         {r.isClosed ? 'Closed' : 'Close'}
                     </Button>
@@ -490,11 +505,15 @@ export default function TaskManagement() {
         {
             title: 'Status',
             onCell: () => ({ style: { whiteSpace: 'nowrap' } }),
-            render: (_, r) => (
-                <Tag color={r.status === 'DONE' ? 'green' : r.status === 'IN_PROGRESS' ? 'blue' : 'orange'}>
-                    {r.status || 'SCHEDULE'}
-                </Tag>
-            )
+            render: (_, r) => {
+                const normStatus = String(r.status || 'SCHEDULE').toLowerCase();
+                const tagClass = `sales-status-tag sales-status-${normStatus === 'done' ? 'complete' : normStatus === 'in_progress' ? 'inprogress' : normStatus === 'schedule' ? 'active' : 'pending'}`;
+                return (
+                    <Tag className={tagClass}>
+                        {r.status || 'SCHEDULE'}
+                    </Tag>
+                );
+            }
         },
         {
             title: 'Meeting Link',
@@ -535,6 +554,7 @@ export default function TaskManagement() {
                         icon={r.isClosed ? <CheckOutlined /> : null}
                         size="small"
                         disabled={r.isClosed}
+                        style={{ borderRadius: 6 }}
                     >
                         {r.isClosed ? 'Closed' : 'Close'}
                     </Button>
@@ -560,7 +580,7 @@ export default function TaskManagement() {
 
 
     const ticketColumns = [
-        { title: 'Ticket ID', dataIndex: 'ticketId', key: 'ticketId', render: (id) => <Tag color="cyan">{id}</Tag>, onCell: () => ({ style: { whiteSpace: 'nowrap' } }) },
+        { title: 'Ticket ID', dataIndex: 'ticketId', key: 'ticketId', render: (id) => <Tag className="sales-status-tag sales-status-active">{id}</Tag>, onCell: () => ({ style: { whiteSpace: 'nowrap' } }) },
         { title: 'Title', dataIndex: 'title', key: 'title', onCell: () => ({ style: { whiteSpace: 'nowrap' } }) },
         { title: 'By', onCell: () => ({ style: { whiteSpace: 'nowrap' } }), render: (_, r) => r.creator?.profile?.name || 'Admin' },
         { title: 'To', onCell: () => ({ style: { whiteSpace: 'nowrap' } }), render: (_, r) => r.assignee?.profile?.name || 'Staff' },
@@ -576,12 +596,16 @@ export default function TaskManagement() {
         {
             title: 'Status',
             onCell: () => ({ style: { whiteSpace: 'nowrap' } }),
-            render: (_, r) => (
-                <Space>
-                    <Tag color={r.status === 'DONE' ? 'green' : r.status === 'IN_PROGRESS' ? 'blue' : 'orange'}>{r.status}</Tag>
-                    {r.isClosed && <Tag color="magenta">CLOSED</Tag>}
-                </Space>
-            )
+            render: (_, r) => {
+                const normStatus = String(r.status || '').toLowerCase();
+                const tagClass = `sales-status-tag sales-status-${normStatus === 'done' ? 'complete' : normStatus === 'in_progress' ? 'inprogress' : 'pending'}`;
+                return (
+                    <Space>
+                        <Tag className={tagClass}>{r.status}</Tag>
+                        {r.isClosed && <Tag className="sales-status-tag sales-status-inactive">CLOSED</Tag>}
+                    </Space>
+                );
+            }
         },
         {
             title: 'Mark Close',
@@ -600,6 +624,7 @@ export default function TaskManagement() {
                         icon={r.isClosed ? <CheckOutlined /> : null}
                         size="small"
                         disabled={r.isClosed}
+                        style={{ borderRadius: 6 }}
                     >
                         {r.isClosed ? 'Closed' : 'Close'}
                     </Button>
@@ -642,6 +667,7 @@ export default function TaskManagement() {
                     size="small"
                     disabled={!r.isTaskObserver}
                     onClick={() => openAssignModal(r)}
+                    style={{ borderRadius: 6 }}
                 >
                     Assign Staff
                 </Button>
@@ -653,14 +679,14 @@ export default function TaskManagement() {
         <Layout style={{ minHeight: '100vh' }}>
             <Sidebar collapsed={collapsed} />
             <Layout style={{ marginLeft: collapsed ? 80 : 200, transition: 'all 0.2s', height: '100vh', overflow: 'hidden' }}>
-                <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
+                <Header className="sales-header" style={{ position: 'sticky', top: 0, zIndex: 90 }}>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                         {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
-                            className: 'trigger',
+                            className: 'trigger sales-header-back-btn',
                             onClick: () => setCollapsed(!collapsed),
-                            style: { fontSize: '18px', padding: '0 24px', cursor: 'pointer' }
+                            style: { fontSize: '18px', padding: '12px 24px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', height: '100%' }
                         })}
-                        <Title level={4} style={{ margin: 0 }}>Task Management</Title>
+                        <Title level={4} className="sales-header-title">Task Management</Title>
                     </div>
                     <Menu
                         theme="light"
@@ -676,41 +702,61 @@ export default function TaskManagement() {
                         style={{ borderBottom: 'none', lineHeight: '64px' }}
                     />
                 </Header>
-
+ 
                 <Content style={{ margin: '24px', overflow: 'auto' }}>
-                    <Card style={{ marginBottom: 24 }}>
-                        <Space wrap size="large">
-                            <div>
-                                <span style={{ marginRight: 8 }}>Filter by Staff:</span>
-                                <Select
-                                    placeholder="Select Staff"
-                                    allowClear
-                                    style={{ width: 220 }}
-                                    options={staffOptions}
-                                    value={staffFilter}
-                                    onChange={setStaffFilter}
-                                    showSearch
-                                    filterOption={(input, option) =>
-                                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                                    }
-                                />
-                            </div>
-                            <div>
-                                <span style={{ marginRight: 8 }}>Date Range:</span>
-                                <RangePicker
-                                    value={dateRange}
-                                    onChange={setDateRange}
-                                />
-                            </div>
-                        </Space>
+                    <Card className="sales-content-card" style={{ marginBottom: 24 }}>
+                        <div className="sales-filter-row" style={{ border: 'none', padding: 0, margin: 0 }}>
+                            <Space wrap size="large">
+                                <div>
+                                    <span style={{ marginRight: 8, fontWeight: 500 }}>Filter by Staff:</span>
+                                    <Select
+                                        placeholder="Select Staff"
+                                        allowClear
+                                        style={{ width: 220 }}
+                                        options={staffOptions}
+                                        value={staffFilter}
+                                        onChange={setStaffFilter}
+                                        showSearch
+                                        filterOption={(input, option) =>
+                                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <span style={{ marginRight: 8, fontWeight: 500 }}>Date Range:</span>
+                                    <RangePicker
+                                        value={dateRange}
+                                        onChange={setDateRange}
+                                    />
+                                </div>
+                                <div>
+                                    <span style={{ marginRight: 8, fontWeight: 500 }}>Status:</span>
+                                    <Select
+                                        placeholder="Select Status"
+                                        allowClear
+                                        style={{ width: 160 }}
+                                        value={statusFilter}
+                                        onChange={setStatusFilter}
+                                        options={[
+                                            { label: 'DONE', value: 'DONE' },
+                                            { label: 'SCHEDULE', value: 'SCHEDULE' },
+                                            { label: 'IN PROGRESS', value: 'IN_PROGRESS' },
+                                            ...(activeTab !== 'meetings' ? [{ label: 'REVIEW', value: 'REVIEW' }] : []),
+                                            { label: 'CLOSED', value: 'CLOSED' },
+                                        ]}
+                                    />
+                                </div>
+                            </Space>
+                        </div>
                     </Card>
-
-                    <Tabs defaultActiveKey="activities" type="card">
+ 
+                    <Tabs className="sales-tabs" defaultActiveKey="activities" onChange={setActiveTab}>
                         <Tabs.TabPane tab="Activities" key="activities">
                             <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-                                <Button type="primary" onClick={() => setIsActivityModalVisible(true)}>Create Activity</Button>
+                                <Button type="primary" shape="round" onClick={() => setIsActivityModalVisible(true)}>Create Activity</Button>
                             </div>
                             <Table
+                                className="sales-table"
                                 loading={loading}
                                 dataSource={filterData(activities, 'date', 'userId')}
                                 columns={activityColumns}
@@ -720,9 +766,10 @@ export default function TaskManagement() {
                         </Tabs.TabPane>
                         <Tabs.TabPane tab="Meetings" key="meetings">
                             <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-                                <Button type="primary" onClick={() => setIsMeetingModalVisible(true)}>Create Meeting</Button>
+                                <Button type="primary" shape="round" onClick={() => setIsMeetingModalVisible(true)}>Create Meeting</Button>
                             </div>
                             <Table
+                                className="sales-table"
                                 loading={loading}
                                 dataSource={filterData(meetings, 'scheduledAt', 'createdBy')}
                                 columns={meetingColumns}
@@ -738,13 +785,14 @@ export default function TaskManagement() {
                                         value={ticketSearchId}
                                         onChange={e => setTicketSearchId(e.target.value)}
                                         onPressEnter={handleTicketSearch}
-                                        style={{ width: 250 }}
+                                        style={{ width: 250, borderRadius: 8 }}
                                     />
-                                    <Button type="primary" onClick={handleTicketSearch} icon={<SearchOutlined />}>Search History</Button>
+                                    <Button type="primary" shape="round" onClick={handleTicketSearch} icon={<SearchOutlined />}>Search History</Button>
                                 </Space>
-                                <Button type="primary" onClick={() => setIsTicketModalVisible(true)}>Create Ticket</Button>
+                                <Button type="primary" shape="round" onClick={() => setIsTicketModalVisible(true)}>Create Ticket</Button>
                             </div>
                             <Table
+                                className="sales-table"
                                 loading={loading}
                                 dataSource={filterData(tickets, 'createdAt', 'allocatedTo')}
                                 columns={ticketColumns}
@@ -755,6 +803,7 @@ export default function TaskManagement() {
                         {(JSON.parse(sessionStorage.getItem('impersonate_user') || localStorage.getItem('user'))?.role === 'admin' || JSON.parse(localStorage.getItem('user'))?.role === 'superadmin') && (
                             <Tabs.TabPane tab="Observers" key="observers">
                                 <Table
+                                    className="sales-table"
                                     loading={loading}
                                     dataSource={observers}
                                     columns={observerColumns}
@@ -765,6 +814,7 @@ export default function TaskManagement() {
                     </Tabs>
 
                     <Modal
+                        className="sales-modal"
                         title={`Assign Staff to ${selectedObserver?.name || selectedObserver?.profile?.name || 'Observer'}`}
                         visible={isAssignModalVisible}
                         onOk={handleSaveAssignments}
@@ -772,9 +822,7 @@ export default function TaskManagement() {
                         width={600}
                         destroyOnClose
                     >
-                        <div style={{ marginBottom: 16 }}>
-                            <Typography.Text strong>Select Staff to Manage:</Typography.Text>
-                        </div>
+                        <label className="modal-field-label">Select Staff to Manage:</label>
                         <Select
                             mode="multiple"
                             style={{ width: '100%' }}
@@ -792,6 +840,7 @@ export default function TaskManagement() {
                     </Modal>
 
                     <Modal
+                        className="sales-modal"
                         title={isTicketEditMode ? "Edit Ticket" : "Create New Ticket"}
                         visible={isTicketModalVisible}
                         onOk={handleCreateTicket}
@@ -813,7 +862,7 @@ export default function TaskManagement() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div style={{ display: 'flex', gap: '16px' }}>
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ marginBottom: 8 }}>Ticket ID (Mandatory & Unique):</div>
+                                    <label className="modal-field-label">Ticket ID (Mandatory & Unique):</label>
                                     <Input
                                         value={newTicket.ticketId}
                                         onChange={e => setNewTicket({ ...newTicket, ticketId: e.target.value })}
@@ -821,7 +870,7 @@ export default function TaskManagement() {
                                     />
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ marginBottom: 8 }}>Title:</div>
+                                    <label className="modal-field-label">Title:</label>
                                     <Input
                                         value={newTicket.title}
                                         onChange={e => setNewTicket({ ...newTicket, title: e.target.value })}
@@ -830,7 +879,7 @@ export default function TaskManagement() {
                                 </div>
                             </div>
                             <div>
-                                <div style={{ marginBottom: 8 }}>Attachment:</div>
+                                <label className="modal-field-label">Attachment:</label>
                                 {!newTicket.attachment ? (
                                     <Input 
                                         type="file" 
@@ -859,7 +908,7 @@ export default function TaskManagement() {
                                 {isTicketEditMode && !newTicket.attachment && <div style={{ fontSize: '12px', color: '#888', marginTop: 4 }}>Leave blank to keep existing file</div>}
                             </div>
                             <div>
-                                <div style={{ marginBottom: 8 }}>Description:</div>
+                                <label className="modal-field-label">Description:</label>
                                 <Input.TextArea
                                     value={newTicket.description}
                                     onChange={e => setNewTicket({ ...newTicket, description: e.target.value })}
@@ -869,7 +918,7 @@ export default function TaskManagement() {
                             </div>
                             <div style={{ display: 'flex', gap: '16px' }}>
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ marginBottom: 8 }}>Assign To:</div>
+                                    <label className="modal-field-label">Assign To:</label>
                                     <Select
                                         style={{ width: '100%' }}
                                         placeholder="Select staff"
@@ -883,7 +932,7 @@ export default function TaskManagement() {
                                     />
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ marginBottom: 8 }}>Priority:</div>
+                                    <label className="modal-field-label">Priority:</label>
                                     <Select
                                         style={{ width: '100%' }}
                                         value={newTicket.priority}
@@ -897,7 +946,7 @@ export default function TaskManagement() {
                                 </div>
                             </div>
                             <div>
-                                <div style={{ marginBottom: 8 }}>Due Date:</div>
+                                <label className="modal-field-label">Due Date:</label>
                                 <DatePicker
                                     style={{ width: '100%' }}
                                     value={newTicket.dueDate}
@@ -908,6 +957,7 @@ export default function TaskManagement() {
                     </Modal>
 
                     <Modal
+                        className="sales-modal"
                         title={isActivityEditMode ? "Edit Activity" : "Create New Activity"}
                         visible={isActivityModalVisible}
                         onOk={handleCreateActivity}
@@ -920,7 +970,8 @@ export default function TaskManagement() {
                                 title: '',
                                 description: '',
                                 date: null,
-                                turnAroundTime: ''
+                                turnAroundTime: '',
+                                turnAroundDate: null
                             });
                         }}
                         okText={isActivityEditMode ? "Save" : "Create"}
@@ -928,7 +979,7 @@ export default function TaskManagement() {
                     >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div>
-                                <div style={{ marginBottom: 8 }}>Title:</div>
+                                <label className="modal-field-label">Title:</label>
                                 <Input
                                     value={newActivity.title}
                                     onChange={e => setNewActivity({ ...newActivity, title: e.target.value })}
@@ -936,7 +987,7 @@ export default function TaskManagement() {
                                 />
                             </div>
                             <div>
-                                <div style={{ marginBottom: 8 }}>Description:</div>
+                                <label className="modal-field-label">Description:</label>
                                 <Input.TextArea
                                     value={newActivity.description}
                                     onChange={e => setNewActivity({ ...newActivity, description: e.target.value })}
@@ -946,7 +997,7 @@ export default function TaskManagement() {
                             </div>
                             <div style={{ display: 'flex', gap: '16px' }}>
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ marginBottom: 8 }}>Assign To Staff:</div>
+                                    <label className="modal-field-label">Assign To Staff:</label>
                                     <Select
                                         style={{ width: '100%' }}
                                         placeholder="Select staff"
@@ -960,7 +1011,7 @@ export default function TaskManagement() {
                                     />
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ marginBottom: 8 }}>Date:</div>
+                                    <label className="modal-field-label">Date:</label>
                                     <DatePicker
                                         style={{ width: '100%' }}
                                         value={newActivity.date}
@@ -968,20 +1019,32 @@ export default function TaskManagement() {
                                     />
                                 </div>
                             </div>
-                            <div>
-                                <div style={{ marginBottom: 8 }}>Turn Around Time (Target Time):</div>
-                                <TimePicker
-                                    style={{ width: '100%' }}
-                                    value={newActivity.turnAroundTime ? dayjs(newActivity.turnAroundTime, 'HH:mm') : null}
-                                    onChange={val => setNewActivity({ ...newActivity, turnAroundTime: val })}
-                                    format="HH:mm"
-                                    placeholder="Select time"
-                                />
+                            <div style={{ display: 'flex', gap: '16px' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label className="modal-field-label">Turn Around Date:</label>
+                                    <DatePicker
+                                        style={{ width: '100%' }}
+                                        value={newActivity.turnAroundDate}
+                                        onChange={val => setNewActivity({ ...newActivity, turnAroundDate: val })}
+                                        placeholder="Deadline Date"
+                                    />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <label className="modal-field-label">Turn Around Time:</label>
+                                    <TimePicker
+                                        style={{ width: '100%' }}
+                                        value={newActivity.turnAroundTime ? dayjs(newActivity.turnAroundTime, 'HH:mm') : null}
+                                        onChange={val => setNewActivity({ ...newActivity, turnAroundTime: val })}
+                                        format="HH:mm"
+                                        placeholder="Deadline Time"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </Modal>
 
                     <Modal
+                        className="sales-modal"
                         title={isMeetingEditMode ? "Edit Meeting" : "Create New Meeting"}
                         open={isMeetingModalVisible}
                         onOk={handleCreateMeeting}
@@ -997,7 +1060,7 @@ export default function TaskManagement() {
                     >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div>
-                                <div style={{ marginBottom: 8 }}>Title:</div>
+                                <label className="modal-field-label">Title:</label>
                                 <Input
                                     value={newMeeting.title}
                                     onChange={e => setNewMeeting({ ...newMeeting, title: e.target.value })}
@@ -1005,7 +1068,7 @@ export default function TaskManagement() {
                                 />
                             </div>
                             <div>
-                                <div style={{ marginBottom: 8 }}>Description:</div>
+                                <label className="modal-field-label">Description:</label>
                                 <Input.TextArea
                                     value={newMeeting.description}
                                     onChange={e => setNewMeeting({ ...newMeeting, description: e.target.value })}
@@ -1014,7 +1077,7 @@ export default function TaskManagement() {
                                 />
                             </div>
                             <div>
-                                <div style={{ marginBottom: 8 }}>Google Meet Link *:</div>
+                                <label className="modal-field-label">Google Meet Link *:</label>
                                 <Input
                                     value={newMeeting.meetLink}
                                     onChange={e => setNewMeeting({ ...newMeeting, meetLink: e.target.value })}
@@ -1023,7 +1086,7 @@ export default function TaskManagement() {
                             </div>
                             <div style={{ display: 'flex', gap: '16px' }}>
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ marginBottom: 8 }}>Scheduled Time:</div>
+                                    <label className="modal-field-label">Scheduled Time:</label>
                                     <DatePicker
                                         showTime
                                         style={{ width: '100%' }}
@@ -1033,7 +1096,7 @@ export default function TaskManagement() {
                                     />
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ marginBottom: 8 }}>Attendees:</div>
+                                    <label className="modal-field-label">Attendees:</label>
                                     <Select
                                         mode="multiple"
                                         style={{ width: '100%' }}
@@ -1052,6 +1115,7 @@ export default function TaskManagement() {
 
             {/* History Modal */}
             <Modal
+                className="sales-modal"
                 title={`${historyType} History`}
                 open={isHistoryModalVisible}
                 onCancel={() => setIsHistoryModalVisible(false)}

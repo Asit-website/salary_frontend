@@ -17,6 +17,16 @@ const Login = () => {
   const inputsRef = useRef([]);
   const navigate = useNavigate();
 
+  // Clear any existing session token/cookie on login mount (Failsafe for logout)
+  useEffect(() => {
+    const clearSession = async () => {
+      try {
+        await api.post('/auth/logout');
+      } catch (_) {}
+    };
+    clearSession();
+  }, []);
+
   // countdown for resend
   useEffect(() => {
     if (!counter) return;
@@ -25,6 +35,7 @@ const Login = () => {
   }, [counter]);
 
   const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
+  const getErrorMessage = (error, fallback) => error?.response?.data?.message || fallback;
 
   const sendOtp = async () => {
     const ph = normalizePhone(phone);
@@ -44,7 +55,7 @@ const Login = () => {
         message.error(res.data?.message || 'Failed to send OTP');
       }
     } catch (e) {
-      message.error('Failed to send OTP');
+      message.error(getErrorMessage(e, 'Failed to send OTP'));
     } finally {
       setSending(false);
     }
@@ -198,7 +209,7 @@ const Login = () => {
                         style={{ height: 52, borderRadius: 12, border: '1px solid #d0d5dd' }}
                       />
                     </Form.Item>
-                    <Form.Item style={{ marginTop: 32 }}>
+                    <Form.Item style={{ marginTop: 32, marginBottom: 0 }}>
                       <Button 
                         type="primary" 
                         htmlType="submit" 
@@ -217,6 +228,18 @@ const Login = () => {
                         Continue
                       </Button>
                     </Form.Item>
+                    
+                    <div style={{ textAlign: 'center', marginTop: 24 }}>
+                      <Text type="secondary" style={{ fontSize: 15 }}>
+                        Don't have an account? {' '}
+                        <span 
+                          onClick={() => navigate('/signup-admin')} 
+                          style={{ color: '#2463EB', fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          Sign up
+                        </span>
+                      </Text>
+                    </div>
                   </Form>
                 </div>
               )}
@@ -328,7 +351,7 @@ const Login = () => {
 
               <div style={{ marginTop: 64, textAlign: 'center' }}>
                 <Text type="secondary" style={{ fontSize: 14, color: '#667085' }}>
-                  By continuing you agree to our <a href="/terms" style={{ color: '#2463EB', fontWeight: 600 }}>Terms & Privacy Policy</a>
+                  By continuing you agree to our <a href="https://vetansutra.com/policy.html" target="_blank" rel="noopener noreferrer" style={{ color: '#2463EB', fontWeight: 600 }}>Privacy Policy</a>
                 </Text>
               </div>
             </div>

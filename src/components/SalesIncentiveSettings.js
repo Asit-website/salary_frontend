@@ -16,27 +16,32 @@ import {
     Typography,
     Tabs,
     Popconfirm,
-    Menu,
 } from 'antd';
 import {
+    ArrowLeftOutlined,
     PlusOutlined,
     EditOutlined,
     DeleteOutlined,
-    LogoutOutlined,
     SettingOutlined,
     UserOutlined,
-    ClockCircleOutlined,
+    SearchOutlined,
+    ReloadOutlined,
+    TrophyOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import api from '../api';
 
-const { Header, Content } = Layout;
-const { Title, Text } = Typography;
+const { Content } = Layout;
+const { Text } = Typography;
 const { Option } = Select;
+const { Search } = Input;
 
 export default function SalesIncentiveSettings() {
     const navigate = useNavigate();
+    const [collapsed, setCollapsed] = useState(false);
+    const [activeTab, setActiveTab] = useState('rules');
     const [rules, setRules] = useState([]);
     const [staff, setStaff] = useState([]);
     const [approvals, setApprovals] = useState([]);
@@ -53,6 +58,9 @@ export default function SalesIncentiveSettings() {
     const [bulkAssignForm] = Form.useForm();
     const [bulkAssignModalOpen, setBulkAssignModalOpen] = useState(false);
     const [ruleType, setRuleType] = useState('fixed');
+    const [ruleSearch, setRuleSearch] = useState('');
+    const [ruleStatusFilter, setRuleStatusFilter] = useState('all');
+    const [staffSearch, setStaffSearch] = useState('');
 
     const loadRules = async () => {
         try {
@@ -96,11 +104,23 @@ export default function SalesIncentiveSettings() {
         loadApprovals();
     }, []);
 
-    const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/');
-    };
+    const filteredRules = rules.filter((rule) => {
+        const matchesSearch = !ruleSearch || String(rule.name || '').toLowerCase().includes(ruleSearch.toLowerCase());
+        const matchesStatus =
+            ruleStatusFilter === 'all' ||
+            (ruleStatusFilter === 'active' && rule.active !== false) ||
+            (ruleStatusFilter === 'inactive' && rule.active === false);
+        return matchesSearch && matchesStatus;
+    });
+
+    const filteredStaff = staff.filter((row) => {
+        const text = `${row.name || ''} ${row.phone || ''}`.toLowerCase();
+        return !staffSearch || text.includes(staffSearch.toLowerCase());
+    });
+
+    const activeRules = rules.filter((r) => r.active !== false).length;
+    const inactiveRules = rules.length - activeRules;
+    const assignedStaff = staff.filter((s) => (s.assignedRules || []).length > 0).length;
 
     const openCreateRule = () => {
         setEditingRule(null);
@@ -225,14 +245,29 @@ export default function SalesIncentiveSettings() {
     };
 
     const ruleColumns = [
-        { title: 'Rule Name', dataIndex: 'name', key: 'name' },
+        {
+            title: 'Rule Name',
+            dataIndex: 'name',
+            key: 'name',
+            render: (name, row) => (
+                <Space>
+                    <div style={{ width: 38, height: 38, borderRadius: 10, background: '#eef5ff', color: '#1677ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <TrophyOutlined />
+                    </div>
+                    <div>
+                        <div style={{ fontWeight: 700, color: '#1f2937' }}>{name}</div>
+                        <Text type="secondary" style={{ fontSize: 12 }}>{row.ruleType || 'fixed'}</Text>
+                    </div>
+                </Space>
+            )
+        },
         {
             title: 'Type',
             dataIndex: 'ruleType',
             key: 'ruleType',
             render: (t) => {
                 const labels = { fixed: 'Fixed Amount', value_slab: 'Value Slabs', unit_slab: 'Unit Slabs' };
-                return labels[t] || t;
+                return <Tag color="blue">{labels[t] || t}</Tag>;
             },
         },
         {
@@ -246,7 +281,7 @@ export default function SalesIncentiveSettings() {
             key: 'actions',
             render: (_, row) => (
                 <Space>
-                    <Button icon={<EditOutlined />} onClick={() => openEditRule(row)}>Edit</Button>
+                    <Button size="small" icon={<EditOutlined />} onClick={() => openEditRule(row)}>Edit</Button>
                     <Popconfirm
                         title="Delete Rule"
                         description="Are you sure you want to delete this rule?"
@@ -254,7 +289,7 @@ export default function SalesIncentiveSettings() {
                         okText="Yes"
                         cancelText="No"
                     >
-                        <Button danger icon={<DeleteOutlined />}>Delete</Button>
+                        <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
                     </Popconfirm>
                 </Space>
             ),
@@ -337,7 +372,17 @@ export default function SalesIncentiveSettings() {
     ];
 
     const staffColumns = [
-        { title: 'Staff Name', dataIndex: 'name', key: 'name' },
+        {
+            title: 'Staff Name',
+            dataIndex: 'name',
+            key: 'name',
+            render: (name, row) => (
+                <div>
+                    <div style={{ fontWeight: 700 }}>{name || row.phone || 'Unknown'}</div>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{row.phone || '-'}</Text>
+                </div>
+            )
+        },
         { title: 'Phone', dataIndex: 'phone', key: 'phone' },
         {
             title: 'Assigned Rules',
@@ -356,7 +401,7 @@ export default function SalesIncentiveSettings() {
             title: 'Actions',
             key: 'actions',
             render: (_, row) => (
-                <Button icon={<UserOutlined />} onClick={() => openAssign(row)}>Assign Rules</Button>
+                <Button size="small" icon={<UserOutlined />} onClick={() => openAssign(row)}>Assign Rules</Button>
             ),
         },
     ];
@@ -462,51 +507,121 @@ export default function SalesIncentiveSettings() {
 
     return (
         <Layout style={{ minHeight: '100vh' }}>
-            <Sidebar />
-            <Layout style={{ marginLeft: 200, background: '#f5f7fb' }}>
-                <Header style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Title level={4} style={{ margin: 0 }}>Sales Incentive Settings</Title>
-                    <Menu
-                        theme="light"
-                        mode="horizontal"
-                        items={[{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout }]}
-                        style={{ borderRight: 'none', backgroundColor: 'transparent' }}
-                    />
-                </Header>
-                <Content style={{ padding: 24 }}>
-                    <Card style={{ borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                        <Tabs defaultActiveKey="rules">
-                            <Tabs.TabPane tab={<span><SettingOutlined />Incentive Rules</span>} key="rules">
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-                                    <Button type="primary" icon={<PlusOutlined />} onClick={openCreateRule}>
-                                        Add Rule
-                                    </Button>
-                                </div>
-                                <Table
-                                    dataSource={rules}
-                                    columns={ruleColumns}
-                                    rowKey="id"
-                                    loading={loadingRules}
-                                    pagination={{ pageSize: 10 }}
-                                />
-                            </Tabs.TabPane>
+            <Sidebar collapsed={collapsed} />
+            <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
+                <MainHeader
+                    collapsed={collapsed}
+                    setCollapsed={setCollapsed}
+                    title="Sales Incentive Settings"
+                />
+                <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Button
+                                type="text"
+                                icon={<ArrowLeftOutlined />}
+                                onClick={() => navigate('/settings')}
+                                style={{ fontWeight: 600, color: '#475569' }}
+                            >
+                                Back to Settings
+                            </Button>
+                        </div>
 
-                            <Tabs.TabPane tab={<span><UserOutlined />Staff Assignments</span>} key="assignments">
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-                                    <Button type="primary" ghost icon={<UserOutlined />} onClick={openBulkAssign}>
-                                        Assign to All Staff
-                                    </Button>
-                                </div>
-                                <Table
-                                    dataSource={staff}
-                                    columns={staffColumns}
-                                    rowKey="id"
-                                    loading={loadingStaff}
-                                    pagination={{ pageSize: 15 }}
-                                />
-                            </Tabs.TabPane>
-                        </Tabs>
-                    </Card>
+                        <Card
+                            className="sales-content-card"
+                            style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}
+                            bodyStyle={{ padding: 24 }}
+                        >
+                            <Tabs className="custom-tabs" activeKey={activeTab} onChange={setActiveTab}>
+                                <Tabs.TabPane
+                                    tab={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}><SettingOutlined /> Incentive Rules</span>}
+                                    key="rules"
+                                >
+                                    <div style={{ paddingTop: 16 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+                                            <div>
+                                                <div style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>Incentive Rules</div>
+                                                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                                                    {activeRules} active, {inactiveRules} inactive. Configure fixed and slab-based sales incentive templates.
+                                                </div>
+                                            </div>
+                                            <Space wrap>
+                                                <Search
+                                                    placeholder="Search rules"
+                                                    allowClear
+                                                    value={ruleSearch}
+                                                    onChange={(e) => setRuleSearch(e.target.value)}
+                                                    onSearch={setRuleSearch}
+                                                    prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                                                    style={{ width: 220 }}
+                                                />
+                                                <Select value={ruleStatusFilter} onChange={setRuleStatusFilter} style={{ width: 140 }}>
+                                                    <Option value="all">All Status</Option>
+                                                    <Option value="active">Active</Option>
+                                                    <Option value="inactive">Inactive</Option>
+                                                </Select>
+                                                <Button icon={<ReloadOutlined />} onClick={() => { setRuleSearch(''); setRuleStatusFilter('all'); loadRules(); }}>
+                                                    Reset
+                                                </Button>
+                                                <Button type="primary" icon={<PlusOutlined />} onClick={openCreateRule}>
+                                                    Add Rule
+                                                </Button>
+                                            </Space>
+                                        </div>
+                                        <Table
+                                            columns={ruleColumns}
+                                            dataSource={filteredRules}
+                                            rowKey="id"
+                                            loading={loadingRules}
+                                            pagination={{ pageSize: 10, showTotal: (total) => `Total ${total} rules` }}
+                                            scroll={{ x: 900 }}
+                                        />
+                                    </div>
+                                </Tabs.TabPane>
+
+                                <Tabs.TabPane
+                                    tab={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}><UserOutlined /> Staff Assignments</span>}
+                                    key="assignments"
+                                >
+                                    <div style={{ paddingTop: 16 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+                                            <div>
+                                                <div style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>Staff Assignments</div>
+                                                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                                                    {assignedStaff} staff members currently have one or more incentive rules assigned.
+                                                </div>
+                                            </div>
+                                            <Space wrap>
+                                                <Search
+                                                    placeholder="Search staff"
+                                                    allowClear
+                                                    value={staffSearch}
+                                                    onChange={(e) => setStaffSearch(e.target.value)}
+                                                    onSearch={setStaffSearch}
+                                                    prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                                                    style={{ width: 220 }}
+                                                />
+                                                <Button icon={<ReloadOutlined />} onClick={() => { setStaffSearch(''); loadStaff(); }}>
+                                                    Reset
+                                                </Button>
+                                                <Button type="primary" ghost icon={<UserOutlined />} onClick={openBulkAssign}>
+                                                    Assign to All Staff
+                                                </Button>
+                                            </Space>
+                                        </div>
+                                        <Table
+                                            columns={staffColumns}
+                                            dataSource={filteredStaff}
+                                            rowKey="id"
+                                            loading={loadingStaff}
+                                            pagination={{ pageSize: 15, showTotal: (total) => `Total ${total} staff` }}
+                                            scroll={{ x: 900 }}
+                                        />
+                                    </div>
+                                </Tabs.TabPane>
+                            </Tabs>
+                        </Card>
+                    </Space>
                 </Content>
             </Layout>
 

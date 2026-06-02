@@ -72,14 +72,18 @@ import Recruitment from './components/Recruitment';
 import CommunityFeed from './components/CommunityFeed';
 import SuperadminLeads from './components/SuperadminLeads';
 import SuperadminStaff from './components/SuperadminStaff';
+import QrAttendanceSettings from './components/QrAttendanceSettings';
+import InactivityHandler from './components/InactivityHandler';
+import SessionSettings from './components/SessionSettings';
 
 
 const { Content } = Layout;
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Login />} />
+    <InactivityHandler>
+      <Routes>
+        <Route path="/" element={<Login />} />
       <Route path="/home" element={<Home />} />
       <Route path="/signup-admin" element={<SignupAdmin />} />
       <Route path="/impersonate" element={<ImpersonateRedirect />} />
@@ -113,6 +117,7 @@ function App() {
       <Route path="/settings/salary-calculation" element={<PrivateRoute><SalaryCalculationLogic /></PrivateRoute>} />
       <Route path="/settings/salary-access" element={<PrivateRoute><SalaryDetailsAccess /></PrivateRoute>} />
       <Route path="/settings/geofence" element={<PrivateRoute><GeofenceSettings /></PrivateRoute>} />
+      <Route path="/settings/qr-attendance" element={<PrivateRoute><QrAttendanceSettings /></PrivateRoute>} />
       <Route path="/sales" element={<PrivateRoute><Sales /></PrivateRoute>} />
       <Route path="/org-reports" element={<PrivateRoute><OrgReports /></PrivateRoute>} />
       <Route path="/assets-management" element={<PrivateRoute><AssetsManagement /></PrivateRoute>} />
@@ -139,6 +144,7 @@ function App() {
       <Route path="/settings/order-products" element={<PrivateRoute><OrderProductsSettings /></PrivateRoute>} />
       <Route path="/settings/sales-incentives" element={<PrivateRoute><SalesIncentiveSettings /></PrivateRoute>} />
       <Route path="/settings/device-management" element={<PrivateRoute><DeviceManagementSettings /></PrivateRoute>} />
+      <Route path="/settings/sessions" element={<PrivateRoute><SessionSettings /></PrivateRoute>} />
       <Route path="/settings/automation-rules" element={<PrivateRoute><AutomationRules /></PrivateRoute>} />
       <Route path="/settings/overtime-rules" element={<PrivateRoute><OvertimeAutomation /></PrivateRoute>} />
       <Route path="/settings/early-exit-rules" element={<PrivateRoute><EarlyExitAutomation /></PrivateRoute>} />
@@ -156,6 +162,7 @@ function App() {
       <Route path="/community-feed" element={<PrivateRoute><CommunityFeed /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" />} />
     </Routes>
+    </InactivityHandler>
   );
 }
 

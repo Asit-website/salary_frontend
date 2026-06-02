@@ -1,45 +1,95 @@
-import React, { useEffect, useState, Fragment } from 'react';
+import React, { useEffect, useState, useMemo, Fragment } from 'react';
 import { Layout, Card, Row, Col, Button, Input, Typography, Space, Tag, Modal, Form, Select, TimePicker, InputNumber, DatePicker, message } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined, MoreOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, PlusOutlined, MoreOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import api from '../api';
+import { useNavigate } from 'react-router-dom';
 
-const { Header, Content } = Layout;
+
+const { Content } = Layout;
 const { Title, Text } = Typography;
 
 function timeFromStr(v) { return v ? dayjs(v, 'HH:mm:ss') : null; }
 function toHHmmss(v) { return v ? dayjs(v).format('HH:mm:ss') : null; }
 
-const TemplateCard = ({ tpl, onEdit, onAssign }) => (
-  <Card bordered hoverable>
-    <Space direction="vertical" size={4} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text strong>{tpl.name}</Text>
-        <Space>
-          <Tag color={tpl.shiftType === 'open' ? 'blue' : 'green'}>{(tpl.shiftType || '').toUpperCase()}</Tag>
-          {/* <Button size="small" onClick={() => onAssign?.(tpl)}>Assign</Button> */}
-          <Button size="small" icon={<MoreOutlined />} onClick={() => onEdit?.(tpl)} />
-        </Space>
+const TemplateCard = ({ tpl, onEdit, onAssign }) => {
+  const typeColor = tpl.shiftType === 'open' ? '#722ed1' : '#52c41a';
+  return (
+    <Card 
+      className="sales-content-card" 
+      style={{ height: '100%', borderRadius: '12px' }}
+      bodyStyle={{ padding: '20px' }}
+      hoverable
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <div>
+            <div style={{ fontWeight: '700', fontSize: '15px', color: '#1e293b', textTransform: 'capitalize' }}>{tpl.name}</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px', fontWeight: '500' }}>Code: {tpl.code || '—'}</div>
+          </div>
+          <Space size={8}>
+            <span style={{ 
+                padding: '4px 10px', 
+                borderRadius: '20px', 
+                fontSize: '10px', 
+                fontWeight: '700', 
+                color: typeColor, 
+                backgroundColor: `${typeColor}12`, 
+                border: `1px solid ${typeColor}30`,
+                letterSpacing: '0.5px'
+            }}>
+              {(tpl.shiftType || 'fixed').toUpperCase()}
+            </span>
+            <Button 
+              size="small" 
+              shape="circle" 
+              icon={<MoreOutlined style={{ fontSize: '13px' }} />} 
+              onClick={() => onEdit?.(tpl)} 
+            />
+          </Space>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#f8fafc', padding: '12px 14px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+            <span style={{ color: '#64748b', fontWeight: '500' }}>Shift Timing</span>
+            <span style={{ color: '#1e293b', fontWeight: '600' }}>
+              {tpl.shiftType === 'open' ? (
+                <>Duration: {tpl.workMinutes || 0} mins</>
+              ) : (
+                <>{tpl.startTime || '--:--'} - {tpl.endTime || '--:--'}</>
+              )}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+            <span style={{ color: '#64748b', fontWeight: '500' }}>Buffer Allowed</span>
+            <span style={{ color: '#1e293b', fontWeight: '600' }}>{tpl.bufferMinutes || 0} mins</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+            <span style={{ color: '#64748b', fontWeight: '500' }}>Breaks Included</span>
+            <span style={{ color: '#1e293b', fontWeight: '600' }}>{(tpl.breaks || []).length} breaks</span>
+          </div>
+        </div>
       </div>
-      <Text type="secondary" style={{ fontSize: 12 }}>
-        {tpl.shiftType === 'open' ? (
-          <>Duration: {tpl.workMinutes || 0} mins</>
-        ) : (
-          <>Time: {tpl.startTime || '--:--'} - {tpl.endTime || '--:--'}</>
-        )}
-      </Text>
-      <Text type="secondary" style={{ fontSize: 12 }}>Buffer: {tpl.bufferMinutes || 0} mins</Text>
-      <Text type="secondary" style={{ fontSize: 12 }}>Breaks: {(tpl.breaks || []).length}</Text>
-    </Space>
-  </Card>
-);
+    </Card>
+  );
+};
 
 export default function ShiftSettings() {
+  const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
+  const [search, setSearch] = useState('');
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm();
+
+  const filteredList = useMemo(() => {
+    const q = (search || '').trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(t => (t.name || '').toLowerCase().includes(q) || (t.code || '').toLowerCase().includes(q));
+  }, [list, search]);
   const [editing, setEditing] = useState(null);
   const [assignOpen, setAssignOpen] = useState(false);
   const [assigningTpl, setAssigningTpl] = useState(null);
@@ -194,28 +244,59 @@ export default function ShiftSettings() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sidebar />
-      <Layout style={{ marginLeft: 200, background: '#f5f7fb' }}>
-        <Header style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => window.history.back()} />
-            <Title level={4} style={{ margin: 0, lineHeight: 1 }}>Shift Settings</Title>
-          </div>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>New Template</Button>
-        </Header>
-        <Content style={{ padding: 24 }}>
-          <Card bodyStyle={{ padding: 12 }} style={{ marginBottom: 16 }}>
-            <Space>
-              <Input.Search placeholder="Search templates..." allowClear style={{ width: 280 }} />
-            </Space>
-          </Card>
-          <Row gutter={[16, 16]}>
-            {(list || []).map((t) => (
-              <Col key={t.id} xs={24} sm={12} lg={8}>
-                <TemplateCard tpl={t} onEdit={openEdit} onAssign={openAssign} />
-              </Col>
-            ))}
-          </Row>
+      <Sidebar collapsed={collapsed} />
+      <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden', transition: 'margin-left 0.2s' }}>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Shift Settings" 
+        />
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            {/* Toolbar Row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Button 
+                type="text" 
+                icon={<ArrowLeftOutlined />} 
+                onClick={() => navigate('/settings')}
+                style={{ fontWeight: 600, color: '#475569' }}
+                shape="round"
+              >
+                Back to Settings
+              </Button>
+            </div>
+
+            {/* Elegant Search and Create Row */}
+            <Card className="sales-content-card" bodyStyle={{ padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                <Input 
+                  prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                  placeholder="Search templates..." 
+                  allowClear 
+                  style={{ width: 280, borderRadius: '20px' }} 
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <Button 
+                  type="primary" 
+                  shape="round" 
+                  icon={<PlusOutlined />} 
+                  onClick={openCreate}
+                  style={{ boxShadow: '0 2px 6px rgba(22, 119, 255, 0.15)' }}
+                >
+                  New Template
+                </Button>
+              </div>
+            </Card>
+
+            <Row gutter={[16, 16]}>
+              {(filteredList || []).map((t) => (
+                <Col key={t.id} xs={24} sm={12} lg={8}>
+                  <TemplateCard tpl={t} onEdit={openEdit} onAssign={openAssign} />
+                </Col>
+              ))}
+            </Row>
+          </Space>
         </Content>
 
         <Modal
@@ -265,15 +346,6 @@ export default function ShiftSettings() {
                         dependencies={['startTime']}
                         rules={[
                           { required: true, message: 'Please select end time' },
-                          ({ getFieldValue }) => ({
-                            validator(_, value) {
-                              const start = getFieldValue('startTime');
-                              if (!value || !start || value.isAfter(start)) {
-                                return Promise.resolve();
-                              }
-                              return Promise.reject(new Error('shift end not be few than start'));
-                            },
-                          }),
                         ]}
                       >
                         <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />

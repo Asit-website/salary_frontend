@@ -1,13 +1,13 @@
-// Updated Late Penalty UI Imports
-import { Layout, Typography, Card, Space, Switch, InputNumber, Button, message, Breadcrumb, Input, Divider } from 'antd';
-import { ThunderboltOutlined, HomeOutlined, DeleteOutlined, PlusOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { Layout, Typography, Card, Space, Switch, Button, message, Input, Row, Col } from 'antd';
+import { ArrowLeftOutlined, ClockCircleOutlined, ThunderboltOutlined, ApiOutlined, WarningOutlined, CoffeeOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import React, { useState, useEffect, Fragment } from 'react';
+import MainHeader from './MainHeader';
+import React, { useState, useEffect } from 'react';
 import api from '../api';
 
-const { Header, Content } = Layout;
-const { Title, Text } = Typography;
+const { Content } = Layout;
+const { Text } = Typography;
 
 export default function AutomationRules() {
     const navigate = useNavigate();
@@ -15,23 +15,12 @@ export default function AutomationRules() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    const DEFAULT_TIERS = [
-        { id: 1, minMinutes: 1, maxMinutes: 20, deduction: 0.5, frequency: 5 },
-        { id: 2, minMinutes: 21, maxMinutes: 60, deduction: 0.5, frequency: 2 },
-        { id: 3, minMinutes: 61, maxMinutes: 150, deduction: 0.5, frequency: 1 },
-        { id: 4, minMinutes: 151, maxMinutes: 9999, deduction: 1.0, frequency: 1 }
-    ];
-
-    const [latePenalty, setLatePenalty] = useState({
-        active: false,
-        tiers: DEFAULT_TIERS
-    });
-
     const [zktecoConfig, setZktecoConfig] = useState({
         active: false,
         url: 'http://15.206.144.225:8081/',
         username: 'admin',
-        password: ''
+        password: '',
+        // companyId: ''
     });
 
     useEffect(() => {
@@ -45,20 +34,6 @@ export default function AutomationRules() {
             if (resp.data?.success) {
                 const rules = resp.data.rules || [];
 
-                // Penalty Rule
-                const penaltyRule = rules.find(r => r.key === 'late_punchin_penalty');
-                if (penaltyRule) {
-                    let config = penaltyRule.config;
-                    if (typeof config === 'string') {
-                        try { config = JSON.parse(config); } catch (e) { config = {}; }
-                    }
-                    setLatePenalty({
-                        active: penaltyRule.active,
-                        tiers: Array.isArray(config.tiers) && config.tiers.length > 0 ? config.tiers : DEFAULT_TIERS
-                    });
-                }
-
-                // ZKTeco Rule
                 const zktecoRule = rules.find(r => r.key === 'zkteco_integration');
                 if (zktecoRule) {
                     let config = zktecoRule.config;
@@ -69,7 +44,8 @@ export default function AutomationRules() {
                         active: zktecoRule.active,
                         url: config.url || 'http://15.206.144.225:8081/',
                         username: config.username || 'admin',
-                        password: config.password || ''
+                        password: config.password || '',
+                        // companyId: config.companyId || ''
                     });
                 }
             }
@@ -102,345 +78,251 @@ export default function AutomationRules() {
         }
     };
 
+    const automationSections = [
+        {
+            title: 'Late Punch-In Penalty',
+            description: 'Automatically deduct absent days from payroll based on repeated late punch-ins.',
+            calloutTitle: 'Assignment-Based Rules Available',
+            calloutText: 'Create flexible late penalty rules and assign them to specific staff members.',
+            buttonText: 'Manage Per-User Penalty Rules',
+            path: '/settings/late-punchin-rules',
+            icon: <ClockCircleOutlined />,
+            accent: '#1677ff'
+        },
+        {
+            title: 'Overtime Automation',
+            description: 'Automatically calculate and reward staff for working beyond their scheduled shift hours.',
+            calloutTitle: 'Flexible Overtime Rules',
+            calloutText: 'Create and assign specific overtime rules to your team members.',
+            buttonText: 'Manage Overtime Rules',
+            path: '/settings/overtime-rules',
+            icon: <ThunderboltOutlined />,
+            accent: '#722ed1'
+        },
+        {
+            title: 'Early Overtime Automation',
+            description: 'Set up rewards for staff members who start their work before the official shift start time.',
+            calloutTitle: 'Early Start Incentives',
+            calloutText: "Configure how early arrivals are compensated based on your organization's policies.",
+            buttonText: 'Manage Early Overtime',
+            path: '/settings/early-overtime-rules',
+            icon: <InfoCircleOutlined />,
+            accent: '#13c2c2'
+        },
+        {
+            title: 'Early Exit Automation',
+            description: 'Define deduction rules for employees who leave the workplace before their shift ends.',
+            calloutTitle: 'Early Departure Penalties',
+            calloutText: 'Set up automated deductions for staff who punch out before completing their shifts.',
+            buttonText: 'Manage Early Exit Rules',
+            path: '/settings/early-exit-rules',
+            icon: <WarningOutlined />,
+            accent: '#fa8c16'
+        },
+        {
+            title: 'Break Automation',
+            description: 'Monitor break durations and automatically apply penalties for exceeding allowed time limits.',
+            calloutTitle: 'Excessive Break Tracking',
+            calloutText: 'Automate deductions for breaks that exceed the defined limits for each staff member.',
+            buttonText: 'Manage Break Rules',
+            path: '/settings/break-rules',
+            icon: <CoffeeOutlined />,
+            accent: '#52c41a'
+        }
+    ];
+
+    const renderAutomationCard = (section) => (
+        <Card
+            key={section.title}
+            style={{
+                borderRadius: 14,
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)',
+                height: '100%'
+            }}
+            bodyStyle={{ padding: 20 }}
+        >
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <div style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 12,
+                        background: `${section.accent}14`,
+                        color: section.accent,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 18,
+                        flexShrink: 0
+                    }}>
+                        {section.icon}
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>{section.title}</div>
+                        <Text style={{ color: '#64748b', fontSize: 12 }}>{section.description}</Text>
+                    </div>
+                </div>
+
+                <div style={{
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 12,
+                    padding: 14
+                }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                        {section.calloutTitle}
+                    </div>
+                    <Text style={{ color: '#64748b', fontSize: 12 }}>{section.calloutText}</Text>
+                </div>
+
+                <Button
+                    type="primary"
+                    shape="round"
+                    icon={section.icon}
+                    onClick={() => navigate(section.path)}
+                    style={{ alignSelf: 'flex-start', boxShadow: '0 2px 6px rgba(22, 119, 255, 0.15)' }}
+                >
+                    {section.buttonText}
+                </Button>
+            </Space>
+        </Card>
+    );
+
     return (
         <Layout style={{ minHeight: '100vh' }}>
             <Sidebar collapsed={collapsed} />
-            <Layout style={{ marginLeft: collapsed ? 80 : 200, background: '#f5f7fb' }}>
-                <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center' }}>
-                    <Title level={4} style={{ margin: 0 }}>Automation Rules</Title>
-                </Header>
+            <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden', transition: 'margin-left 0.2s' }}>
+                <MainHeader
+                    collapsed={collapsed}
+                    setCollapsed={setCollapsed}
+                    title="Automation Rules"
+                />
 
-                <Content style={{ padding: '24px' }}>
-                    <Breadcrumb style={{ marginBottom: 16 }}>
-                        <Breadcrumb.Item onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
-                            <HomeOutlined />
-                        </Breadcrumb.Item>
-                        <Breadcrumb.Item onClick={() => navigate('/settings')} style={{ cursor: 'pointer' }}>Settings</Breadcrumb.Item>
-                        <Breadcrumb.Item>Automation Rules</Breadcrumb.Item>
-                    </Breadcrumb>
+                <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Button
+                                type="text"
+                                icon={<ArrowLeftOutlined />}
+                                onClick={() => navigate('/settings')}
+                                style={{ fontWeight: 600, color: '#475569' }}
+                                shape="round"
+                            >
+                                Back to Settings
+                            </Button>
+                        </div>
 
-                    <Space direction="vertical" size={24} style={{ width: '100%' }}>
                         <Card
-                            title={
-                                <Space>
-                                    <ThunderboltOutlined style={{ color: '#1677ff' }} />
-                                    <span>Late Punch-In Penalty</span>
-                                </Space>
-                            }
-                        // extra={
-                        //     <Switch
-                        //         checked={latePenalty.active}
-                        //         onChange={(checked) => setLatePenalty({ ...latePenalty, active: checked })}
-                        //     />
-                        // }
+                            className="sales-content-card"
+                            loading={loading}
+                            style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}
+                            bodyStyle={{ padding: 24 }}
                         >
-                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                                <Text type="secondary">
-                                    Automatically deduct absent days from payroll based on repeated late punch-ins.
-                                </Text>
+                            <Space direction="vertical" size={24} style={{ width: '100%' }}>
+                                <div>
+                                    <div style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>Attendance Automation</div>
+                                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                                        Manage punch-in, overtime, early exit, and break rules from one place.
+                                    </div>
+                                </div>
 
-                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
-                                    <Space direction="vertical" size={4}>
-                                        <Text strong><InfoCircleOutlined style={{ color: '#1890ff', marginRight: 8 }} />Assignment-Based Rules Available</Text>
-                                        <Text size="small" type="secondary">You can now create flexible late penalty rules (Fixed, Hourly, Multiplier) and assign them to specific staff members.</Text>
-                                        <Button
-                                            type="primary"
-                                            size="small"
-                                            icon={<ThunderboltOutlined />}
-                                            style={{ marginTop: 8 }}
-                                            onClick={() => navigate('/settings/late-punchin-rules')}
-                                        >
-                                            Manage Per-User Penalty Rules
-                                        </Button>
-                                    </Space>
-                                </Card>
-
-                                {/* <Divider plain style={{ margin: '8px 0' }}><Text type="secondary" size="small">OR USE LEGACY GLOBAL SLABS (Applies if no per-user rule assigned)</Text></Divider> */}
-
-                                {/* <div style={{ display: 'grid', gridTemplateColumns: 'minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) 40px', gap: '10px', marginTop: 10 }}>
-                                    <Text strong>Min Late (mins)</Text>
-                                    <Text strong>Max Late (mins)</Text>
-                                    <Text strong>Deduct Days</Text>
-                                    <Text strong>Every X Occurrences</Text>
-                                    <Text strong></Text>
-                                    
-                                    {latePenalty.tiers.map((t, idx) => (
-                                        <React.Fragment key={t.id || idx}>
-                                            <InputNumber
-                                                min={0}
-                                                style={{ width: '100%' }}
-                                                value={t.minMinutes}
-                                                onChange={(v) => {
-                                                    const newTiers = [...latePenalty.tiers];
-                                                    newTiers[idx].minMinutes = v;
-                                                    setLatePenalty({ ...latePenalty, tiers: newTiers });
-                                                }}
-                                                disabled={!latePenalty.active}
-                                            />
-                                            <InputNumber
-                                                min={1}
-                                                style={{ width: '100%' }}
-                                                value={t.maxMinutes}
-                                                onChange={(v) => {
-                                                    const newTiers = [...latePenalty.tiers];
-                                                    newTiers[idx].maxMinutes = v;
-                                                    setLatePenalty({ ...latePenalty, tiers: newTiers });
-                                                }}
-                                                disabled={!latePenalty.active}
-                                            />
-                                            <InputNumber
-                                                min={0} step={0.5}
-                                                style={{ width: '100%' }}
-                                                value={t.deduction}
-                                                onChange={(v) => {
-                                                    const newTiers = [...latePenalty.tiers];
-                                                    newTiers[idx].deduction = v;
-                                                    setLatePenalty({ ...latePenalty, tiers: newTiers });
-                                                }}
-                                                disabled={!latePenalty.active}
-                                            />
-                                            <InputNumber
-                                                min={1}
-                                                style={{ width: '100%' }}
-                                                value={t.frequency}
-                                                onChange={(v) => {
-                                                    const newTiers = [...latePenalty.tiers];
-                                                    newTiers[idx].frequency = v;
-                                                    setLatePenalty({ ...latePenalty, tiers: newTiers });
-                                                }}
-                                                disabled={!latePenalty.active}
-                                            />
-                                            <Button 
-                                                type="text" 
-                                                danger 
-                                                icon={<DeleteOutlined style={{ fontSize: 16 }} />} 
-                                                disabled={!latePenalty.active}
-                                                onClick={() => {
-                                                    const newTiers = latePenalty.tiers.filter((_, i) => i !== idx);
-                                                    setLatePenalty({ ...latePenalty, tiers: newTiers });
-                                                }}
-                                            />
-                                        </React.Fragment>
+                                <Row gutter={[16, 16]}>
+                                    {automationSections.map((section) => (
+                                        <Col xs={24} lg={12} xl={8} key={section.title}>
+                                            {renderAutomationCard(section)}
+                                        </Col>
                                     ))}
-                                </div> */}
+                                </Row>
 
-                                {/* <div style={{ marginTop: 8 }}>
-                                    <Button
-                                        type="dashed"
-                                        icon={<PlusOutlined />}
-                                        onClick={() => {
-                                            const lastTier = latePenalty.tiers[latePenalty.tiers.length - 1];
-                                            const newMin = lastTier ? (Number(lastTier.maxMinutes) + 1) : 1;
-                                            setLatePenalty({
-                                                ...latePenalty,
-                                                tiers: [...latePenalty.tiers, { id: Date.now(), minMinutes: newMin, maxMinutes: newMin + 30, deduction: 0.5, frequency: 1 }]
-                                            });
-                                        }}
-                                        disabled={!latePenalty.active}
-                                        style={{ width: '100%' }}
-                                    >
-                                        Add New Slab
-                                    </Button>
-                                </div> */}
+                                <Card
+                                    style={{
+                                        borderRadius: 14,
+                                        border: '1px solid #e2e8f0',
+                                        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)'
+                                    }}
+                                    bodyStyle={{ padding: 20 }}
+                                >
+                                    <Space direction="vertical" size={18} style={{ width: '100%' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                                                <div style={{
+                                                    width: 38,
+                                                    height: 38,
+                                                    borderRadius: 12,
+                                                    background: '#faad1414',
+                                                    color: '#d48806',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: 18
+                                                }}>
+                                                    <ApiOutlined />
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>ZKTeco Biometric Integration</div>
+                                                    <Text style={{ color: '#64748b', fontSize: 12 }}>
+                                                        Sync attendance transactions from your ZKTeco BioTime or EasyTime server.
+                                                    </Text>
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={zktecoConfig.active}
+                                                onChange={(checked) => setZktecoConfig({ ...zktecoConfig, active: checked })}
+                                                checkedChildren="Active"
+                                                unCheckedChildren="Off"
+                                            />
+                                        </div>
 
-                                {/* <div style={{ marginTop: 24, borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
-                                    <Button
-                                        type="primary"
-                                        size="large"
-                                        onClick={() => saveRule('late_punchin_penalty', latePenalty.active, {
-                                            tiers: latePenalty.tiers
-                                        })}
-                                        loading={saving}
-                                        icon={<ThunderboltOutlined />}
-                                    >
-                                        Save Late Penalty Configuration
-                                    </Button>
-                                </div> */}
-                            </Space>
-                        </Card>
+                                        <Row gutter={[16, 16]}>
+                                            <Col xs={24} md={12}>
+                                                <Text style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>API URL</Text>
+                                                <Input
+                                                    placeholder="http://15.206.144.225:8081/"
+                                                    value={zktecoConfig.url}
+                                                    onChange={(e) => setZktecoConfig({ ...zktecoConfig, url: e.target.value })}
+                                                    style={{ marginTop: 6, borderRadius: 8 }}
+                                                />
+                                            </Col>
+                                            <Col xs={24} md={12}>
+                                                <Text style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Username</Text>
+                                                <Input
+                                                    placeholder="admin"
+                                                    value={zktecoConfig.username}
+                                                    onChange={(e) => setZktecoConfig({ ...zktecoConfig, username: e.target.value })}
+                                                    style={{ marginTop: 6, borderRadius: 8 }}
+                                                />
+                                            </Col>
+                                            <Col xs={24} md={12}>
+                                                <Text style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Password</Text>
+                                                <Input.Password
+                                                    placeholder="******"
+                                                    value={zktecoConfig.password}
+                                                    onChange={(e) => setZktecoConfig({ ...zktecoConfig, password: e.target.value })}
+                                                    style={{ marginTop: 6, borderRadius: 8 }}
+                                                />
+                                            </Col>
+                                        </Row>
 
-                        <Card
-                            title={
-                                <Space>
-                                    <ThunderboltOutlined style={{ color: '#1677ff' }} />
-                                    <span>Overtime Automation</span>
-                                </Space>
-                            }
-                        >
-                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                                <Text type="secondary">
-                                    Automatically calculate and reward staff for working beyond their scheduled shift hours.
-                                </Text>
-                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
-                                    <Space direction="vertical" size={4}>
-                                        <Text strong><ThunderboltOutlined style={{ color: '#1890ff', marginRight: 8 }} />Flexible Overtime Rules</Text>
-                                        <Text size="small" type="secondary">Create and assign specific overtime rules (Fixed, Hourly, or Multipliers) to your team members.</Text>
-                                        <Button
-                                            type="primary"
-                                            size="small"
-                                            icon={<ThunderboltOutlined />}
-                                            style={{ marginTop: 8 }}
-                                            onClick={() => navigate('/settings/overtime-rules')}
-                                        >
-                                            Manage Overtime Rules
-                                        </Button>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+                                            <Button
+                                                type="primary"
+                                                shape="round"
+                                                icon={<ApiOutlined />}
+                                                onClick={() => saveRule('zkteco_integration', zktecoConfig.active, {
+                                                    url: zktecoConfig.url || 'http://15.206.144.225:8081/',
+                                                    username: zktecoConfig.username || 'admin',
+                                                    password: zktecoConfig.password || 'Admin@1234',
+                                                    companyId: zktecoConfig.companyId || ''
+                                                })}
+                                                loading={saving}
+                                                style={{ boxShadow: '0 2px 6px rgba(22, 119, 255, 0.15)' }}
+                                            >
+                                                Save ZKTeco Settings
+                                            </Button>
+                                        </div>
                                     </Space>
                                 </Card>
-                            </Space>
-                        </Card>
-
-                        <Card
-                            title={
-                                <Space>
-                                    <ThunderboltOutlined style={{ color: '#1677ff' }} />
-                                    <span>Early Overtime Automation</span>
-                                </Space>
-                            }
-                        >
-                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                                <Text type="secondary">
-                                    Set up rewards for staff members who start their work before the official shift start time.
-                                </Text>
-                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
-                                    <Space direction="vertical" size={4}>
-                                        <Text strong><ThunderboltOutlined style={{ color: '#1890ff', marginRight: 8 }} />Early Start Incentives</Text>
-                                        <Text size="small" type="secondary">Configure how early arrivals are compensated based on your organization's policies.</Text>
-                                        <Button
-                                            type="primary"
-                                            size="small"
-                                            icon={<ThunderboltOutlined />}
-                                            style={{ marginTop: 8 }}
-                                            onClick={() => navigate('/settings/early-overtime-rules')}
-                                        >
-                                            Manage Early Overtime
-                                        </Button>
-                                    </Space>
-                                </Card>
-                            </Space>
-                        </Card>
-
-                        <Card
-                            title={
-                                <Space>
-                                    <ThunderboltOutlined style={{ color: '#1677ff' }} />
-                                    <span>Early Exit Automation</span>
-                                </Space>
-                            }
-                        >
-                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                                <Text type="secondary">
-                                    Define deduction rules for employees who leave the workplace before their shift ends.
-                                </Text>
-                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
-                                    <Space direction="vertical" size={4}>
-                                        <Text strong><ThunderboltOutlined style={{ color: '#1890ff', marginRight: 8 }} />Early Departure Penalties</Text>
-                                        <Text size="small" type="secondary">Set up automated deductions for staff who punch out before completing their shifts.</Text>
-                                        <Button
-                                            type="primary"
-                                            size="small"
-                                            icon={<ThunderboltOutlined />}
-                                            style={{ marginTop: 8 }}
-                                            onClick={() => navigate('/settings/early-exit-rules')}
-                                        >
-                                            Manage Early Exit Rules
-                                        </Button>
-                                    </Space>
-                                </Card>
-                            </Space>
-                        </Card>
-
-                        <Card
-                            title={
-                                <Space>
-                                    <ThunderboltOutlined style={{ color: '#1677ff' }} />
-                                    <span>Break Automation</span>
-                                </Space>
-                            }
-                        >
-                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                                <Text type="secondary">
-                                    Monitor break durations and automatically apply penalties for exceeding allowed time limits.
-                                </Text>
-                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
-                                    <Space direction="vertical" size={4}>
-                                        <Text strong><ThunderboltOutlined style={{ color: '#1890ff', marginRight: 8 }} />Excessive Break Tracking</Text>
-                                        <Text size="small" type="secondary">Automate deductions for breaks that exceed the defined limits for each staff member.</Text>
-                                        <Button
-                                            type="primary"
-                                            size="small"
-                                            icon={<ThunderboltOutlined />}
-                                            style={{ marginTop: 8 }}
-                                            onClick={() => navigate('/settings/break-rules')}
-                                        >
-                                            Manage Break Rules
-                                        </Button>
-                                    </Space>
-                                </Card>
-                            </Space>
-                        </Card>
-
-                        <Card
-                            title={
-                                <Space>
-                                    <ThunderboltOutlined style={{ color: '#faad14' }} />
-                                    <span>ZKTeco Biometric Integration</span>
-                                </Space>
-                            }
-                            extra={
-                                <Switch
-                                    checked={zktecoConfig.active}
-                                    onChange={(checked) => setZktecoConfig({ ...zktecoConfig, active: checked })}
-                                />
-                            }
-                        >
-                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                                <Text type="secondary">
-                                    Sync attendance transactions from your ZKTeco BioTime or EasyTime server.
-                                </Text>
-
-                                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 12 }}>
-                                    <Text>API URL:</Text>
-                                    <Input
-                                        placeholder="http://15.206.144.225:8081/"
-                                        value={zktecoConfig.url}
-                                        onChange={(e) => setZktecoConfig({ ...zktecoConfig, url: e.target.value })}
-                                        disabled={true}
-                                    />
-                                </div>
-
-                                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 12 }}>
-                                    <Text>Username:</Text>
-                                    <Input
-                                        placeholder="admin"
-                                        value={zktecoConfig.username}
-                                        onChange={(e) => setZktecoConfig({ ...zktecoConfig, username: e.target.value })}
-                                        disabled={true}
-                                    />
-                                </div>
-
-                                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 12 }}>
-                                    <Text>Password:</Text>
-                                    <Input.Password
-                                        placeholder="******"
-                                        value={zktecoConfig.password}
-                                        onChange={(e) => setZktecoConfig({ ...zktecoConfig, password: e.target.value })}
-                                        disabled={true}
-                                    />
-                                </div>
-
-                                <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
-                                    <Button
-                                        type="primary"
-                                        onClick={() => saveRule('zkteco_integration', zktecoConfig.active, {
-                                            url: zktecoConfig.url || 'http://15.206.144.225:8081/',
-                                            username: zktecoConfig.username || 'admin',
-                                            password: zktecoConfig.password || 'Admin@123'
-                                        })}
-                                        loading={saving}
-                                    >
-                                        Save ZKTeco Settings
-                                    </Button>
-                                </div>
                             </Space>
                         </Card>
                     </Space>

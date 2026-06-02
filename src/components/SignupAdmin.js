@@ -67,11 +67,11 @@ export default function SignupAdmin() {
       <Content style={{ padding: 0 }}>
         <Row style={{ minHeight: '100vh' }}>
           {/* Left Column - Design Illustration */}
-          <Col 
-            xs={0} 
-            md={10} 
-            lg={12} 
-            style={{ 
+          <Col
+            xs={0}
+            md={10}
+            lg={12}
+            style={{
               background: 'linear-gradient(135deg, #f8fbff 0%, #e0eaff 100%)',
               position: 'relative',
               overflow: 'hidden',
@@ -84,7 +84,7 @@ export default function SignupAdmin() {
           >
             <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '400px', height: '400px', borderRadius: '50%', background: 'rgba(36,99,235,0.05)' }}></div>
             <div style={{ position: 'absolute', bottom: '10%', left: '-5%', width: '250px', height: '250px', borderRadius: '50%', background: 'rgba(18,101,205,0.05)' }}></div>
-            
+
             <div style={{ position: 'relative', zIndex: 2 }}>
               <div style={{ marginBottom: 24 }}>
                 <Tag color="blue" style={{ borderRadius: 20, padding: '2px 12px', fontWeight: 600, background: 'rgba(36,99,235,0.1)', color: '#2463EB', border: 'none' }}>
@@ -94,13 +94,13 @@ export default function SignupAdmin() {
               <Title level={1} style={{ color: '#101828', fontSize: '3.5rem', fontWeight: 800, lineHeight: 1.1, marginBottom: 24 }}>
                 Advanced Intelligence for <span style={{ color: '#2463EB' }}>Modern Enterprise.</span>
               </Title>
-              
+
               <div style={{ marginTop: 48, position: 'relative' }}>
                 <div style={{ maxWidth: 640 }}>
-                  <img 
-                    src="/pina.png" 
-                    alt="Dashboard Illustration" 
-                    style={{ width: '100%' }} 
+                  <img
+                    src="/pina.png"
+                    alt="Dashboard Illustration"
+                    style={{ width: '100%' }}
                   />
                 </div>
               </div>
@@ -110,7 +110,7 @@ export default function SignupAdmin() {
           {/* Right Column - Form */}
           <Col xs={24} md={14} lg={12} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', overflowY: 'auto' }}>
             <div style={{ width: '100%', maxWidth: 540, padding: '60px 40px' }}>
-              
+
               {submitted ? (
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ marginBottom: 24, fontSize: 64 }}>✅</div>
@@ -118,15 +118,15 @@ export default function SignupAdmin() {
                   <Text type="secondary" style={{ fontSize: 18, color: '#667085', display: 'block', marginBottom: 32 }}>
                     Thank you for reaching out to us. Your message has been received and one of our team members will respond within 24–48 hours.
                   </Text>
-                  <Button 
-                    type="primary" 
-                    size="large" 
+                  <Button
+                    type="primary"
+                    size="large"
                     onClick={() => navigate('/')}
-                    style={{ 
-                      height: 52, 
-                      padding: '0 40px', 
-                      borderRadius: 12, 
-                      background: '#2463EB', 
+                    style={{
+                      height: 52,
+                      padding: '0 40px',
+                      borderRadius: 12,
+                      background: '#2463EB',
                       fontWeight: 600,
                       border: 'none',
                       boxShadow: '0 4px 14px rgba(36,99,235,0.25)'
@@ -146,10 +146,10 @@ export default function SignupAdmin() {
                     </Text>
                   </div>
 
-                  <Form 
-                    layout="vertical" 
-                    size="large" 
-                    onFinish={onFinish} 
+                  <Form
+                    layout="vertical"
+                    size="large"
+                    onFinish={onFinish}
                     initialValues={{ phone: phonePrefill }}
                     requiredMark={false}
                   >
@@ -168,6 +168,10 @@ export default function SignupAdmin() {
 
                     <Form.Item label={<Text strong>Business Name</Text>} name="businessName" rules={[{ required: true, message: 'Please enter business name' }]}>
                       <Input prefix={<ShopOutlined style={{ color: '#98a2b3' }} />} placeholder="Company / Shop name" style={{ borderRadius: 10 }} />
+                    </Form.Item>
+
+                    <Form.Item label={<Text strong>Detailed Address</Text>} name="address">
+                      <Input.TextArea rows={2} placeholder="Building, Street, Area..." style={{ borderRadius: 10 }} />
                     </Form.Item>
 
                     <Form.Item label={<Text strong>Business Email</Text>} name="businessEmail">
@@ -204,10 +208,6 @@ export default function SignupAdmin() {
                       <Input.TextArea rows={2} placeholder="e.g. Owner/HR/Manager" style={{ borderRadius: 10 }} />
                     </Form.Item>
 
-                    <Form.Item label={<Text strong>Detailed Address</Text>} name="address">
-                      <Input.TextArea rows={2} placeholder="Building, Street, Area..." style={{ borderRadius: 10 }} />
-                    </Form.Item>
-
                     <Row gutter={16}>
                       <Col span={12}>
                         <Form.Item label={<Text strong>Birth Date</Text>} name="birthDate">
@@ -226,20 +226,20 @@ export default function SignupAdmin() {
                     </Form.Item>
 
                     <Form.Item style={{ marginTop: 24 }}>
-                      <Button 
-                        type="primary" 
-                        htmlType="submit" 
-                        loading={loading} 
+                      <Button
+                        type="primary"
+                        htmlType="submit"
+                        loading={loading}
                         icon={<ArrowRightOutlined />}
-                        style={{ 
-                          width: '100%', 
-                          height: 52, 
-                          fontWeight: 600, 
-                          fontSize: 16, 
-                          borderRadius: 12, 
-                          background: '#2463EB', 
+                        style={{
+                          width: '100%',
+                          height: 52,
+                          fontWeight: 600,
+                          fontSize: 16,
+                          borderRadius: 12,
+                          background: '#2463EB',
                           border: 'none',
-                          boxShadow: '0 4px 14px rgba(36,99,235,0.25)' 
+                          boxShadow: '0 4px 14px rgba(36,99,235,0.25)'
                         }}
                       >
                         Onboard Now
@@ -247,7 +247,7 @@ export default function SignupAdmin() {
                     </Form.Item>
 
                     <div style={{ textAlign: 'center', marginTop: 16 }}>
-                      <Text type="secondary">Already part of the ecosystem? </Text>
+                      <Text type="secondary">Already part of VetanSutra? </Text>
                       <Button type="link" onClick={() => navigate('/')} style={{ padding: 0, fontWeight: 700, color: '#2463EB' }}>
                         Log In
                       </Button>
@@ -258,7 +258,7 @@ export default function SignupAdmin() {
 
               <div style={{ marginTop: 48, textAlign: 'center' }}>
                 <Text type="secondary" style={{ fontSize: 14, color: '#667085' }}>
-                  By continuing you agree to our <a href="/terms" style={{ color: '#2463EB', fontWeight: 600 }}>Privacy Policy</a> and <a href="/terms" style={{ color: '#2463EB', fontWeight: 600 }}>Terms of Use</a>
+                  By continuing you agree to our <a href="https://vetansutra.com/policy.html" target="_blank" rel="noopener noreferrer" style={{ color: '#2463EB', fontWeight: 600 }}>Privacy Policy</a>
                 </Text>
               </div>
             </div>

@@ -3,6 +3,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, HomeOutlined, ThunderboltOu
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
@@ -185,18 +186,25 @@ export default function BreakAutomation() {
     };
 
     const columns = [
-        { title: 'Rule Name', dataIndex: 'name', key: 'name' },
+        { 
+            title: 'Rule Name', 
+            dataIndex: 'name', 
+            key: 'name',
+            render: (text) => <Text strong style={{ color: '#262626' }}>{text}</Text>
+        },
         {
             title: 'Status',
             dataIndex: 'active',
             key: 'active',
-            render: (active) => active ? <Tag color="success">Active</Tag> : <Tag color="error">Inactive</Tag>
+            render: (active) => active ? 
+                <Tag className="sales-status-tag sales-status-complete">Active</Tag> : 
+                <Tag className="sales-status-tag sales-status-inactive">Inactive</Tag>
         },
         {
             title: 'Assigned Staff',
             key: 'assignedCount',
             render: (_, record) => (
-                <Tag color="cyan" style={{ cursor: 'pointer' }} onClick={() => openAssignedList(record)}>
+                <Tag className="sales-status-tag sales-status-active" style={{ cursor: 'pointer', transition: 'all 0.3s' }} onClick={() => openAssignedList(record)}>
                     {record.assignedCount || 0} Staff
                 </Tag>
             )
@@ -204,37 +212,58 @@ export default function BreakAutomation() {
         {
             title: 'Actions',
             key: 'actions',
+            width: 260,
             render: (_, record) => (
-                <Space>
-                    <Button icon={< ThunderboltOutlined />} onClick={() => openAssign(record)}>Assign</Button>
-                    <Button icon={<EditOutlined />} onClick={() => {
-                        let rawThresholds = record.thresholds || [];
-                        if (typeof rawThresholds === 'string') {
-                            try { rawThresholds = JSON.parse(rawThresholds); } catch (e) { rawThresholds = []; }
-                        }
+                <Space size="middle" style={{ paddingRight: 8 }}>
+                    <Button 
+                        type="primary"
+                        ghost
+                        shape="round"
+                        icon={<ThunderboltOutlined />} 
+                        onClick={() => openAssign(record)}
+                        style={{ fontSize: '13px' }}
+                    >
+                        Assign
+                    </Button>
+                    <Button 
+                        shape="circle"
+                        icon={<EditOutlined />} 
+                        className="sales-action-btn"
+                        onClick={() => {
+                            let rawThresholds = record.thresholds || [];
+                            if (typeof rawThresholds === 'string') {
+                                try { rawThresholds = JSON.parse(rawThresholds); } catch (e) { rawThresholds = []; }
+                            }
 
-                        const thresholds = rawThresholds.map(t => {
-                            const { h, m } = minsToHHMM(t.minMinutes);
-                            return {
-                                ...t,
-                                h, m,
-                                rewardType: t.rewardType,
-                                rewardValue: t.rewardValue
-                            };
-                        });
-                        const half = minsToHHMM(record.halfDayThresholdMinutes || 0);
-                        const full = minsToHHMM(record.fullDayThresholdMinutes || 0);
+                            const thresholds = rawThresholds.map(t => {
+                                const { h, m } = minsToHHMM(t.minMinutes);
+                                return {
+                                    ...t,
+                                    h, m,
+                                    rewardType: t.rewardType,
+                                    rewardValue: t.rewardValue
+                                };
+                            });
+                            const half = minsToHHMM(record.halfDayThresholdMinutes || 0);
+                            const full = minsToHHMM(record.fullDayThresholdMinutes || 0);
 
-                        setEditingRule(record);
-                        form.setFieldsValue({
-                            ...record,
-                            thresholds,
-                            halfDayH: half.h, halfDayM: half.m,
-                            fullDayH: full.h, fullDayM: full.m
-                        });
-                        setModalVisible(true);
-                    }} />
-                    <Button icon={<DeleteOutlined />} danger onClick={() => handleDelete(record.id)} />
+                            setEditingRule(record);
+                            form.setFieldsValue({
+                                ...record,
+                                thresholds,
+                                halfDayH: half.h, halfDayM: half.m,
+                                fullDayH: full.h, fullDayM: full.m
+                            });
+                            setModalVisible(true);
+                        }} 
+                    />
+                    <Button 
+                        shape="circle"
+                        danger
+                        icon={<DeleteOutlined />} 
+                        className="sales-action-btn"
+                        onClick={() => handleDelete(record.id)} 
+                    />
                 </Space>
             )
         }
@@ -243,30 +272,62 @@ export default function BreakAutomation() {
     return (
         <Layout style={{ minHeight: '100vh' }}>
             <Sidebar collapsed={collapsed} onCollapse={setCollapsed} />
-            <Layout style={{ marginLeft: collapsed ? 80 : 200, background: '#f5f7fb' }}>
-                <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Space>
-                        <ArrowLeftOutlined onClick={() => navigate('/settings')} style={{ cursor: 'pointer', fontSize: 18 }} />
-                        <Title level={4} style={{ margin: 0 }}>Break Automation Rules</Title>
-                    </Space>
-                    <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-                        setEditingRule(null);
-                        form.resetFields();
-                        setModalVisible(true);
-                    }}>
-                        Add New Rule
-                    </Button>
-                </Header>
+            <Layout style={{ marginLeft: collapsed ? 80 : 200, background: '#f5f7fb', transition: 'all 0.2s' }}>
+                <MainHeader collapsed={collapsed} setCollapsed={setCollapsed} title="Break Automation Rules" showHome={true} />
 
                 <Content style={{ padding: '24px' }}>
-                    <Breadcrumb style={{ marginBottom: 16 }}>
-                        <Breadcrumb.Item onClick={() => navigate('/dashboard')}><HomeOutlined /></Breadcrumb.Item>
-                        <Breadcrumb.Item onClick={() => navigate('/settings')}>Settings</Breadcrumb.Item>
-                        <Breadcrumb.Item>Break Automation</Breadcrumb.Item>
-                    </Breadcrumb>
+                    {/* Action Header Card */}
+                    <div style={{ 
+                        background: '#fff', 
+                        padding: '16px 24px', 
+                        borderRadius: '16px', 
+                        marginBottom: '20px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)',
+                        border: '1px solid #f0f2f5'
+                    }}>
+                        <Space size="middle">
+                            <Button 
+                                shape="circle" 
+                                icon={<ArrowLeftOutlined />} 
+                                onClick={() => navigate('/settings')} 
+                                className="sales-action-btn"
+                            />
+                            <Breadcrumb style={{ margin: 0 }}>
+                                <Breadcrumb.Item onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}><HomeOutlined /></Breadcrumb.Item>
+                                <Breadcrumb.Item onClick={() => navigate('/settings')} style={{ cursor: 'pointer' }}>Settings</Breadcrumb.Item>
+                                <Breadcrumb.Item>Break Automation Rules</Breadcrumb.Item>
+                            </Breadcrumb>
+                        </Space>
+                        <Button 
+                           type="primary" 
+                           icon={<PlusOutlined />} 
+                           shape="round"
+                           onClick={() => {
+                               setEditingRule(null);
+                               form.resetFields();
+                               setModalVisible(true);
+                           }}
+                        >
+                            Add New Rule
+                        </Button>
+                    </div>
 
-                    <Card>
-                        <Table dataSource={rules} columns={columns} loading={loading} rowKey="id" />
+                    <Card className="sales-content-card" style={{ padding: '4px' }}>
+                        <Table 
+                            dataSource={rules} 
+                            columns={columns} 
+                            loading={loading} 
+                            rowKey="id" 
+                            className="sales-table"
+                            pagination={{
+                                pageSize: 10,
+                                showSizeChanger: true,
+                                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} rules`
+                            }}
+                        />
                     </Card>
 
                     <Modal
@@ -276,11 +337,14 @@ export default function BreakAutomation() {
                         onOk={() => form.submit()}
                         width={900}
                         okText="Save Rule"
+                        className="sales-modal"
+                        okButtonProps={{ shape: 'round' }}
+                        cancelButtonProps={{ shape: 'round' }}
                     >
                         <Form form={form} layout="vertical" onFinish={handleSave}>
                             <Row gutter={24}>
                                 <Col span={12}>
-                                    <Form.Item name="name" label={<Text strong>Rule Name <span style={{ color: 'red' }}>*</span></Text>} rules={[{ required: true }]}>
+                                    <Form.Item name="name" label={<span className="modal-field-label">Rule Name <span style={{ color: 'red' }}>*</span></span>} rules={[{ required: true, message: 'Rule name is required' }]}>
                                         <Input placeholder="e.g. Standard Peak Break Rule" />
                                     </Form.Item>
                                 </Col>
@@ -291,16 +355,16 @@ export default function BreakAutomation() {
                                 </Col>
                             </Row>
 
-                            <Divider orientation="left">Time Range Fines (Duration Based)</Divider>
-                            <div style={{ background: '#f9f9f9', padding: '16px', borderRadius: '8px' }}>
+                            <Divider orientation="left"><span className="modal-field-label" style={{ fontSize: '15px' }}>Time Range Fines (Duration Based)</span></Divider>
+                            <div style={{ background: '#fafafa', padding: '20px', borderRadius: '12px', border: '1px solid #f0f2f5', marginBottom: '20px' }}>
                                 <Form.List name="thresholds" initialValue={[{ h: 0, m: 30, rewardType: 'FIXED_AMOUNT', rewardValue: 0 }]}>
                                     {(fields, { add, remove }) => (
                                         <>
                                             {fields.map(({ key, name, ...restField }, index) => (
                                                 <div key={key} style={{ marginBottom: 24, borderBottom: index < fields.length - 1 ? '1px solid #eee' : 'none', paddingBottom: 16 }}>
                                                     <Row gutter={16} align="bottom">
-                                                        <Col span={6}>
-                                                            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>If total break more than or equal to</Text>
+                                                        <Col span={9}>
+                                                            <span className="modal-field-label" style={{ display: 'block', marginBottom: 8 }}>If total break more than or equal to</span>
                                                             <Space>
                                                                 <Form.Item {...restField} name={[name, 'h']} noStyle initialValue={0}>
                                                                     <Select style={{ width: 65 }}>
@@ -313,10 +377,11 @@ export default function BreakAutomation() {
                                                                         {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => <Option key={m} value={m}>{String(m).padStart(2, '0')}</Option>)}
                                                                     </Select>
                                                                 </Form.Item>
+                                                                <Text type="secondary">hh:mm</Text>
                                                             </Space>
                                                         </Col>
-                                                        <Col span={8}>
-                                                            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>Deduction Type</Text>
+                                                        <Col span={7}>
+                                                            <span className="modal-field-label" style={{ display: 'block', marginBottom: 8 }}>Deduction Type</span>
                                                             <Form.Item {...restField} name={[name, 'rewardType']} noStyle initialValue="FIXED_AMOUNT">
                                                                 <Select
                                                                     style={{ width: '100%' }}
@@ -332,7 +397,7 @@ export default function BreakAutomation() {
                                                                 </Select>
                                                             </Form.Item>
                                                         </Col>
-                                                        <Col span={8}>
+                                                        <Col span={6}>
                                                             <Form.Item
                                                                 noStyle
                                                                 shouldUpdate={(prevValues, curValues) =>
@@ -344,9 +409,9 @@ export default function BreakAutomation() {
                                                                     const isMult = type === 'SALARY_MULTIPLIER';
                                                                     return (
                                                                         <>
-                                                                            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                                                                            <span className="modal-field-label" style={{ display: 'block', marginBottom: 8 }}>
                                                                                 {isMult ? 'Multiplier' : 'Amount'}
-                                                                            </Text>
+                                                                            </span>
                                                                             <Form.Item {...restField} name={[name, 'rewardValue']} noStyle initialValue={0}>
                                                                                 <InputNumber
                                                                                     style={{ width: '100%' }}
@@ -366,25 +431,24 @@ export default function BreakAutomation() {
                                                                     danger
                                                                     icon={<DeleteFilled />}
                                                                     onClick={() => remove(name)}
+                                                                    style={{ marginBottom: 4 }}
                                                                 />
                                                             )}
                                                         </Col>
                                                     </Row>
                                                 </div>
                                             ))}
-                                            <Button type="link" onClick={() => add()} icon={<PlusOutlined />} style={{ padding: 0 }}>
-                                                Add Time Range
-                                            </Button>
+                                            <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />} shape="round">Add Time Range</Button>
                                         </>
                                     )}
                                 </Form.List>
                             </div>
 
-                            <Divider orientation="left">Major Attendance Overrides</Divider>
+                            <Divider orientation="left"><span className="modal-field-label" style={{ fontSize: '15px' }}>Major Attendance Overrides</span></Divider>
 
-                            <div style={{ marginBottom: 24, padding: '12px', border: '1px solid #f0f0f0', borderRadius: '8px' }}>
+                            <div style={{ background: '#fafafa', padding: '16px', borderRadius: '12px', border: '1px solid #f0f2f5', marginBottom: '16px' }}>
                                 <Form.Item name="deductHalfDay" valuePropName="checked" noStyle initialValue={false}>
-                                    <Checkbox><Text strong>Deduct half day salary if break more than or equal to</Text></Checkbox>
+                                    <Checkbox><span className="modal-field-label">Deduct half day salary if break more than or equal to</span></Checkbox>
                                 </Form.Item>
                                 <div style={{ marginTop: 8, paddingLeft: 24 }}>
                                     <Space>
@@ -399,17 +463,17 @@ export default function BreakAutomation() {
                                 </div>
                             </div>
 
-                            <div style={{ marginBottom: 24, padding: '12px', border: '1px solid #f0f0f0', borderRadius: '8px' }}>
+                            <div style={{ background: '#fafafa', padding: '16px', borderRadius: '12px', border: '1px solid #f0f2f5', marginBottom: '16px' }}>
                                 <Form.Item name="deductFullDay" valuePropName="checked" noStyle initialValue={false}>
-                                    <Checkbox><Text strong>Deduct full day salary if break more than or equal to</Text></Checkbox>
+                                    <Checkbox><span className="modal-field-label">Deduct full day salary if break more than or equal to</span></Checkbox>
                                 </Form.Item>
                                 <div style={{ marginTop: 8, paddingLeft: 24 }}>
                                     <Space>
                                         <Form.Item name="fullDayH" noStyle initialValue={4}><Select style={{ width: 65 }}>{[...Array(24).keys()].map(h => <Option key={h} value={h}>{String(h).padStart(2, '0')}</Option>)}</Select></Form.Item>
                                         <span>:</span>
                                         <Form.Item name="fullDayM" noStyle initialValue={0}><Select style={{ width: 65 }}>{[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => <Option key={m} value={m}>{String(m).padStart(2, '0')}</Option>)}</Select></Form.Item>
+                                        <Text type="secondary">hh:mm</Text>
                                     </Space>
-                                    <Text type="secondary">hh:mm</Text>
                                     <div style={{ marginTop: 4 }}>
                                         <Text type="secondary" style={{ fontSize: 12 }}><InfoCircleOutlined /> This will override all other break penalties for current day.</Text>
                                     </div>
@@ -426,9 +490,12 @@ export default function BreakAutomation() {
                         onOk={() => setMultiplierModalVisible(false)}
                         width={400}
                         okText="Ok"
+                        className="sales-modal"
+                        okButtonProps={{ shape: 'round' }}
+                        cancelButtonProps={{ shape: 'round' }}
                     >
                         <div style={{ marginBottom: 16 }}>
-                            <Text strong>Multiplier</Text>
+                            <span className="modal-field-label">Multiplier</span>
                             <InputNumber
                                 placeholder="e.g. 1.0, 1.5"
                                 style={{ marginTop: 8, width: '100%' }}
@@ -455,10 +522,19 @@ export default function BreakAutomation() {
                     </Modal>
 
                     {/* Assign Modal */}
-                    <Modal title={assigningRule ? `Assign Staff • ${assigningRule.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
+                    <Modal 
+                        title={assigningRule ? `Assign Staff • ${assigningRule.name}` : 'Assign Staff'} 
+                        open={assignOpen} 
+                        onCancel={() => setAssignOpen(false)} 
+                        onOk={saveAssign} 
+                        okText="Assign"
+                        className="sales-modal"
+                        okButtonProps={{ shape: 'round' }}
+                        cancelButtonProps={{ shape: 'round' }}
+                    >
                         <Space direction="vertical" style={{ width: '100%' }} size={16}>
                             <div>
-                                <Text type="secondary">Select staff members to apply this break rule to:</Text>
+                                <span className="modal-field-label" style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>Select staff members to apply this break rule to:</span>
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
                                     <Button
                                         size="small"
@@ -488,7 +564,7 @@ export default function BreakAutomation() {
 
                             <Row gutter={16}>
                                 <Col span={12}>
-                                    <Text strong>Effective From</Text>
+                                    <span className="modal-field-label">Effective From</span>
                                     <DatePicker 
                                         style={{ width: '100%', marginTop: 8 }} 
                                         value={effectiveFrom} 
@@ -498,7 +574,7 @@ export default function BreakAutomation() {
                                     />
                                 </Col>
                                 <Col span={12}>
-                                    <Text strong>Effective To (Optional)</Text>
+                                    <span className="modal-field-label">Effective To (Optional)</span>
                                     <DatePicker 
                                         style={{ width: '100%', marginTop: 8 }} 
                                         value={effectiveTo} 
@@ -510,9 +586,9 @@ export default function BreakAutomation() {
                             </Row>
 
                             {effectiveFrom && effectiveFrom.isBefore(dayjs(), 'day') && (
-                                <div style={{ background: '#fff7e6', border: '1px solid #ffd591', padding: '8px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ background: '#fff7e6', border: '1px solid #ffd591', padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <InfoCircleOutlined style={{ color: '#fa8c16' }} />
-                                    <Text type="warning" size="small">Backdated assignment will trigger attendance recalculation.</Text>
+                                    <Text type="warning" size="small" style={{ fontSize: '12px' }}>Backdated assignment will trigger attendance recalculation.</Text>
                                 </div>
                             )}
                         </Space>
@@ -525,6 +601,7 @@ export default function BreakAutomation() {
                         onCancel={() => setAssignedListOpen(false)}
                         footer={null}
                         width={900}
+                        className="sales-modal"
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Input.Search
@@ -533,7 +610,7 @@ export default function BreakAutomation() {
                                 value={assignedSearch}
                                 onChange={e => setAssignedSearch(e.target.value)}
                                 onSearch={setAssignedSearch}
-                                style={{ width: 350 }}
+                                style={{ width: 350, borderRadius: '8px' }}
                             />
                         </div>
                         <Table
@@ -547,10 +624,14 @@ export default function BreakAutomation() {
                                 const phone = (r.user?.phone || '').toLowerCase();
                                 return name.includes(s) || sid.includes(s) || phone.includes(s);
                             })}
-                            size="small"
+                            size="middle"
                             pagination={{ pageSize: 8 }}
+                            className="sales-table"
                             columns={[
-                                { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
+                                { 
+                                    title: 'Name', 
+                                    render: (_, r) => <Text strong style={{ color: '#262626' }}>{r.user?.profile?.name || '-'}</Text> 
+                                },
                                 { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
                                 { title: 'Effective From', render: (_, r) => r.effectiveFrom ? dayjs(r.effectiveFrom).format('DD-MM-YYYY') : '-' },
                                 { title: 'Phone', render: (_, r) => r.user?.phone || '-' },
@@ -559,8 +640,9 @@ export default function BreakAutomation() {
                                 {
                                     title: 'Action',
                                     key: 'action',
+                                    width: 120,
                                     render: (_, r) => (
-                                        <Button danger size="small" onClick={() => unassignStaff(r.id)}>Unassign</Button>
+                                        <Button danger size="small" shape="round" onClick={() => unassignStaff(r.id)}>Unassign</Button>
                                     )
                                 },
                             ]}

@@ -23,12 +23,12 @@ import {
   Tooltip
 } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, PlusOutlined, MinusCircleOutlined, InfoCircleOutlined, SearchOutlined } from '@ant-design/icons';
-// import { jsPDF } from 'jspdf'; // Removed client-side generation
 import moment from 'moment';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import api, { API_BASE_URL } from '../api';
 
-const { Header, Content } = Layout;
+const { Content } = Layout;
 const { Title, Text } = Typography;
 
 const categoryNames = {
@@ -63,8 +63,6 @@ const normalizeAttendanceSummary = (summary, monthKey) => {
     && yy === now.getFullYear()
     && mm === (now.getMonth() + 1);
 
-  // For current month projections, backend can store partial-month absence while still
-  // including future WO/Holidays. In that case, use existing classified total as reference.
   const referenceDays = (isCurrentMonth && classifiedDays > 0 && classifiedDays < daysInMonth)
     ? classifiedDays
     : daysInMonth;
@@ -76,7 +74,7 @@ const normalizeAttendanceSummary = (summary, monthKey) => {
 
   const latePenaltyDays = Number(s.latePenaltyDays || s.latePenalty || 0);
   const pUnits = present + (half * 0.5) + paidLeave + weeklyOff + holidays;
-  const payableDays = Math.max(0, pUnits - (s.latePenaltyDays || 0)); // Keep logic for days if present
+  const payableDays = Math.max(0, pUnits - (s.latePenaltyDays || 0));
 
   return {
     ...s,
@@ -106,7 +104,7 @@ const PayrollList = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
 
-  // Payroll Logic State (from PayrollCycle.js)
+  // Payroll Logic State
   const [loading, setLoading] = useState(false);
   const [cycle, setCycle] = useState(null);
   const [lines, setLines] = useState([]);
@@ -124,7 +122,7 @@ const PayrollList = () => {
   // Attendance Drill-down State
   const [drilldownModalVisible, setDrilldownModalVisible] = useState(false);
   const [drilldownRecords, setDrilldownRecords] = useState([]);
-  const [drilldownType, setDrilldownType] = useState(''); // 'Late' | 'Early Exit' | 'Break' | 'Overtime' | 'Early Overtime'
+  const [drilldownType, setDrilldownType] = useState('');
   const [drilldownLoading, setDrilldownLoading] = useState(false);
 
   // Tenure Bonus Breakdown State
@@ -170,6 +168,7 @@ const PayrollList = () => {
     const [y, m] = value.split('-').map(Number);
     return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
   }, [value]);
+
   // Load Staff Map
   const loadStaffMap = useCallback(async () => {
     try {
@@ -190,7 +189,6 @@ const PayrollList = () => {
     }
   }, []);
 
-
   const loadTemplates = useCallback(async () => {
     try {
       const res = await api.get('/admin/salary-templates');
@@ -204,10 +202,9 @@ const PayrollList = () => {
       setLoading(true);
       setCycle(null);
       setLines([]);
-      // Use 'value' (YYYY-MM) as monthKey
       const res = await api.get('/admin/payroll', { params: { monthKey: value } });
       if (res?.data?.success) {
-        setCycle(res.data.cycle); // might be null if not created yet? usually returns draft if exists or null
+        setCycle(res.data.cycle);
         const raw = Array.isArray(res.data.lines) ? res.data.lines : [];
         const parseMaybe = (v) => {
           if (v == null) return v;
@@ -227,13 +224,10 @@ const PayrollList = () => {
         }));
         setLines(normalized);
       } else {
-        // If success is false, maybe just no cycle found, reset state
         setCycle(null);
         setLines([]);
-        // Don't show error, just empty state is fine if not generated
       }
     } catch (e) {
-      // message.error('Failed to load cycle');
       setCycle(null);
       setLines([]);
     } finally {
@@ -250,41 +244,9 @@ const PayrollList = () => {
     loadCycle();
   }, [loadCycle]);
 
-  // Actions
-  const onOpenCycle = async () => {
-    // This button logic might now simply mean "Compute/Create" if cycle doesn't exist
-    // But backend logic typically requires "Compute" to create lines if draft exists
-    // If cycle doesn't exist, we might need to trigger creation.
-    // The previous "Open Cycle" button just navigated.
-    // Let's assume onCompute handles creation/computation.
-    await loadCycle();
-  };
-
   const onCompute = async () => {
     try {
-      // If cycle doesn't exist, we might need a way to create it first?
-      // Usually compute endpoint handles specific cycle ID.
-      // If cycle is null, we can't compute properly unless we have an endpoint to "start" a cycle.
-      // Checking backend... usually GET /admin/payroll with monthKey works.
-      // If cycle is null, we might need to create it.
-      // Let's check if we have a cycle object. modification: if cycle is null but we want to compute,
-      // we might need to create it first. But let's see if GET returns a partial cycle or if we need to POST.
-      // Previously validation was `if (!cycle) ...`.
-      // If the UI shows "Compute" only when cycle exists, how do we start?
-      // The GET endpoint usually returns the cycle if it exists.
-      // If it doesn't exist, we might need to "Initialize" it.
-      // Let's try calling compute on the cycle ID. If cycle is null, we can't.
-
-      // Additional Logic: If cycle is null, maybe there's an endpoint to create?
-      // Or maybe GET /admin/payroll creates it if missing?
-      // If not, we might need a button "Start Cycle" which calls an endpoint.
-      // For now, let's assume if cycle is null, we can't compute.
-      // But typically "Open Cycle" implying "checking/viewing".
-
       if (!cycle) {
-        // Try to find if there's a "create" endpoint.
-        // If not, maybe compute creates it? But compute needs cycleId.
-        // Let's look at previous checks.
         message.warning('Cycle not found. Please ensure cycle is initialized.');
         return;
       }
@@ -295,9 +257,8 @@ const PayrollList = () => {
       setLoading(true);
       const res = await api.post(`/admin/payroll/${cycle.id}/compute`);
       if (res?.data?.success) {
-        // ... same normalization ...
         const raw = Array.isArray(res.data.lines) ? res.data.lines : [];
-        const parseMaybe = (v) => { /* ... */
+        const parseMaybe = (v) => {
           if (v == null) return v;
           if (typeof v === 'object') return v;
           if (typeof v === 'string') { try { return JSON.parse(v); } catch { return v; } }
@@ -313,7 +274,6 @@ const PayrollList = () => {
         }));
         setLines(normalized);
         message.success('Payroll computed');
-        // Refresh cycle status too just in case
         loadCycle();
       } else {
         message.error('Compute failed');
@@ -328,9 +288,7 @@ const PayrollList = () => {
   const onGeneratePayroll = async () => {
     try {
       setLoading(true);
-
-      // Step 1: Ensure cycle exists (GET /admin/payroll creates if missing)
-      const monthKey = value; // value is already in YYYY-MM format
+      const monthKey = value;
       const cycleRes = await api.get('/admin/payroll', { params: { monthKey } });
 
       if (!cycleRes?.data?.success) {
@@ -341,7 +299,6 @@ const PayrollList = () => {
       const fetchedCycle = cycleRes.data.cycle;
       setCycle(fetchedCycle);
 
-      // Step 2: Compute payroll lines
       const computeRes = await api.post(`/admin/payroll/${fetchedCycle.id}/compute`);
 
       if (computeRes?.data?.success) {
@@ -362,7 +319,7 @@ const PayrollList = () => {
         }));
         setLines(normalized);
         message.success(`Payroll generated for ${monthKey} (${normalized.length} employees)`);
-        loadCycle(); // Refresh cycle status
+        loadCycle();
       } else {
         message.error('Failed to compute payroll');
       }
@@ -373,7 +330,6 @@ const PayrollList = () => {
       setLoading(false);
     }
   };
-
 
   const onLock = async () => {
     if (!cycle) return;
@@ -430,7 +386,6 @@ const PayrollList = () => {
     }
   };
 
-
   const openBulkPaid = async () => {
     if (!cycle) return;
     if (!selectedRowKeys || selectedRowKeys.length === 0) {
@@ -439,19 +394,17 @@ const PayrollList = () => {
     }
     try {
       setLoading(true);
-      // Direct payment without popup
       const payload = {
         lineIds: selectedRowKeys,
         paidAt: new Date().toISOString(),
         paidMode: 'CASH',
         paidRef: null,
-        paidAmount: null, // Use net salary from payroll line
+        paidAmount: null,
       };
       const res = await api.post(`/admin/payroll/${cycle.id}/lines/mark-paid`, payload);
       if (res?.data?.success) {
         message.success(`Marked paid for ${res.data.updated} employees`);
         setSelectedRowKeys([]);
-        // Refresh data
         loadCycle();
       } else {
         message.error('Failed to mark paid');
@@ -484,7 +437,7 @@ const PayrollList = () => {
         message.error('Bulk paid failed');
       }
     } catch (e) {
-      if (e?.errorFields) return; // form validation error
+      if (e?.errorFields) return;
       message.error('Bulk paid failed');
     } finally {
       setLoading(false);
@@ -519,14 +472,11 @@ const PayrollList = () => {
     const prefEarn = ['basic_salary', 'hra', 'da', 'special_allowance', 'conveyance_allowance', 'medical_allowance', 'telephone_allowance', 'other_allowances'];
     const prefDed = ['provident_fund', 'esi', 'professional_tax', 'income_tax', 'loan_deduction', 'other_deductions'];
 
-    // Calculate accurate ratio from attendance to reverse-engineer BASE values
     const acc = row?.attendanceSummary || {};
     const [year, month] = (cycle?.monthKey || '').split('-').map(Number);
     const dMonth = new Date(year, month, 0).getDate();
     const pUnits = (Number(acc.present || 0)) + (Number(acc.half || 0) * 0.5) + (Number(acc.paidLeave || 0)) + (Number(acc.weeklyOff || 0)) + (Number(acc.holidays || 0));
     const calculatedRatio = dMonth > 0 ? pUnits / dMonth : 1;
-
-    // Use calculated ratio if > 0.001, otherwise fallback to stored ratio or 1
     const currentRatio = calculatedRatio > 0.001 ? calculatedRatio : Number(row?.totals?.ratio ?? 1);
 
     const reverse = (obj) => {
@@ -538,10 +488,9 @@ const PayrollList = () => {
     };
 
     let bE = reverse(row?.earnings);
-    let bI = reverse(row?.incentives); // binary search usually not needed for incentives but logic kept
+    let bI = reverse(row?.incentives);
     let bD = reverse(row?.deductions);
 
-    // If baseEarnings is zero (because of 0 attendance), fallback to User Package (if no payroll yet)
     const sumVal = (o) => Object.values(o || {}).reduce((s, v) => s + (Number(v) || 0), 0);
     if (sumVal(bE) === 0 && staffObj) {
       const u = staffObj;
@@ -631,7 +580,6 @@ const PayrollList = () => {
     try {
       const vals = await editForm.validateFields();
 
-      // Helper to convert array back to object
       const toObj = (arr) => {
         if (!arr || !Array.isArray(arr)) return {};
         const res = {};
@@ -656,7 +604,6 @@ const PayrollList = () => {
         holidays: Number(vals.holidays || 0),
       }, cycle?.monthKey);
 
-      // Totals Recalculation (Ratio = 1)
       const sum = (o) => Object.values(o || {}).reduce((a, b) => a + (Number(b) || 0), 0);
       const totalEarnings = sum(earnings);
       const totalIncentives = sum(incentives);
@@ -671,7 +618,7 @@ const PayrollList = () => {
         totalIncentives,
         totalDeductions,
         netSalary,
-        ratio: 1, // FORCE RATIO TO 1 as these are now fixed manual values
+        ratio: 1, // FORCE RATIO TO 1 as these are fixed manual values
       };
 
       const payload = {
@@ -682,7 +629,7 @@ const PayrollList = () => {
         deductions,
         attendanceSummary,
         totals,
-        isManual: true, // Flag as manually edited to prevent auto-recompute overwrites
+        isManual: true,
       };
 
       setLoading(true);
@@ -729,36 +676,84 @@ const PayrollList = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/');
+  const onBulkGeneratePayslips = async () => {
+    if (!cycle || selectedRowKeys.length === 0) {
+      message.warning('Please select at least one employee using the checkboxes.');
+      return;
+    }
+
+    const selectedLines = combinedData.filter(row => {
+      if (row._status === 'NOT_GENERATED') return false;
+      const key = row.id || `${row.cycleId}-${row.userId}`;
+      return selectedRowKeys.includes(key);
+    });
+
+    if (selectedLines.length === 0) {
+      message.warning('None of the selected employees have their payroll generated yet.');
+      return;
+    }
+
+    setLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    const hideLoadingMsg = message.loading(`Generating payslips for ${selectedLines.length} employee(s)... Please wait.`, 0);
+
+    try {
+      for (const line of selectedLines) {
+        try {
+          const res = await api.post('/admin/payroll/generate-payslip', {
+            userId: line.userId || line.user_id,
+            monthKey: cycle.monthKey
+          });
+          if (res.data?.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          failCount++;
+          console.error('Error generating bulk payslip for userId:', line.userId, err);
+        }
+      }
+
+      hideLoadingMsg();
+
+      if (successCount > 0) {
+        message.success(`Successfully generated ${successCount} payslip(s)!`);
+      }
+      if (failCount > 0) {
+        message.error(`Failed to generate ${failCount} payslip(s).`);
+      }
+
+      setSelectedRowKeys([]);
+      await loadCycle();
+    } catch (e) {
+      hideLoadingMsg();
+      message.error('An error occurred during bulk generation.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Check if user has payroll line, if not show 'Generate'
-  // We need to merge staffMap with lines to show all eligible staff
   const combinedData = useMemo(() => {
     if (!cycle) return [];
 
-    // Convert lines to map for easy lookup
     const lineMap = {};
     lines.forEach(line => {
       lineMap[line.userId || line.user_id] = line;
     });
 
-    // Create rows for all active staff
     const rows = [];
     Object.entries(staffMap).forEach(([id, name]) => {
-      // Filter by selected staff if any
       if (selectedStaffId && Number(id) !== selectedStaffId) {
         return;
       }
 
       const line = lineMap[id];
       if (line) {
-        rows.push({ ...line, _status: 'GENERATED' }); // Existing line
+        rows.push({ ...line, _status: 'GENERATED' });
       } else {
-        // Placeholder for staff without payroll
         rows.push({
           userId: Number(id),
           totals: { grossSalary: 0, totalEarnings: 0, totalDeductions: 0, netSalary: 0 },
@@ -769,46 +764,100 @@ const PayrollList = () => {
     return rows;
   }, [cycle, lines, staffMap, selectedStaffId]);
 
-
-
   const columns = [
-    { title: 'Employee', key: 'emp', render: (_, r) => staffMap[r.userId || r.user_id] || (r.userId || r.user_id) },
-    { title: 'Gross', dataIndex: ['totals', 'grossSalary'], key: 'gross', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+    {
+      title: 'Employee',
+      key: 'emp',
+      render: (_, r) => {
+        const userId = Number(r.userId || r.user_id);
+        const name = staffMap[userId] || userId;
+        const staff = staffDataMap[userId];
+        const isInactive = staff && (staff.active === false || staff.active === 0 || staff.active === 'false' || staff.active === '0');
+        const phone = staff?.phone || 'No contact';
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              backgroundColor: '#e6f7ff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: '12px',
+              color: '#1677ff',
+              fontSize: '16px',
+              fontWeight: '700',
+              boxShadow: '0 2px 6px rgba(22, 119, 255, 0.08)'
+            }}>
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: isInactive ? '#8c8c8c' : '#1677ff', whiteSpace: 'nowrap' }}>{name}</div>
+              <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '2px', whiteSpace: 'nowrap' }}>{phone}</div>
+              {isInactive && (
+                <span className="sales-status-tag sales-status-inactive" style={{ fontSize: '9px', padding: '1px 6px', marginTop: '4px', whiteSpace: 'nowrap' }}>
+                  Inactive
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      }
+    },
+    { 
+      title: 'Gross', 
+      dataIndex: ['totals', 'grossSalary'], 
+      key: 'gross', 
+      render: (v) => <span style={{ fontWeight: '500' }}>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> 
+    },
     {
       title: 'Earnings',
       dataIndex: ['totals', 'totalEarnings'],
       key: 'earnings',
-      render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      render: (v) => <span style={{ fontWeight: '500' }}>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
     },
-    { title: 'Deductions', dataIndex: ['totals', 'totalDeductions'], key: 'deductions', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-    { title: 'Net', dataIndex: ['totals', 'netSalary'], key: 'net', render: (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+    { 
+      title: 'Deductions', 
+      dataIndex: ['totals', 'totalDeductions'], 
+      key: 'deductions', 
+      render: (v) => <span style={{ fontWeight: '500', color: v > 0 ? '#ff4d4f' : 'inherit' }}>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> 
+    },
+    { 
+      title: 'Net', 
+      dataIndex: ['totals', 'netSalary'], 
+      key: 'net', 
+      render: (v) => <span style={{ fontWeight: '700', color: '#52c41a' }}>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> 
+    },
     {
-      title: 'Actions', key: 'actions', render: (_, r) => {
+      title: 'Actions', 
+      key: 'actions',
+      width: 380,
+      render: (_, r) => {
         if (r._status === 'NOT_GENERATED') {
-          return <Text type="secondary">Not Generated</Text>;
+          return <span className="sales-status-tag sales-status-inactive">Not Generated</span>;
         }
 
-        // Construct View Link if path exists
         let viewLink = null;
         if (r.payslipPath) {
-          // Ensure it starts with /
           const p = r.payslipPath.startsWith('/') ? r.payslipPath : '/' + r.payslipPath;
           viewLink = `${API_BASE_URL}${p}`;
         }
 
         return (
-          <Space>
-            <Button size="small" icon={<MenuUnfoldOutlined />} onClick={() => onOpenEdit(r)}>Edit</Button>
-            <Button size="small" onClick={() => setViewRow(r)}>View</Button>
-            {viewLink ? (
-              <>
-                <Button size="small" href={viewLink} target="_blank">View Payslip</Button>
-                <Button size="small" type="default" onClick={() => generatePayslipPDF(r)}>Regenerate</Button>
-              </>
-            ) : (
-              <Button size="small" type="primary" onClick={() => generatePayslipPDF(r)}>Generate Payslip</Button>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'nowrap', alignItems: 'center', whiteSpace: 'nowrap' }}>
+            <Button size="small" shape="round" onClick={() => onOpenEdit(r)}>Edit</Button>
+            <Button size="small" shape="round" onClick={() => setViewRow(r)}>View</Button>
+            {viewLink && (
+              <Button size="small" shape="round" href={viewLink} target="_blank">View Payslip</Button>
             )}
-          </Space>
+            {viewLink && (
+              <Button size="small" shape="round" type="default" onClick={() => generatePayslipPDF(r)}>Regenerate</Button>
+            )}
+            {!viewLink && (
+              <Button size="small" shape="round" type="primary" onClick={() => generatePayslipPDF(r)}>Generate Payslip</Button>
+            )}
+          </div>
         );
       }
     },
@@ -818,123 +867,133 @@ const PayrollList = () => {
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} />
       <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
-        <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 90 }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
-              className: 'trigger',
-              onClick: () => setCollapsed(!collapsed),
-              style: { fontSize: '18px', padding: '0 24px' }
-            })}
-            <Title level={4} style={{ margin: 0 }}>Payroll</Title>
-          </div>
-          <Menu
-            theme="light"
-            mode="horizontal"
-            items={[{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout }]}
-          />
-        </Header>
-        <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', overflow: 'auto' }}>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Payroll" 
+        />
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
 
-          {/* New Selection Header */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 24, justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <Text strong>Select Month:</Text>
-              <input
-                type="month"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                style={{ padding: 6, border: '1px solid #E5E7EB', borderRadius: 6 }}
-              />
-              <Select
-                showSearch
-                placeholder="Search or Select Staff"
-                optionFilterProp="children"
-                value={selectedStaffId}
-                onChange={setSelectedStaffId}
-                style={{ width: 300 }}
-                allowClear
-              >
-                {Object.entries(staffMap).map(([id, name]) => (
-                  <Select.Option key={id} value={Number(id)}>{name}</Select.Option>
-                ))}
-              </Select>
-            </div>
-
-            {/* Actions for Cycle */}
-            <Space>
-              <Button onClick={onExportCSV} disabled={!cycle || lines.length === 0} loading={loading}>Export Excel</Button>
-              <Button
-                type="primary"
-                onClick={onGeneratePayroll}
-                loading={loading}
-                disabled={loading || (cycle?.status === 'LOCKED' || cycle?.status === 'PAID')}
-              >
-                {lines.length > 0 ? 'Re-Generate Payroll' : 'Generate Payroll'}
-              </Button>
-
-              {cycle?.status === 'DRAFT' && (
-                <Button onClick={onLock} disabled={!cycle || lines.length === 0} loading={loading}>Lock Cycle</Button>
-              )}
-              {cycle?.status === 'LOCKED' && (
-                <>
-                  <Button onClick={onUnlock} disabled={!cycle} loading={loading}>Unlock</Button>
-                  <Button onClick={onMarkPaid} type="default" disabled={!cycle} loading={loading}>Mark All Paid</Button>
-                  <Button onClick={openBulkPaid} type="primary" disabled={!cycle || selectedRowKeys.length === 0} loading={loading}>Mark Paid Selected</Button>
-                </>
-              )}
-              {cycle?.status === 'PAID' && (
-                <Tag color="green">Paid</Tag>
-              )}
-            </Space>
-          </div>
-
-          {/* Content Area */}
-          {loading && !lines.length ? (
-            <div style={{ textAlign: 'center', padding: 40 }}><Text type="secondary">Loading payroll data...</Text></div>
-          ) : (!cycle && !loading ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <Text type="secondary">No payroll cycle found for {monthText}.</Text>
-              <div style={{ marginTop: 16 }}>
-                <Button type="primary" onClick={onCompute}>Create Payroll Cycle</Button>
+          <Card
+            className="sales-content-card"
+            bodyStyle={{ padding: '24px' }}
+          >
+            {/* Sleek Filter & Action Row */}
+            <div className="sales-filter-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="modal-field-label" style={{ margin: 0, whiteSpace: 'nowrap' }}>Select Month:</span>
+                  <input
+                    type="month"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    style={{ padding: '6px 12px', border: '1px solid #d9d9d9', borderRadius: 8, height: 32, fontSize: 13, background: '#fff', outline: 'none' }}
+                  />
+                </div>
+                <Select
+                  showSearch
+                  placeholder="Search or Select Staff"
+                  optionFilterProp="children"
+                  value={selectedStaffId}
+                  onChange={setSelectedStaffId}
+                  style={{ width: 240 }}
+                  allowClear
+                >
+                  {Object.entries(staffMap).map(([id, name]) => (
+                    <Select.Option key={id} value={Number(id)}>{name}</Select.Option>
+                  ))}
+                </Select>
               </div>
+
+              {/* Actions for Cycle */}
+              <Space wrap size={8}>
+                <Button onClick={onExportCSV} disabled={!cycle || lines.length === 0} loading={loading} shape="round">Export Excel</Button>
+                <Button
+                  type="primary"
+                  onClick={onGeneratePayroll}
+                  loading={loading}
+                  disabled={loading || (cycle?.status === 'LOCKED' || cycle?.status === 'PAID')}
+                  shape="round"
+                >
+                  {lines.length > 0 ? 'Re-Generate Payroll' : 'Generate Payroll'}
+                </Button>
+
+                {cycle && lines.length > 0 && (
+                  <Button
+                    type="default"
+                    onClick={onBulkGeneratePayslips}
+                    loading={loading}
+                    disabled={selectedRowKeys.length === 0 || loading}
+                    shape="round"
+                  >
+                    Bulk Generate Payslips {selectedRowKeys.length > 0 ? `(${selectedRowKeys.length})` : ''}
+                  </Button>
+                )}
+
+                {cycle?.status === 'DRAFT' && (
+                  <Button onClick={onLock} disabled={!cycle || lines.length === 0} loading={loading} shape="round">Lock Cycle</Button>
+                )}
+                {cycle?.status === 'LOCKED' && (
+                  <>
+                    <Button onClick={onUnlock} disabled={!cycle} loading={loading} shape="round">Unlock</Button>
+                    <Button onClick={onMarkPaid} type="default" disabled={!cycle} loading={loading} shape="round">Mark All Paid</Button>
+                    <Button onClick={openBulkPaid} type="primary" disabled={!cycle || selectedRowKeys.length === 0} loading={loading} shape="round">Mark Paid Selected</Button>
+                  </>
+                )}
+                {cycle?.status === 'PAID' && (
+                  <span className="sales-status-tag sales-status-complete" style={{ padding: '4px 12px' }}>Paid</span>
+                )}
+              </Space>
             </div>
-          ) : (
-            <Card bodyStyle={{ padding: 0 }}>
+
+            {/* Content Area */}
+            {loading && !lines.length ? (
+              <div style={{ textAlign: 'center', padding: 40 }}><Text type="secondary">Loading payroll data...</Text></div>
+            ) : (!cycle && !loading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <Text type="secondary">No payroll cycle found for {monthText}.</Text>
+                <div style={{ marginTop: 16 }}>
+                  <Button type="primary" onClick={onCompute} shape="round">Create Payroll Cycle</Button>
+                </div>
+              </div>
+            ) : (
               <Table
                 columns={columns}
                 dataSource={combinedData}
                 rowKey={(r) => r.id || `${r.cycleId}-${r.userId}`}
                 rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys) }}
                 loading={loading}
+                className="sales-table"
                 pagination={{
                   pageSize: 10,
                   showSizeChanger: true,
                   showQuickJumper: true,
                   pageSizeOptions: ['10', '20', '50', '100'],
-                  showTotal: (total) => `Total ${total} items`,
-                  hideOnSinglePage: false
+                  showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
                 }}
-                scroll={{ y: 'calc(100vh - 250px)' }}
+                scroll={{ y: 'calc(100vh - 280px)', x: 1000 }}
               />
-            </Card>
-          ))}
+            ))}
+          </Card>
 
         </Content>
       </Layout>
 
-      {/* Bulk Mark Paid */}
+      {/* Bulk Mark Paid Modal */}
       <Modal
         open={paidOpen}
         title={`Mark Paid for ${selectedRowKeys.length} selected`}
         onCancel={() => setPaidOpen(false)}
         onOk={submitBulkPaid}
         okButtonProps={{ disabled: !cycle }}
+        className="sales-modal"
+        destroyOnClose
       >
         <Form form={paidForm} layout="vertical">
-          <Form.Item name="paidAt" label="Paid At">
+          <Form.Item name="paidAt" label={<span className="modal-field-label">Paid At</span>}>
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item name="paidMode" label="Payment Mode">
+          <Form.Item name="paidMode" label={<span className="modal-field-label">Payment Mode</span>}>
             <Select allowClear placeholder="Select mode">
               <Select.Option value="cash">Cash</Select.Option>
               <Select.Option value="bank">Bank</Select.Option>
@@ -942,16 +1001,16 @@ const PayrollList = () => {
               <Select.Option value="other">Other</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="paidAmount" label="Amount">
+          <Form.Item name="paidAmount" label={<span className="modal-field-label">Amount</span>}>
             <InputNumber style={{ width: '100%' }} min={0} step={1} />
           </Form.Item>
-          <Form.Item name="paidRef" label="Reference / UTR">
+          <Form.Item name="paidRef" label={<span className="modal-field-label">Reference / UTR</span>}>
             <Input placeholder="Transaction reference (optional)" />
           </Form.Item>
         </Form>
       </Modal>
 
-      {/* Edit Line (Hidden for now as not requested in UI but good to keep logic if needed or can remove) */}
+      {/* Edit Line Modal */}
       <Modal
         open={!!editRow}
         title={editRow ? `Edit - ${staffMap[editRow.userId || editRow.user_id] || 'User'}` : 'Edit'}
@@ -959,6 +1018,8 @@ const PayrollList = () => {
         onOk={submitEdit}
         width={800}
         okButtonProps={{ disabled: cycle?.status === 'PAID' }}
+        className="sales-modal"
+        destroyOnClose
       >
         <Form
           form={editForm}
@@ -977,21 +1038,18 @@ const PayrollList = () => {
               let wo = Number(all.weeklyOff || 0);
               let ho = Number(all.holidays || 0);
               let totalLeave = Number(all.leave || 0);
-              const existingAbsent = Number(all.absent || 0);
 
-              // Auto-sync Total Leave if Paid changed
               if (changed.paidLeave !== undefined) {
                 totalLeave = pl;
                 editForm.setFieldsValue({ leave: totalLeave });
               }
-              // Auto-sync Paid if Total Leave changed (assume all paid by default)
               if (changed.leave !== undefined) {
                 totalLeave = Number(all.leave || 0);
                 pl = totalLeave;
                 editForm.setFieldsValue({ paidLeave: pl });
               }
 
-              const classifiedDays = p + h + totalLeave + wo + ho + existingAbsent;
+              const classifiedDays = p + h + totalLeave + wo + ho + Number(all.absent || 0);
               const [yy, mm] = cycle.monthKey.split('-').map(Number);
               const now = new Date();
               const isCurrentMonth = yy === now.getFullYear() && mm === (now.getMonth() + 1);
@@ -999,15 +1057,12 @@ const PayrollList = () => {
                 ? classifiedDays
                 : daysInMonth;
 
-              // Auto-calculate Absent using smart reference days.
               const absent = Math.max(0, referenceDays - (p + h + totalLeave + wo + ho));
               editForm.setFieldsValue({ absent });
 
-              // Calculate new ratio
               const payableDays = p + (h * 0.5) + pl + wo + ho;
               const newRatio = daysInMonth > 0 ? Math.min(1, Math.max(0, payableDays / daysInMonth)) : 1;
 
-              // Update Earnings, Incentives, and Deductions based on BASE values
               const userId = editRow?.userId || editRow?.user_id;
               const staffObj = staffDataMap[userId];
               const staffTplId = staffObj?.salaryTemplateId || staffObj?.profile?.salaryTemplateId;
@@ -1072,29 +1127,30 @@ const PayrollList = () => {
             }
           }}
         >
-          <Form.Item name="remarks" label="Remarks">
+          <Form.Item name="remarks" label={<span className="modal-field-label">Remarks</span>}>
             <Input.TextArea rows={2} />
           </Form.Item>
 
-          <Card size="small" title="Attendance Summary" style={{ marginBottom: 16 }}>
+          <Card size="small" title={<span style={{ fontWeight: 600 }}>Attendance Summary</span>} style={{ marginBottom: 16, background: '#fafafa', borderRadius: '12px' }} bordered={false}>
             <Row gutter={12}>
-              <Col span={6}><Form.Item name="present" label="Present"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="half" label="Half Day"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="leave" label="Total Leave"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="absent" label="Absent"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="paidLeave" label="Paid Leave"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="weeklyOff" label="Weekly Off"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="holidays" label="Holidays"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Late Count"><InputNumber value={editRow?.attendanceSummary?.lateCount || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Late Penalty"><InputNumber value={editRow?.attendanceSummary?.latePunchInPenalty || editRow?.attendanceSummary?.latePenalty || 0} disabled style={{ width: '100%' }} precision={2} prefix="₹" /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Early Exit (Min)"><InputNumber value={editRow?.attendanceSummary?.earlyExitMinutes || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="EE Penalty"><InputNumber value={editRow?.attendanceSummary?.earlyExitPenalty || 0} disabled style={{ width: '100%' }} precision={2} prefix="₹" /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Excess Break (Min)"><InputNumber value={editRow?.attendanceSummary?.excessBreakMinutes || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Break Penalty"><InputNumber value={editRow?.attendanceSummary?.breakPenalty || 0} disabled style={{ width: '100%' }} precision={2} prefix="₹" /></Form.Item></Col>
+              <Col span={6}><Form.Item name="present" label={<span className="modal-field-label">Present</span>}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="half" label={<span className="modal-field-label">Half Day</span>}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="leave" label={<span className="modal-field-label">Total Leave</span>}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="absent" label={<span className="modal-field-label">Absent</span>}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="paidLeave" label={<span className="modal-field-label">Paid Leave</span>}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="weeklyOff" label={<span className="modal-field-label">Weekly Off</span>}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="holidays" label={<span className="modal-field-label">Holidays</span>}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label={<span className="modal-field-label">Late Count</span>}><InputNumber value={editRow?.attendanceSummary?.lateCount || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label={<span className="modal-field-label">Late Penalty</span>}><InputNumber value={editRow?.attendanceSummary?.latePunchInPenalty || editRow?.attendanceSummary?.latePenalty || 0} disabled style={{ width: '100%' }} precision={2} prefix="₹" /></Form.Item></Col>
+              <Col span={6}><Form.Item label={<span className="modal-field-label">Early Exit (Min)</span>}><InputNumber value={editRow?.attendanceSummary?.earlyExitMinutes || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label={<span className="modal-field-label">EE Penalty</span>}><InputNumber value={editRow?.attendanceSummary?.earlyExitPenalty || 0} disabled style={{ width: '100%' }} precision={2} prefix="₹" /></Form.Item></Col>
+              <Col span={6}><Form.Item label={<span className="modal-field-label">Excess Break (Min)</span>}><InputNumber value={editRow?.attendanceSummary?.excessBreakMinutes || 0} disabled style={{ width: '100%' }} /></Form.Item></Col>
+              <Col span={6}><Form.Item label={<span className="modal-field-label">Break Penalty</span>}><InputNumber value={editRow?.attendanceSummary?.breakPenalty || 0} disabled style={{ width: '100%' }} precision={2} prefix="₹" /></Form.Item></Col>
             </Row>
           </Card>
+          
           <div style={{ marginBottom: 16 }}>
-            <Card size="small" title="Earnings">
+            <Card size="small" title={<span style={{ fontWeight: 600 }}>Earnings</span>} style={{ background: '#fafafa', borderRadius: '12px' }} bordered={false}>
               <Form.List name="earnings">
                 {(fields, { add, remove }) => (
                   <>
@@ -1102,10 +1158,9 @@ const PayrollList = () => {
                       <Row key={key} gutter={8} style={{ marginBottom: 8 }} align="middle">
                         <Col span={12}><Form.Item {...rest} name={[name, 'name']} noStyle><Input placeholder="Name" /></Form.Item></Col>
                         <Col span={9}><Form.Item {...rest} name={[name, 'amount']} noStyle><InputNumber style={{ width: '100%' }} placeholder="Amount" precision={2} prefix="₹" /></Form.Item></Col>
-                        <Col span={3}><MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer' }} /></Col>
+                        <Col span={3} style={{ textAlign: 'center' }}><MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer' }} /></Col>
                       </Row>
                     ))}
-                    {/* <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Earning</Button> */}
                   </>
                 )}
               </Form.List>
@@ -1113,7 +1168,7 @@ const PayrollList = () => {
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <Card size="small" title="Incentives">
+            <Card size="small" title={<span style={{ fontWeight: 600 }}>Incentives</span>} style={{ background: '#fafafa', borderRadius: '12px' }} bordered={false}>
               <Form.List name="incentives">
                 {(fields, { add, remove }) => (
                   <>
@@ -1121,10 +1176,9 @@ const PayrollList = () => {
                       <Row key={key} gutter={8} style={{ marginBottom: 8 }} align="middle">
                         <Col span={12}><Form.Item {...rest} name={[name, 'name']} noStyle><Input placeholder="Name" /></Form.Item></Col>
                         <Col span={9}><Form.Item {...rest} name={[name, 'amount']} noStyle><InputNumber style={{ width: '100%' }} placeholder="Amount" precision={2} prefix="₹" /></Form.Item></Col>
-                        <Col span={3}><MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer' }} /></Col>
+                        <Col span={3} style={{ textAlign: 'center' }}><MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer' }} /></Col>
                       </Row>
                     ))}
-                    {/* <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Incentive</Button> */}
                   </>
                 )}
               </Form.List>
@@ -1132,7 +1186,7 @@ const PayrollList = () => {
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <Card size="small" title="Deductions">
+            <Card size="small" title={<span style={{ fontWeight: 600 }}>Deductions</span>} style={{ background: '#fafafa', borderRadius: '12px' }} bordered={false}>
               <Form.List name="deductions">
                 {(fields, { add, remove }) => (
                   <>
@@ -1140,10 +1194,9 @@ const PayrollList = () => {
                       <Row key={key} gutter={8} style={{ marginBottom: 8 }} align="middle">
                         <Col span={12}><Form.Item {...rest} name={[name, 'name']} noStyle><Input placeholder="Name" /></Form.Item></Col>
                         <Col span={9}><Form.Item {...rest} name={[name, 'amount']} noStyle><InputNumber style={{ width: '100%' }} placeholder="Amount" precision={2} prefix="₹" /></Form.Item></Col>
-                        <Col span={3}><MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer' }} /></Col>
+                        <Col span={3} style={{ textAlign: 'center' }}><MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer' }} /></Col>
                       </Row>
                     ))}
-                    {/* <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Deduction</Button> */}
                   </>
                 )}
               </Form.List>
@@ -1152,13 +1205,15 @@ const PayrollList = () => {
         </Form>
       </Modal>
 
-      {/* View Line */}
+      {/* View Line Modal */}
       <Modal
         open={!!viewRow}
         title={viewRow ? (staffMap[viewRow.userId || viewRow.user_id] || `User #${viewRow.userId || viewRow.user_id}`) : 'View'}
         onCancel={() => setViewRow(null)}
-        footer={<Button onClick={() => setViewRow(null)}>Close</Button>}
+        footer={<Button onClick={() => setViewRow(null)} shape="round">Close</Button>}
         width={700}
+        className="sales-modal"
+        destroyOnClose
       >
         {viewRow && (
           (() => {
@@ -1166,7 +1221,7 @@ const PayrollList = () => {
             return (
               <Descriptions column={2} bordered size="small">
                 <Descriptions.Item label="Gross">₹{Number(viewRow?.totals?.grossSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
-                <Descriptions.Item label="Net">₹{Number(viewRow?.totals?.netSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
+                <Descriptions.Item label="Net"><span style={{ fontWeight: 'bold', color: '#52c41a' }}>₹{Number(viewRow?.totals?.netSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></Descriptions.Item>
                 <Descriptions.Item label="Earnings">₹{Number(viewRow?.totals?.totalEarnings || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
                 <Descriptions.Item label="Deductions">₹{Number(viewRow?.totals?.totalDeductions || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
                 <Descriptions.Item label="Ratio" span={2}>{Number(viewRow?.totals?.ratio ?? 1).toFixed(2)}</Descriptions.Item>
@@ -1207,7 +1262,7 @@ const PayrollList = () => {
                         <Space size={4}>
                           <Text>{val}</Text>
                           <Tooltip title={`${(val - extra).toFixed(2)} Base + ${extra.toFixed(2)} Extra Credit`}>
-                            <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'help' }} />
+                            <InfoCircleOutlined style={{ color: '#1677ff', cursor: 'help' }} />
                           </Tooltip>
                         </Space>
                       );
@@ -1226,7 +1281,7 @@ const PayrollList = () => {
                         <Space size={4}>
                           <Text>{val}</Text>
                           <Tooltip title={`${(val - extra).toFixed(2)} Base + ${extra.toFixed(2)} Extra Credit`}>
-                            <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'help' }} />
+                            <InfoCircleOutlined style={{ color: '#1677ff', cursor: 'help' }} />
                           </Tooltip>
                         </Space>
                       );
@@ -1423,8 +1478,10 @@ const PayrollList = () => {
         open={drilldownModalVisible}
         title={`${drilldownType} Details - ${monthText}`}
         onCancel={() => setDrilldownModalVisible(false)}
-        footer={<Button onClick={() => setDrilldownModalVisible(false)}>Close</Button>}
+        footer={<Button onClick={() => setDrilldownModalVisible(false)} shape="round">Close</Button>}
         width={600}
+        className="sales-modal"
+        destroyOnClose
       >
         <Table
           dataSource={drilldownRecords}
@@ -1451,17 +1508,8 @@ const PayrollList = () => {
               dataIndex: 'lateOccurrence',
               key: 'lateOccurrence',
               render: (v, r) => {
-                if (v) return <Tag color="orange">{v}</Tag>;
-                if (Number(r.latePunchInAmount || 0) <= 0) return <Text type="secondary" italic>Rule not assigned</Text>;
-                return '-';
-              }
-            }] : []),
-            ...(drilldownType === 'Early Exit' || drilldownType === 'Break' ? [{
-              title: 'Note',
-              key: 'note',
-              render: (_, r) => {
-                const amt = drilldownType === 'Early Exit' ? (r.earlyExitAmount || 0) : (r.breakDeductionAmount || 0);
-                if (Number(amt) <= 0) return <Text type="secondary" italic>Rule not assigned</Text>;
+                if (v) return <span className="sales-status-tag sales-status-pending" style={{ fontSize: '10px' }}>{v}</span>;
+                if (Number(r.lateFullDayPenaltyApplied ? 1 : 0) > 0) return <span className="sales-status-tag sales-status-inactive" style={{ fontSize: '10px' }}>Full Day</span>;
                 return '-';
               }
             }] : []),
@@ -1478,7 +1526,21 @@ const PayrollList = () => {
                 else if (drilldownType === 'Early Overtime') amt = r.earlyOvertimeAmount || 0;
 
                 const isEarning = drilldownType.includes('Overtime');
-                return <Text strong type={isEarning ? "success" : "danger"}>₹{Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>;
+                const bonusAmount = Number(r.extraFullDayBonusAmount || 0);
+                const showExtraBonus = drilldownType === 'Overtime' && r.extraFullDayBonusApplied && bonusAmount > 0;
+                if (showExtraBonus) {
+                  return (
+                    <Space direction="vertical" size={0} align="end">
+                      <Text strong type="success">
+                        {'\u20b9'}{Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        ({'\u20b9'}{bonusAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })} extra applicable)
+                      </Text>
+                    </Space>
+                  );
+                }
+                return <span style={{ fontWeight: '700', color: isEarning ? '#52c41a' : '#ff4d4f' }}>₹{Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
               }
             }
           ]}
@@ -1496,11 +1558,13 @@ const PayrollList = () => {
         open={bonusModalVisible}
         onCancel={() => setBonusModalVisible(false)}
         footer={[
-          <Button key="close" onClick={() => setBonusModalVisible(false)}>
+          <Button key="close" onClick={() => setBonusModalVisible(false)} shape="round">
             Close
           </Button>
         ]}
         width={450}
+        className="sales-modal"
+        destroyOnClose
       >
         {bonusData && (
           <Descriptions column={1} bordered size="small">
@@ -1511,9 +1575,9 @@ const PayrollList = () => {
               <Text strong>{bonusData.tenureMonths} Months</Text>
             </Descriptions.Item>
             <Descriptions.Item label="Matched Bracket">
-              <Tag color="purple">
+              <span className="sales-status-tag sales-status-inprogress">
                 {bonusData.bracketMin} - {bonusData.bracketMax} Months
-              </Tag>
+              </span>
             </Descriptions.Item>
             <Descriptions.Item label="Bonus Percentage">
               <Text strong style={{ color: '#722ed1' }}>{bonusData.bracketPercent}%</Text>

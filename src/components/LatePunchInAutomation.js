@@ -3,6 +3,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, HomeOutlined, ThunderboltOu
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
@@ -161,24 +162,37 @@ export default function LatePunchInAutomation() {
     };
 
     const columns = [
-        { title: 'Rule Name', dataIndex: 'name', key: 'name' },
+        { 
+            title: 'Rule Name', 
+            dataIndex: 'name', 
+            key: 'name',
+            render: (text) => <Text strong style={{ color: '#262626' }}>{text}</Text>
+        },
         {
             title: 'Penalty Type',
             dataIndex: 'penaltyType',
             key: 'penaltyType',
-            render: (type) => <Tag color="orange">{type.replace(/_/g, ' ')}</Tag>
+            render: (type) => {
+                let tagClass = 'sales-status-pending';
+                if (type === 'SLABS') tagClass = 'sales-status-pending';
+                else if (type.includes('AMOUNT')) tagClass = 'sales-status-active';
+                else tagClass = 'sales-status-inprogress';
+                return <Tag className={`sales-status-tag ${tagClass}`}>{type.replace(/_/g, ' ')}</Tag>;
+            }
         },
         {
             title: 'Status',
             dataIndex: 'active',
             key: 'active',
-            render: (active) => active ? <Tag color="success">Active</Tag> : <Tag color="error">Inactive</Tag>
+            render: (active) => active ? 
+                <Tag className="sales-status-tag sales-status-complete">Active</Tag> : 
+                <Tag className="sales-status-tag sales-status-inactive">Inactive</Tag>
         },
         {
             title: 'Assigned Staff',
             key: 'assignedCount',
             render: (_, record) => (
-                <Tag color="cyan" style={{ cursor: 'pointer' }} onClick={() => openAssignedList(record)}>
+                <Tag className="sales-status-tag sales-status-active" style={{ cursor: 'pointer', transition: 'all 0.3s' }} onClick={() => openAssignedList(record)}>
                     {record.assignedCount || 0} Staff
                 </Tag>
             )
@@ -186,23 +200,44 @@ export default function LatePunchInAutomation() {
         {
             title: 'Actions',
             key: 'actions',
+            width: 260,
             render: (_, record) => (
-                <Space>
-                    <Button icon={<ThunderboltOutlined />} onClick={() => openAssign(record)}>Assign</Button>
-                    <Button icon={<EditOutlined />} onClick={() => {
-                        setEditingRule(record);
-                        let thresholds = record.thresholds || [];
-                        if (typeof thresholds === 'string') {
-                            try { thresholds = JSON.parse(thresholds); } catch (e) { thresholds = []; }
-                        }
+                <Space size="middle" style={{ paddingRight: 8 }}>
+                    <Button 
+                        type="primary"
+                        ghost
+                        shape="round"
+                        icon={<ThunderboltOutlined />} 
+                        onClick={() => openAssign(record)}
+                        style={{ fontSize: '13px' }}
+                    >
+                        Assign
+                    </Button>
+                    <Button 
+                        shape="circle"
+                        icon={<EditOutlined />} 
+                        className="sales-action-btn"
+                        onClick={() => {
+                            setEditingRule(record);
+                            let thresholds = record.thresholds || [];
+                            if (typeof thresholds === 'string') {
+                                try { thresholds = JSON.parse(thresholds); } catch (e) { thresholds = []; }
+                            }
 
-                        form.setFieldsValue({
-                            ...record,
-                            thresholds: Array.isArray(thresholds) ? thresholds : []
-                        });
-                        setModalVisible(true);
-                    }} />
-                    <Button icon={<DeleteOutlined />} danger onClick={() => handleDelete(record.id)} />
+                            form.setFieldsValue({
+                                ...record,
+                                thresholds: Array.isArray(thresholds) ? thresholds : []
+                            });
+                            setModalVisible(true);
+                        }} 
+                    />
+                    <Button 
+                        shape="circle"
+                        danger
+                        icon={<DeleteOutlined />} 
+                        className="sales-action-btn"
+                        onClick={() => handleDelete(record.id)} 
+                    />
                 </Space>
             )
         }
@@ -211,32 +246,65 @@ export default function LatePunchInAutomation() {
     return (
         <Layout style={{ minHeight: '100vh' }}>
             <Sidebar collapsed={collapsed} onCollapse={setCollapsed} />
-            <Layout style={{ marginLeft: collapsed ? 80 : 200, background: '#f5f7fb' }}>
-                <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Space>
-                        <ArrowLeftOutlined onClick={() => navigate('/automation-rules')} style={{ cursor: 'pointer', fontSize: 18 }} />
-                        <Title level={4} style={{ margin: 0 }}>Late Punch-In Penalty Rules</Title>
-                    </Space>
-                    <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-                        setEditingRule(null);
-                        form.resetFields();
-                        setModalVisible(true);
-                    }}>
-                        Add New Penalty Rule
-                    </Button>
-                </Header>
+            <Layout style={{ marginLeft: collapsed ? 80 : 200, background: '#f5f7fb', transition: 'all 0.2s' }}>
+                <MainHeader collapsed={collapsed} setCollapsed={setCollapsed} title="Late Punch-In Penalty Rules" showHome={true} />
 
                 <Content style={{ padding: '24px' }}>
-                    <Breadcrumb style={{ marginBottom: 16 }}>
-                        <Breadcrumb.Item onClick={() => navigate('/dashboard')}><HomeOutlined /></Breadcrumb.Item>
-                        <Breadcrumb.Item onClick={() => navigate('/automation-rules')}>Automation Rules</Breadcrumb.Item>
-                        <Breadcrumb.Item>Late Penalty Rules</Breadcrumb.Item>
-                    </Breadcrumb>
+                    {/* Action Header Card */}
+                    <div style={{ 
+                        background: '#fff', 
+                        padding: '16px 24px', 
+                        borderRadius: '16px', 
+                        marginBottom: '20px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)',
+                        border: '1px solid #f0f2f5'
+                    }}>
+                        <Space size="middle">
+                            <Button 
+                                shape="circle" 
+                                icon={<ArrowLeftOutlined />} 
+                                onClick={() => navigate('/automation-rules')} 
+                                className="sales-action-btn"
+                            />
+                            <Breadcrumb style={{ margin: 0 }}>
+                                <Breadcrumb.Item onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}><HomeOutlined /></Breadcrumb.Item>
+                                <Breadcrumb.Item onClick={() => navigate('/automation-rules')} style={{ cursor: 'pointer' }}>Automation Rules</Breadcrumb.Item>
+                                <Breadcrumb.Item>Late Penalty Rules</Breadcrumb.Item>
+                            </Breadcrumb>
+                        </Space>
+                        <Button 
+                            type="primary" 
+                            icon={<PlusOutlined />} 
+                            shape="round"
+                            onClick={() => {
+                                setEditingRule(null);
+                                form.resetFields();
+                                setModalVisible(true);
+                            }}
+                        >
+                            Add New Penalty Rule
+                        </Button>
+                    </div>
 
-                    <Card>
-                        <Table dataSource={rules} columns={columns} loading={loading} rowKey="id" />
+                    <Card className="sales-content-card" style={{ padding: '4px' }}>
+                        <Table 
+                            dataSource={rules} 
+                            columns={columns} 
+                            loading={loading} 
+                            rowKey="id" 
+                            className="sales-table"
+                            pagination={{
+                                pageSize: 10,
+                                showSizeChanger: true,
+                                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} rules`
+                            }}
+                        />
                     </Card>
 
+                    {/* Create/Edit Penalty Rule Modal */}
                     <Modal
                         title={editingRule ? 'Edit Late Penalty Rule' : 'Create Late Penalty Rule'}
                         open={modalVisible}
@@ -244,16 +312,17 @@ export default function LatePunchInAutomation() {
                         onOk={() => form.submit()}
                         width={900}
                         okText="Save Rule"
+                        className="sales-modal"
                     >
                         <Form form={form} layout="vertical" onFinish={handleSave}>
                             <Row gutter={24}>
                                 <Col span={10}>
-                                    <Form.Item name="name" label={<Text strong>Rule Name <span style={{ color: 'red' }}>*</span></Text>} rules={[{ required: true }]}>
+                                    <Form.Item name="name" label={<span className="modal-field-label">Rule Name <span style={{ color: 'red' }}>*</span></span>} rules={[{ required: true, message: 'Rule name is required' }]}>
                                         <Input placeholder="e.g. Standard 15m Late Penalty" />
                                     </Form.Item>
                                 </Col>
                                 <Col span={8}>
-                                    <Form.Item name="penaltyType" label={<Text strong>Penalty Calculation Type</Text>} initialValue="SLABS">
+                                    <Form.Item name="penaltyType" label={<span className="modal-field-label">Penalty Calculation Type</span>} initialValue="SLABS">
                                         <Select style={{ width: '100%' }}>
                                             <Option value="SLABS">Tiers / Slabs (Day Deductions)</Option>
                                             <Option value="FIXED_AMOUNT">Fixed Amount Penalty</Option>
@@ -264,7 +333,7 @@ export default function LatePunchInAutomation() {
                                     </Form.Item>
                                 </Col>
                                 <Col span={3}>
-                                    <Form.Item name="bufferMinutes" label={<Text strong>Buffer (min)</Text>} initialValue={0}>
+                                    <Form.Item name="bufferMinutes" label={<span className="modal-field-label">Buffer (min)</span>} initialValue={0}>
                                         <InputNumber style={{ width: '100%' }} min={0} />
                                     </Form.Item>
                                 </Col>
@@ -275,9 +344,9 @@ export default function LatePunchInAutomation() {
                                 </Col>
                             </Row>
 
-                            <Divider orientation="left">Penalty Logic</Divider>
+                            <Divider orientation="left"><span className="modal-field-label" style={{ fontSize: '15px' }}>Penalty Logic</span></Divider>
 
-                            <div style={{ background: '#f9f9f9', padding: '16px', borderRadius: '8px' }}>
+                            <div style={{ background: '#fafafa', padding: '20px', borderRadius: '12px', border: '1px solid #f0f2f5' }}>
                                 <Form.Item
                                     noStyle
                                     shouldUpdate={(prev, curr) => prev.penaltyType !== curr.penaltyType}
@@ -293,22 +362,22 @@ export default function LatePunchInAutomation() {
                                                             {fields.map(({ key, name, ...restField }, index) => (
                                                                 <Row key={key} gutter={12} align="bottom" style={{ marginBottom: 16 }}>
                                                                     <Col span={5}>
-                                                                        <Form.Item {...restField} name={[name, 'minMinutes']} label={index === 0 ? "Min Late (min)" : ""} rules={[{ required: true }]}>
+                                                                        <Form.Item {...restField} name={[name, 'minMinutes']} label={index === 0 ? <span className="modal-field-label">Min Late (min)</span> : ""} rules={[{ required: true }]}>
                                                                             <InputNumber style={{ width: '100%' }} min={1} />
                                                                         </Form.Item>
                                                                     </Col>
                                                                     <Col span={5}>
-                                                                        <Form.Item {...restField} name={[name, 'maxMinutes']} label={index === 0 ? "Max Late (min)" : ""} rules={[{ required: true }]}>
+                                                                        <Form.Item {...restField} name={[name, 'maxMinutes']} label={index === 0 ? <span className="modal-field-label">Max Late (min)</span> : ""} rules={[{ required: true }]}>
                                                                             <InputNumber style={{ width: '100%' }} min={1} />
                                                                         </Form.Item>
                                                                     </Col>
                                                                     <Col span={5}>
-                                                                        <Form.Item {...restField} name={[name, 'deduction']} label={index === 0 ? "Deduct Days" : ""} rules={[{ required: true }]}>
+                                                                        <Form.Item {...restField} name={[name, 'deduction']} label={index === 0 ? <span className="modal-field-label">Deduct Days</span> : ""} rules={[{ required: true }]}>
                                                                             <InputNumber style={{ width: '100%' }} step={0.5} min={0} />
                                                                         </Form.Item>
                                                                     </Col>
                                                                     <Col span={6}>
-                                                                        <Form.Item {...restField} name={[name, 'frequency']} label={index === 0 ? "Every X Occurrences" : ""} initialValue={1}>
+                                                                        <Form.Item {...restField} name={[name, 'frequency']} label={index === 0 ? <span className="modal-field-label">Every X Occurrences</span> : ""} initialValue={1}>
                                                                             <InputNumber style={{ width: '100%' }} min={1} />
                                                                         </Form.Item>
                                                                     </Col>
@@ -317,7 +386,7 @@ export default function LatePunchInAutomation() {
                                                                     </Col>
                                                                 </Row>
                                                             ))}
-                                                            <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Tier / Slab</Button>
+                                                            <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />} shape="round">Add Tier / Slab</Button>
                                                         </>
                                                     )}
                                                 </Form.List>
@@ -332,12 +401,12 @@ export default function LatePunchInAutomation() {
                                                         {fields.map(({ key, name, ...restField }) => (
                                                             <Row key={key} gutter={16} align="bottom">
                                                                 <Col span={10}>
-                                                                    <Form.Item {...restField} name={[name, 'minMinutes']} label="If Late more than (minutes)" rules={[{ required: true }]}>
+                                                                    <Form.Item {...restField} name={[name, 'minMinutes']} label={<span className="modal-field-label">If Late more than (minutes)</span>} rules={[{ required: true }]}>
                                                                         <InputNumber style={{ width: '100%' }} min={1} />
                                                                     </Form.Item>
                                                                 </Col>
                                                                 <Col span={10}>
-                                                                    <Form.Item {...restField} name={[name, 'value']} label={pType.includes('AMOUNT') ? "Penalty Amount (₹)" : "Status Only"} rules={[{ required: pType.includes('AMOUNT') }]}>
+                                                                    <Form.Item {...restField} name={[name, 'value']} label={<span className="modal-field-label">{pType.includes('AMOUNT') ? "Penalty Amount (₹)" : "Status Only"}</span>} rules={[{ required: pType.includes('AMOUNT') }]}>
                                                                         <InputNumber style={{ width: '100%' }} prefix={pType.includes('AMOUNT') ? '₹' : ''} min={0} disabled={!pType.includes('AMOUNT')} />
                                                                     </Form.Item>
                                                                 </Col>
@@ -346,7 +415,7 @@ export default function LatePunchInAutomation() {
                                                                 </Col>
                                                             </Row>
                                                         ))}
-                                                        <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>Add Condition</Button>
+                                                        <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />} shape="round">Add Condition</Button>
                                                     </>
                                                 )}
                                             </Form.List>
@@ -358,10 +427,17 @@ export default function LatePunchInAutomation() {
                     </Modal>
 
                     {/* Assign Modal */}
-                    <Modal title={assigningRule ? `Assign Staff • ${assigningRule.name}` : 'Assign Staff'} open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={saveAssign} okText="Assign">
+                    <Modal 
+                        title={assigningRule ? `Assign Staff • ${assigningRule.name}` : 'Assign Staff'} 
+                        open={assignOpen} 
+                        onCancel={() => setAssignOpen(false)} 
+                        onOk={saveAssign} 
+                        okText="Assign"
+                        className="sales-modal"
+                    >
                         <Space direction="vertical" style={{ width: '100%' }} size={16}>
                             <div>
-                                <Text type="secondary">Select staff members to apply this penalty rule to:</Text>
+                                <Text type="secondary" style={{ fontSize: '13px' }}>Select staff members to apply this penalty rule to:</Text>
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
                                     <Button
                                         size="small"
@@ -391,7 +467,7 @@ export default function LatePunchInAutomation() {
 
                             <Row gutter={16}>
                                 <Col span={12}>
-                                    <Text strong>Effective From</Text>
+                                    <span className="modal-field-label">Effective From</span>
                                     <DatePicker 
                                         style={{ width: '100%', marginTop: 8 }} 
                                         value={effectiveFrom} 
@@ -401,7 +477,7 @@ export default function LatePunchInAutomation() {
                                     />
                                 </Col>
                                 <Col span={12}>
-                                    <Text strong>Effective To (Optional)</Text>
+                                    <span className="modal-field-label">Effective To (Optional)</span>
                                     <DatePicker 
                                         style={{ width: '100%', marginTop: 8 }} 
                                         value={effectiveTo} 
@@ -413,9 +489,9 @@ export default function LatePunchInAutomation() {
                             </Row>
 
                             {effectiveFrom && effectiveFrom.isBefore(dayjs(), 'day') && (
-                                <div style={{ background: '#fff7e6', border: '1px solid #ffd591', padding: '8px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ background: '#fff7e6', border: '1px solid #ffd591', padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <InfoCircleOutlined style={{ color: '#fa8c16' }} />
-                                    <Text type="warning" size="small">Backdated assignment will trigger attendance recalculation.</Text>
+                                    <Text type="warning" size="small" style={{ fontSize: '12px' }}>Backdated assignment will trigger attendance recalculation.</Text>
                                 </div>
                             )}
                         </Space>
@@ -428,6 +504,7 @@ export default function LatePunchInAutomation() {
                         onCancel={() => setAssignedListOpen(false)}
                         footer={null}
                         width={900}
+                        className="sales-modal"
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Input.Search
@@ -436,7 +513,7 @@ export default function LatePunchInAutomation() {
                                 value={assignedSearch}
                                 onChange={e => setAssignedSearch(e.target.value)}
                                 onSearch={setAssignedSearch}
-                                style={{ width: 350 }}
+                                style={{ width: 350, borderRadius: '8px' }}
                             />
                         </div>
                         <Table
@@ -450,10 +527,14 @@ export default function LatePunchInAutomation() {
                                 const phone = (r.user?.phone || '').toLowerCase();
                                 return name.includes(s) || sid.includes(s) || phone.includes(s);
                             })}
-                            size="small"
+                            size="middle"
                             pagination={{ pageSize: 8 }}
+                            className="sales-table"
                             columns={[
-                                { title: 'Name', render: (_, r) => r.user?.profile?.name || '-' },
+                                { 
+                                    title: 'Name', 
+                                    render: (_, r) => <Text strong style={{ color: '#262626' }}>{r.user?.profile?.name || '-'}</Text> 
+                                },
                                 { title: 'Staff ID', render: (_, r) => r.user?.profile?.staffId || '-' },
                                 { title: 'Effective From', render: (_, r) => r.effectiveFrom ? dayjs(r.effectiveFrom).format('DD-MM-YYYY') : '-' },
                                 { title: 'Department', render: (_, r) => r.user?.profile?.department || '-' },
@@ -461,8 +542,9 @@ export default function LatePunchInAutomation() {
                                 {
                                     title: 'Action',
                                     key: 'action',
+                                    width: 120,
                                     render: (_, r) => (
-                                        <Button danger size="small" onClick={() => unassignStaff(r.id)}>Unassign</Button>
+                                        <Button danger size="small" shape="round" onClick={() => unassignStaff(r.id)}>Unassign</Button>
                                     )
                                 },
                             ]}

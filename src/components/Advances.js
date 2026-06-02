@@ -14,11 +14,7 @@ import {
   message, 
   Row, 
   Col, 
-  Statistic,
   Descriptions,
-  Tag,
-  Tooltip,
-  Menu,
   Typography
 } from 'antd';
 import { 
@@ -26,10 +22,6 @@ import {
   DeleteOutlined, 
   EyeOutlined,
   CalendarOutlined,
-  UserOutlined,
-  MenuUnfoldOutlined,
-  MenuFoldOutlined,
-  LogoutOutlined,
   ReloadOutlined,
   EditOutlined,
   WalletOutlined,
@@ -38,11 +30,12 @@ import {
 import dayjs from 'dayjs';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 
-const { Header, Content } = Layout;
+const { Content } = Layout;
 const { Option } = Select;
 const { TextArea } = Input;
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 const Advances = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -59,12 +52,6 @@ const Advances = () => {
     pageSize: 10,
     total: 0
   });
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/';
-  };
 
   // Load advances
   const loadAdvances = async () => {
@@ -160,18 +147,41 @@ const Advances = () => {
     {
       title: 'Staff Member',
       key: 'staff',
-      render: (text, record) => (
-        <div>
-          <div style={{ fontWeight: 'bold' }}>{record.staffMember?.profile?.name || 'Unknown'}</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>{record.staffMember?.phone}</div>
-        </div>
-      ),
+      render: (text, record) => {
+        const name = record.staffMember?.profile?.name || 'Unknown';
+        const phone = record.staffMember?.phone || 'No phone';
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              flexShrink: 0,
+              borderRadius: '10px',
+              backgroundColor: '#e6f7ff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: '10px',
+              color: '#1677ff',
+              fontWeight: '700',
+              fontSize: '14px',
+              boxShadow: '0 2px 6px rgba(22, 119, 255, 0.06)'
+            }}>
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ whiteSpace: 'nowrap' }}>
+              <div style={{ fontWeight: '600', color: '#1677ff', whiteSpace: 'nowrap' }}>{name}</div>
+              <div style={{ fontSize: '11px', color: '#8c8c8c', marginTop: '1px', whiteSpace: 'nowrap' }}>{phone}</div>
+            </div>
+          </div>
+        );
+      }
     },
     {
       title: 'Amount',
       dataIndex: 'amount',
       key: 'amount',
-      render: (amount) => `₹${(Number(amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      render: (amount) => <span style={{ fontWeight: '600', color: '#262626' }}>₹{(Number(amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>,
     },
     {
       title: 'Advance Date',
@@ -189,36 +199,41 @@ const Advances = () => {
       title: 'Actions',
       key: 'actions',
       render: (text, record) => (
-        <Space size="small">
-          <Tooltip title="View Details">
-            <Button 
-              type="link" 
-              icon={<EyeOutlined />} 
-              onClick={() => handleViewDetails(record)}
-            />
-          </Tooltip>
-          <Tooltip title="Edit Advance">
-            <Button 
-              type="link" 
-              icon={<EditOutlined style={{ color: '#1890ff' }} />} 
-              onClick={() => handleEdit(record)} 
-            />
-          </Tooltip>
-          <Tooltip title="Delete">
-            <Button 
-              type="link" 
-              danger 
-              icon={<DeleteOutlined />} 
-              onClick={() => {
-                Modal.confirm({
-                  title: 'Are you sure you want to delete this advance?',
-                  content: 'This action cannot be undone.',
-                  onOk: () => handleDelete(record.id)
-                });
-              }}
-            />
-          </Tooltip>
-        </Space>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'nowrap', alignItems: 'center', whiteSpace: 'nowrap' }}>
+          <Button 
+            size="small" 
+            shape="round"
+            icon={<EyeOutlined />} 
+            onClick={() => handleViewDetails(record)}
+          >
+            Details
+          </Button>
+          <Button 
+            size="small" 
+            shape="round"
+            icon={<EditOutlined style={{ color: '#1677ff' }} />} 
+            onClick={() => handleEdit(record)}
+          >
+            Edit
+          </Button>
+          <Button 
+            size="small" 
+            shape="round"
+            danger
+            icon={<DeleteOutlined />} 
+            onClick={() => {
+              Modal.confirm({
+                title: 'Are you sure you want to delete this advance?',
+                content: 'This action cannot be undone.',
+                okButtonProps: { shape: 'round' },
+                cancelButtonProps: { shape: 'round' },
+                onOk: () => handleDelete(record.id)
+              });
+            }}
+          >
+            Delete
+          </Button>
+        </div>
       ),
     },
   ];
@@ -233,80 +248,72 @@ const Advances = () => {
       <Sidebar collapsed={collapsed} />
       
       <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
-        <Header
-          style={{
-            padding: 0,
-            background: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            position: 'sticky',
-            top: 0,
-            zIndex: 90
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <Button
-              type="text"
-              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={() => setCollapsed(!collapsed)}
-              style={{
-                fontSize: '18px',
-                padding: '0 24px'
-              }}
-            />
-            <Title level={4} style={{ margin: 0 }}>Staff Advances</Title>
-          </div>
-          <Menu
-            theme="light"
-            mode="horizontal"
-            items={[{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout }]}
-          />
-        </Header>
+        <MainHeader 
+          collapsed={collapsed} 
+          setCollapsed={setCollapsed} 
+          title="Staff Advances" 
+        />
         
         <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
           <div>
-            <Row gutter={16} style={{ marginBottom: 24 }}>
-              <Col span={8}>
-                <Card>
-                  <Statistic
-                    title="Total Advances"
-                    value={advances.length}
-                    prefix={<WalletOutlined />}
-                  />
+            {/* Beautiful Custom KPI Statistics Row */}
+            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+              <Col xs={24} md={8}>
+                <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>Total Advances</div>
+                      <div style={{ fontSize: '28px', fontWeight: '700', color: '#262626', lineHeight: '1.2' }}>{advances.length}</div>
+                    </div>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#e6f7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1677ff', fontSize: '20px', boxShadow: '0 4px 10px rgba(22, 119, 255, 0.1)' }}>
+                      <WalletOutlined />
+                    </div>
+                  </div>
                 </Card>
               </Col>
-              <Col span={8}>
-                <Card>
-                  <Statistic
-                    title="Pending Deductions"
-                    value={advances.filter(a => a.deductionMonth > dayjs().format('YYYY-MM')).reduce((sum, a) => sum + parseFloat(a.amount), 0)}
-                    valueStyle={{ color: '#cf1322' }}
-                    prefix={<CalendarOutlined />}
-                    formatter={(val) => `₹${(Number(val) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                  />
+              <Col xs={24} md={8}>
+                <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>Pending Deductions</div>
+                      <div style={{ fontSize: '24px', fontWeight: '700', color: '#ff4d4f', lineHeight: '1.4' }}>
+                        ₹{advances.filter(a => a.deductionMonth > dayjs().format('YYYY-MM')).reduce((sum, a) => sum + parseFloat(a.amount), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#fff1f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ff4d4f', fontSize: '20px', boxShadow: '0 4px 10px rgba(255, 77, 79, 0.1)' }}>
+                      <CalendarOutlined />
+                    </div>
+                  </div>
                 </Card>
               </Col>
-              <Col span={8}>
-                <Card>
-                  <Statistic
-                    title="Total Deducted"
-                    value={advances.filter(a => a.deductionMonth <= dayjs().format('YYYY-MM')).reduce((sum, a) => sum + parseFloat(a.amount), 0)}
-                    valueStyle={{ color: '#3f8600' }}
-                    prefix={<CheckCircleOutlined />}
-                    formatter={(val) => `₹${(Number(val) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                  />
+              <Col xs={24} md={8}>
+                <Card className="sales-content-card" bodyStyle={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', color: '#8c8c8c', fontWeight: '500', marginBottom: '8px' }}>Total Deducted</div>
+                      <div style={{ fontSize: '24px', fontWeight: '700', color: '#52c41a', lineHeight: '1.4' }}>
+                        ₹{advances.filter(a => a.deductionMonth <= dayjs().format('YYYY-MM')).reduce((sum, a) => sum + parseFloat(a.amount), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '12px', backgroundColor: '#f6ffed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#52c41a', fontSize: '20px', boxShadow: '0 4px 10px rgba(82, 196, 26, 0.1)' }}>
+                      <CheckCircleOutlined />
+                    </div>
+                  </div>
                 </Card>
               </Col>
             </Row>
 
             <Card
-              title="Advances List"
-              extra={
-                <Space>
-                  <Button icon={<ReloadOutlined />} onClick={loadAdvances}>Refresh</Button>
+              className="sales-content-card"
+              bodyStyle={{ padding: '24px' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <Title level={4} style={{ margin: 0, fontWeight: 600 }}>Active Advances Registry</Title>
+                <Space size={12}>
+                  <Button icon={<ReloadOutlined />} shape="round" onClick={loadAdvances}>Refresh</Button>
                   <Button 
                     type="primary" 
+                    shape="round"
                     icon={<PlusOutlined />}
                     onClick={() => {
                       setSelectedAdvance(null);
@@ -317,13 +324,14 @@ const Advances = () => {
                     Give Advance
                   </Button>
                 </Space>
-              }
-            >
+              </div>
+
               <Table
                 columns={columns}
                 dataSource={advances}
                 rowKey="id"
                 loading={loading}
+                className="sales-table"
                 pagination={{
                   ...pagination,
                   showSizeChanger: true,
@@ -338,7 +346,7 @@ const Advances = () => {
 
             {/* Give Advance Modal */}
             <Modal
-              title={selectedAdvance && modalVisible ? 'Edit Staff Advance' : 'Give Staff Advance'}
+              title={selectedAdvance && modalVisible ? 'Edit Staff Advance Record' : 'Record Staff Advance payment'}
               open={modalVisible}
               onCancel={() => {
                 setModalVisible(false);
@@ -347,24 +355,27 @@ const Advances = () => {
               }}
               footer={null}
               width={700}
+              className="sales-modal"
             >
               <Form
                 form={form}
                 layout="vertical"
                 onFinish={handleSubmit}
                 initialValues={{ advanceDate: dayjs(), deductionMonth: dayjs() }}
+                style={{ marginTop: '12px' }}
               >
                 <Row gutter={16}>
                   <Col span={12}>
                     <Form.Item
                       name="staffId"
-                      label="Select Staff"
+                      label={<span className="modal-field-label">Select Staff Member</span>}
                       rules={[{ required: true, message: 'Please select staff' }]}
                     >
                       <Select 
                         showSearch 
-                        placeholder="Search staff"
+                        placeholder="Search staff member"
                         optionFilterProp="children"
+                        dropdownStyle={{ borderRadius: '8px' }}
                       >
                         {staff.map(s => <Option key={s.id} value={s.id}>{s.name} ({s.phone})</Option>)}
                       </Select>
@@ -373,7 +384,7 @@ const Advances = () => {
                   <Col span={12}>
                     <Form.Item
                       name="amount"
-                      label="Advance Amount"
+                      label={<span className="modal-field-label">Advance Amount</span>}
                       rules={[{ required: true, message: 'Please enter amount' }]}
                     >
                       <InputNumber style={{ width: '100%' }} min={1} placeholder="0.00" prefix="₹" />
@@ -385,7 +396,7 @@ const Advances = () => {
                   <Col span={12}>
                     <Form.Item
                       name="advanceDate"
-                      label="Date Given"
+                      label={<span className="modal-field-label">Date Given</span>}
                       rules={[{ required: true, message: 'Please select date' }]}
                     >
                       <DatePicker style={{ width: '100%' }} />
@@ -394,7 +405,7 @@ const Advances = () => {
                   <Col span={12}>
                     <Form.Item
                       name="deductionMonth"
-                      label="Deduction Month"
+                      label={<span className="modal-field-label">Deduction Month</span>}
                       rules={[{ required: true, message: 'Please select deduction month' }]}
                     >
                       <DatePicker picker="month" style={{ width: '100%' }} format="MMMM YYYY" />
@@ -402,22 +413,21 @@ const Advances = () => {
                   </Col>
                 </Row>
 
-
-                <Form.Item name="notes" label="Notes">
-                  <TextArea rows={3} placeholder="Optional notes" />
+                <Form.Item name="notes" label={<span className="modal-field-label">Notes</span>}>
+                  <TextArea rows={3} placeholder="Provide descriptive notes for this payment (optional)" />
                 </Form.Item>
 
                 <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-                  <Space>
+                  <Space size={10}>
                     <Button onClick={() => {
                       setModalVisible(false);
                       setSelectedAdvance(null);
                       form.resetFields();
-                    }}>
+                    }} shape="round">
                       Cancel
                     </Button>
-                    <Button type="primary" htmlType="submit" loading={loading}>
-                      {selectedAdvance ? 'Update Advance' : 'Give Advance'}
+                    <Button type="primary" htmlType="submit" loading={loading} shape="round">
+                      {selectedAdvance ? 'Save Changes' : 'Record Advance'}
                     </Button>
                   </Space>
                 </Form.Item>
@@ -426,19 +436,37 @@ const Advances = () => {
 
             {/* Details Modal */}
             <Modal
-              title="Advance Details"
+              title="Overview of Staff Advance"
               open={detailsModalVisible}
               onCancel={() => setDetailsModalVisible(false)}
-              footer={[<Button key="close" onClick={() => setDetailsModalVisible(false)}>Close</Button>]}
+              footer={[
+                <Button key="close" type="primary" shape="round" onClick={() => setDetailsModalVisible(false)}>
+                  Dismiss Details
+                </Button>
+              ]}
+              className="sales-modal"
+              width={600}
             >
               {selectedAdvance && (
-                <Descriptions bordered column={1}>
-                  <Descriptions.Item label="Staff Member">{selectedAdvance.staffMember?.profile?.name}</Descriptions.Item>
-                  <Descriptions.Item label="Amount">₹{(Number(selectedAdvance.amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
-                  <Descriptions.Item label="Date Given">{dayjs(selectedAdvance.advanceDate).format('DD MMM YYYY')}</Descriptions.Item>
-                  <Descriptions.Item label="Deduction Month">{dayjs(selectedAdvance.deductionMonth, 'YYYY-MM').format('MMMM YYYY')}</Descriptions.Item>
-                  <Descriptions.Item label="Notes">{selectedAdvance.notes || '-'}</Descriptions.Item>
-                </Descriptions>
+                <div style={{ marginTop: '16px' }}>
+                  <Descriptions bordered column={1} contentStyle={{ fontSize: '13px', color: '#434343' }} labelStyle={{ fontWeight: '600', color: '#595959', fontSize: '13px', width: '150px' }}>
+                    <Descriptions.Item label="Staff Member">
+                      <span style={{ fontWeight: 'bold', color: '#1677ff' }}>{selectedAdvance.staffMember?.profile?.name}</span>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Amount">
+                      <span style={{ fontWeight: '700', color: '#262626' }}>₹{(Number(selectedAdvance.amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Date Given">
+                      {dayjs(selectedAdvance.advanceDate).format('DD MMM YYYY')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Deduction Month">
+                      {dayjs(selectedAdvance.deductionMonth, 'YYYY-MM').format('MMMM YYYY')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Notes">
+                      {selectedAdvance.notes || <Text type="secondary" style={{ fontStyle: 'italic' }}>No additional notes</Text>}
+                    </Descriptions.Item>
+                  </Descriptions>
+                </div>
               )}
             </Modal>
           </div>

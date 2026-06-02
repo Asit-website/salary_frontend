@@ -4,6 +4,7 @@ import { PlusOutlined, FileTextOutlined, TeamOutlined, CalendarOutlined, UploadO
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
+import MainHeader from './MainHeader';
 import moment from 'moment';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
@@ -157,39 +158,76 @@ const Recruitment = () => {
 
     const renderBoardView = () => {
         const statuses = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFERED', 'HIRED'];
-        const colors = { APPLIED: '#e6f7ff', SCREENING: '#fff7e6', INTERVIEW: '#f9f0ff', OFFERED: '#f6ffed', HIRED: '#f0f5ff' };
+        const colors = { 
+            APPLIED: { bg: '#e6f7ff', border: '#91d5ff', text: '#1890ff' }, 
+            SCREENING: { bg: '#fff7e6', border: '#ffd591', text: '#fa8c16' }, 
+            INTERVIEW: { bg: '#f9f0ff', border: '#d3adf7', text: '#722ed1' }, 
+            OFFERED: { bg: '#f6ffed', border: '#b7eb8f', text: '#52c41a' }, 
+            HIRED: { bg: '#f0f5ff', border: '#adc6ff', text: '#2f54eb' } 
+        };
 
         return (
-            <div className="kanban-board" style={{ display: 'flex', overflowX: 'auto', padding: '10px 0', gap: '16px' }}>
-                {statuses.map(status => (
-                    <div key={status} style={{ minWidth: '280px', flex: 1, background: '#f0f2f5', borderRadius: '8px', padding: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                            <Text strong>{status}</Text>
-                            <Tag color="default">{candidates.filter(c => c.status === status).length}</Tag>
+            <div className="kanban-board" style={{ display: 'flex', overflowX: 'auto', padding: '12px 0', gap: '20px' }}>
+                {statuses.map(status => {
+                    const stColor = colors[status] || { bg: '#f1f5f9', border: '#cbd5e1', text: '#475569' };
+                    return (
+                        <div key={status} style={{ minWidth: '290px', flex: 1, background: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '2px solid ' + stColor.text + '20', paddingBottom: '10px' }}>
+                                <span style={{ fontWeight: '700', color: stColor.text, fontSize: '13px', letterSpacing: '0.5px' }}>{status}</span>
+                                <span style={{ 
+                                    padding: '2px 8px', 
+                                    borderRadius: '10px', 
+                                    fontSize: '11px', 
+                                    fontWeight: '700', 
+                                    color: stColor.text, 
+                                    backgroundColor: stColor.text + '15'
+                                }}>
+                                    {candidates.filter(c => c.status === status).length}
+                                </span>
+                            </div>
+                            <div style={{ maxHeight: 'calc(100vh - 350px)', overflowY: 'auto', paddingRight: '4px' }}>
+                                {candidates.filter(c => c.status === status).map(c => (
+                                    <Card 
+                                        key={c.id} 
+                                        size="small" 
+                                        style={{ 
+                                            marginBottom: '12px', 
+                                            cursor: 'pointer', 
+                                            borderRadius: '10px',
+                                            border: '1px solid #e2e8f0',
+                                            boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+                                        }}
+                                        bodyStyle={{ padding: '12px' }}
+                                        onClick={() => { setSelectedCandidate(c); setCandidateDrawerVisible(true); }}
+                                        hoverable
+                                    >
+                                        <div style={{ marginBottom: '6px', fontSize: '14px' }}><strong>{c.name}</strong></div>
+                                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>{c.Job?.title || 'Unknown Job'}</div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                                            <Rate disabled defaultValue={c.rating || 0} style={{ fontSize: '11px' }} />
+                                            <Space>
+                                                <Button 
+                                                    size="small" 
+                                                    type="text" 
+                                                    shape="circle"
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation(); 
+                                                        handleUpdateCandidate(c.id, { status: statuses[statuses.indexOf(status) + 1] || status }); 
+                                                    }} 
+                                                    disabled={status === 'HIRED'} 
+                                                    icon={<PlusOutlined style={{ fontSize: '10px', color: '#1677ff' }} />} 
+                                                />
+                                            </Space>
+                                        </div>
+                                    </Card>
+                                ))}
+                                {candidates.filter(c => c.status === status).length === 0 && (
+                                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} style={{ margin: '20px 0' }} />
+                                )}
+                            </div>
                         </div>
-                        <div style={{ maxHeight: 'calc(100vh - 350px)', overflowY: 'auto' }}>
-                            {candidates.filter(c => c.status === status).map(c => (
-                                <Card 
-                                    key={c.id} 
-                                    size="small" 
-                                    style={{ marginBottom: '8px', cursor: 'pointer', borderRadius: '6px' }}
-                                    onClick={() => { setSelectedCandidate(c); setCandidateDrawerVisible(true); }}
-                                    hoverable
-                                >
-                                    <div style={{ marginBottom: '4px' }}><strong>{c.name}</strong></div>
-                                    <div style={{ fontSize: '12px', color: '#8c8c8c' }}>{c.Job?.title}</div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-                                        <Rate disabled defaultValue={c.rating || 0} style={{ fontSize: '12px' }} />
-                                        <Space>
-                                            <Button size="small" type="text" onClick={(e) => { e.stopPropagation(); handleUpdateCandidate(c.id, { status: statuses[statuses.indexOf(status) + 1] || status }); }} disabled={status === 'HIRED'} icon={<PlusOutlined style={{ fontSize: '10px' }} />} />
-                                        </Space>
-                                    </div>
-                                </Card>
-                            ))}
-                            {candidates.filter(c => c.status === status).length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} />}
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         );
     };
@@ -197,44 +235,92 @@ const Recruitment = () => {
     const jobColumns = [
         { title: 'Job Title', dataIndex: 'title', key: 'title', render: text => <strong>{text}</strong> },
         { title: 'Location', dataIndex: 'location', key: 'location' },
-        { title: 'Type', dataIndex: 'jobType', key: 'jobType', render: type => <Tag color="blue">{type}</Tag> },
-        { title: 'Status', dataIndex: 'status', key: 'status', render: status => (
-            <Tag color={status === 'OPEN' ? 'green' : 'red'}>{status}</Tag>
-        )},
+        { title: 'Type', dataIndex: 'jobType', key: 'jobType', render: type => {
+            const color = type === 'Full-time' ? '#1890ff' : '#722ed1';
+            return (
+                <span style={{ 
+                    padding: '4px 10px', 
+                    borderRadius: '20px', 
+                    fontSize: '11px', 
+                    fontWeight: '600', 
+                    color: color, 
+                    backgroundColor: `${color}10`, 
+                    border: `1px solid ${color}30` 
+                }}>
+                    {type}
+                </span>
+            );
+        }},
+        { title: 'Status', dataIndex: 'status', key: 'status', render: status => {
+            const color = status === 'OPEN' ? '#52c41a' : '#ff4d4f';
+            return (
+                <span style={{ 
+                    padding: '4px 10px', 
+                    borderRadius: '20px', 
+                    fontSize: '11px', 
+                    fontWeight: '600', 
+                    color: color, 
+                    backgroundColor: `${color}10`, 
+                    border: `1px solid ${color}30` 
+                }}>
+                    {status}
+                </span>
+            );
+        }},
         { title: 'Actions', key: 'actions', render: (_, record) => (
-            <Button size="small" onClick={() => { setSelectedJob(record); form.setFieldsValue(record); setJobModalVisible(true); }}>Edit</Button>
+            <Button size="small" shape="round" onClick={() => { setSelectedJob(record); form.setFieldsValue(record); setJobModalVisible(true); }}>Edit</Button>
         )}
     ];
 
     const candidateColumns = [
-        { title: 'Name', dataIndex: 'name', key: 'name', render: (text, r) => (
-            <div style={{ cursor: 'pointer' }} onClick={() => { setSelectedCandidate(r); setCandidateDrawerVisible(true); }}>
-                <strong>{text}</strong><br/><Text size="small" type="secondary">{r.email}</Text>
+        { title: 'Name', dataIndex: 'name', key: 'name', width: 220, render: (text, r) => (
+            <div style={{ display: 'flex', alignItems: 'center', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { setSelectedCandidate(r); setCandidateDrawerVisible(true); }}>
+                <div style={{
+                    width: '36px',
+                    height: '36px',
+                    flexShrink: 0,
+                    borderRadius: '10px',
+                    backgroundColor: '#e6f7ff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: '12px',
+                    color: '#1677ff',
+                    fontWeight: '700',
+                    fontSize: '14px',
+                    boxShadow: '0 2px 6px rgba(22, 119, 255, 0.06)'
+                }}>
+                    {text ? text.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ fontWeight: '600', color: '#1677ff', whiteSpace: 'nowrap' }}>{text}</div>
+                    <div style={{ fontSize: '11px', color: '#8c8c8c', marginTop: '1px', whiteSpace: 'nowrap' }}>{r.email}</div>
+                </div>
             </div>
         )},
         { title: 'Job Applied', key: 'job', render: (_, r) => r.Job?.title },
         { title: 'Status', dataIndex: 'status', key: 'status', render: (status, r) => (
-            <Select defaultValue={status} style={{ width: 130 }} onChange={(val) => handleUpdateCandidate(r.id, { status: val })}>
+            <Select defaultValue={status} style={{ width: 130 }} onChange={(val) => handleUpdateCandidate(r.id, { status: val })} dropdownStyle={{ borderRadius: '8px' }}>
                 {['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFERED', 'SELECTED', 'REJECTED', 'HIRED'].map(s => <Option key={s} value={s}>{s}</Option>)}
             </Select>
         )},
         { title: 'Rating', dataIndex: 'rating', key: 'rating', render: (val, r) => <Rate value={val} onChange={(v) => handleUpdateCandidate(r.id, { rating: v })} style={{ fontSize: '14px' }} /> },
         { title: 'Resume', key: 'resume', render: (_, r) => r.resumeUrl ? (
-            <Button type="link" icon={<FileTextOutlined />} onClick={() => window.open(`${api.defaults.baseURL}${r.resumeUrl}`, '_blank')}>View</Button>
-        ) : 'N/A' },
+            <Button type="link" shape="round" icon={<FileTextOutlined />} onClick={() => window.open(`${api.defaults.baseURL}${r.resumeUrl}`, '_blank')}>View</Button>
+        ) : <span style={{ color: '#bfbfbf' }}>N/A</span> },
         { title: 'Interview', key: 'interview', render: (_, r) => (
-            <Button size="small" icon={<CalendarOutlined />} onClick={() => { 
+            <Button size="small" shape="round" icon={<CalendarOutlined />} onClick={() => { 
                 setSelectedCandidate(r); 
                 interviewForm.setFieldsValue({ candidateId: r.id });
                 setInterviewModalVisible(true); 
             }}>Schedule</Button>
         )},
         { title: 'Actions', key: 'actions', fixed: 'right', render: (_, r) => (
-            <Button size="small" onClick={() => { 
+            <Button size="small" shape="round" onClick={() => { 
                 setSelectedCandidate(r); 
                 candidateForm.setFieldsValue({
                     ...r,
-                    resume: undefined // Can't populate file input
+                    resume: undefined
                 });
                 setCandidateModalVisible(true); 
             }}>Edit</Button>
@@ -244,52 +330,71 @@ const Recruitment = () => {
     return (
         <Layout style={{ minHeight: '100vh' }}>
             <Sidebar collapsed={collapsed} />
-            <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden' }}>
-                <Header style={{ padding: 0, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f0f0f0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                        {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, { onClick: () => setCollapsed(!collapsed), style: { fontSize: '18px', padding: '0 24px' } })}
-                        <Title level={4} style={{ margin: 0 }}>Recruitment System (ATS)</Title>
-                    </div>
-                </Header>
+            <Layout style={{ marginLeft: collapsed ? 80 : 200, height: '100vh', overflow: 'hidden', transition: 'margin-left 0.2s' }}>
+                <MainHeader 
+                    collapsed={collapsed} 
+                    setCollapsed={setCollapsed} 
+                    title="Recruitment System (ATS)" 
+                />
 
-                <Content style={{ margin: '0', padding: '24px', background: '#f5f5f5', height: 'calc(100vh - 64px)', overflow: 'auto' }}>
-                    <Row gutter={16} style={{ marginBottom: '24px' }}>
-                        <Col span={6}><Card bordered={false} className="stat-card"><Statistic title="Total Pool" value={stats.total} prefix={<TeamOutlined />} /></Card></Col>
-                        <Col span={6}><Card bordered={false} className="stat-card"><Statistic title="Active Interviews" value={stats.interview} valueStyle={{ color: '#722ed1' }} prefix={<CalendarOutlined />} /></Card></Col>
-                        <Col span={6}><Card bordered={false} className="stat-card"><Statistic title="Offered" value={stats.offered} valueStyle={{ color: '#faad14' }} prefix={<FileTextOutlined />} /></Card></Col>
-                        <Col span={6}><Card bordered={false} className="stat-card"><Statistic title="Hired" value={stats.hired} valueStyle={{ color: '#52c41a' }} prefix={<CheckCircleOutlined />} /></Card></Col>
+                <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
+                    {/* Beautiful Premium Stat Cards */}
+                    <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+                        <Col xs={12} sm={12} md={6}>
+                            <Card bordered={false} style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: 16, boxShadow: '0 4px 15px rgba(102, 126, 234, 0.25)' }} bodyStyle={{ padding: '18px' }}>
+                                <Statistic title={<span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '11px', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.3px' }}>Total Pool</span>} value={stats.total || 0} valueStyle={{ color: '#fff', fontWeight: 700, fontSize: '22px' }} prefix={<TeamOutlined style={{ marginRight: '6px' }} />} />
+                            </Card>
+                        </Col>
+                        <Col xs={12} sm={12} md={6}>
+                            <Card bordered={false} style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', borderRadius: 16, boxShadow: '0 4px 15px rgba(245, 87, 108, 0.25)' }} bodyStyle={{ padding: '18px' }}>
+                                <Statistic title={<span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '11px', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.3px' }}>Active Interviews</span>} value={stats.interview || 0} valueStyle={{ color: '#fff', fontWeight: 700, fontSize: '22px' }} prefix={<CalendarOutlined style={{ marginRight: '6px' }} />} />
+                            </Card>
+                        </Col>
+                        <Col xs={12} sm={12} md={6}>
+                            <Card bordered={false} style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', borderRadius: 16, boxShadow: '0 4px 15px rgba(250, 112, 154, 0.25)' }} bodyStyle={{ padding: '18px' }}>
+                                <Statistic title={<span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '11px', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.3px' }}>Offered</span>} value={stats.offered || 0} valueStyle={{ color: '#fff', fontWeight: 700, fontSize: '22px' }} prefix={<FileTextOutlined style={{ marginRight: '6px' }} />} />
+                            </Card>
+                        </Col>
+                        <Col xs={12} sm={12} md={6}>
+                            <Card bordered={false} style={{ background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', borderRadius: 16, boxShadow: '0 4px 15px rgba(67, 233, 123, 0.25)' }} bodyStyle={{ padding: '18px' }}>
+                                <Statistic title={<span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '11px', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.3px' }}>Hired</span>} value={stats.hired || 0} valueStyle={{ color: '#fff', fontWeight: 700, fontSize: '22px' }} prefix={<CheckCircleOutlined style={{ marginRight: '6px' }} />} />
+                            </Card>
+                        </Col>
                     </Row>
 
-                    <Card style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                    {/* Content Card with Tabs */}
+                    <Card className="sales-content-card" bodyStyle={{ padding: '24px' }}>
                         <Tabs 
                             activeKey={activeTab} 
                             onChange={setActiveTab}
                             tabBarExtraContent={
                                 <Space>
                                     {activeTab === 'candidates' && (
-                                        <Space className="view-switcher" style={{ background: '#f0f0f0', padding: '4px', borderRadius: '8px' }}>
-                                            <Button type={viewMode === 'board' ? 'primary' : 'text'} size="small" icon={<AppstoreOutlined />} onClick={() => setViewMode('board')}>Board</Button>
-                                            <Button type={viewMode === 'table' ? 'primary' : 'text'} size="small" icon={<BarsOutlined />} onClick={() => setViewMode('table')}>List</Button>
+                                        <Space className="view-switcher" style={{ background: '#f1f5f9', padding: '2px', borderRadius: '20px', border: '1px solid #e2e8f0', marginRight: '8px' }}>
+                                            <Button type={viewMode === 'board' ? 'primary' : 'text'} shape="round" size="small" icon={<AppstoreOutlined />} onClick={() => setViewMode('board')}>Board</Button>
+                                            <Button type={viewMode === 'table' ? 'primary' : 'text'} shape="round" size="small" icon={<BarsOutlined />} onClick={() => setViewMode('table')}>List</Button>
                                         </Space>
                                     )}
-                                    <Button type="primary" icon={<PlusOutlined />} onClick={() => setJobModalVisible(true)}>New Job</Button>
-                                    <Button icon={<TeamOutlined />} onClick={() => setCandidateModalVisible(true)}>Add Candidate</Button>
+                                    <Button type="primary" shape="round" icon={<PlusOutlined />} onClick={() => { setSelectedJob(null); form.resetFields(); setJobModalVisible(true); }}>New Job</Button>
+                                    <Button shape="round" icon={<TeamOutlined />} onClick={() => { setSelectedCandidate(null); candidateForm.resetFields(); setCandidateModalVisible(true); }}>Add Candidate</Button>
                                 </Space>
                             }
                         >
                             <TabPane tab={<span><FileTextOutlined />Job Postings</span>} key="jobs">
-                                <Table columns={jobColumns} dataSource={jobs} loading={loading} rowKey="id" pagination={{ pageSize: 6 }} />
+                                <Table className="sales-table" size="middle" columns={jobColumns} dataSource={jobs} loading={loading} rowKey="id" pagination={{ pageSize: 6 }} />
                             </TabPane>
                             <TabPane tab={<span><TeamOutlined />Candidates</span>} key="candidates">
-                                {viewMode === 'table' ? <Table columns={candidateColumns} dataSource={candidates} loading={loading} rowKey="id" pagination={{ pageSize: 8 }} /> : renderBoardView()}
+                                {viewMode === 'table' ? <Table className="sales-table" size="middle" columns={candidateColumns} dataSource={candidates} loading={loading} rowKey="id" pagination={{ pageSize: 8 }} /> : renderBoardView()}
                             </TabPane>
                             <TabPane tab={<span><CalendarOutlined />Interviews</span>} key="interviews">
                                 <Table 
+                                    className="sales-table"
+                                    size="middle"
                                     columns={[
-                                        { title: 'Time', dataIndex: 'scheduledAt', key: 'time', render: d => moment(d).format('MMM DD, hh:mm A') },
-                                        { title: 'Candidate', key: 'candidate', render: (_, r) => r.Candidate?.name },
-                                        { title: 'Round', dataIndex: 'roundName', key: 'round' },
-                                        { title: 'Status', dataIndex: 'status', key: 'status', render: (status, r) => (
+                                        { title: 'Time', dataIndex: 'scheduledAt', key: 'time', width: 180, render: d => moment(d).format('DD MMM YYYY, hh:mm A') },
+                                        { title: 'Candidate', key: 'candidate', width: 160, render: (_, r) => <span style={{ fontWeight: 600 }}>{r.Candidate?.name}</span> },
+                                        { title: 'Round', dataIndex: 'roundName', key: 'round', width: 160 },
+                                        { title: 'Status', dataIndex: 'status', key: 'status', width: 150, render: (status, r) => (
                                             <Select 
                                                 defaultValue={status} 
                                                 style={{ width: 140 }} 
@@ -297,24 +402,25 @@ const Recruitment = () => {
                                                     setSelectedInterview(r);
                                                     handleUpdateInterview({ status: val });
                                                 }}
+                                                dropdownStyle={{ borderRadius: '8px' }}
                                             >
                                                 {['SCHEDULED', 'COMPLETED', 'CANCELLED'].map(s => <Option key={s} value={s}>{s}</Option>)}
                                             </Select>
                                         )},
-                                        { title: 'Score', dataIndex: 'score', key: 'score', render: (score, r) => (
+                                        { title: 'Score', dataIndex: 'score', key: 'score', width: 90, render: (score, r) => (
                                             <Input 
                                                 type="number" 
                                                 defaultValue={score} 
-                                                style={{ width: 60 }} 
+                                                style={{ width: 70, borderRadius: '6px' }} 
                                                 onBlur={(e) => {
                                                     setSelectedInterview(r);
                                                     handleUpdateInterview({ score: e.target.value });
                                                 }}
                                             />
                                         )},
-                                        { title: 'Meeting', key: 'meeting', render: (_, r) => r.meetingLink ? <Button type="link" size="small" onClick={() => window.open(r.meetingLink)}>Join</Button> : 'Offline' },
-                                        { title: 'Actions', key: 'actions', fixed: 'right', render: (_, r) => (
-                                            <Button size="small" onClick={() => {
+                                        { title: 'Meeting', key: 'meeting', width: 110, render: (_, r) => r.meetingLink ? <Button type="link" size="small" shape="round" onClick={() => window.open(r.meetingLink)}>Join</Button> : <span style={{ color: '#bfbfbf' }}>Offline</span> },
+                                        { title: 'Actions', key: 'actions', fixed: 'right', width: 100, render: (_, r) => (
+                                            <Button size="small" shape="round" onClick={() => {
                                                 setSelectedInterview(r);
                                                 setSelectedCandidate(r.Candidate);
                                                 interviewForm.setFieldsValue({
@@ -326,6 +432,7 @@ const Recruitment = () => {
                                         )},
                                     ]} 
                                     dataSource={interviews} loading={loading} rowKey="id" 
+                                    scroll={{ x: 950 }}
                                 />
                             </TabPane>
                         </Tabs>
