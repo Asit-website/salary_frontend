@@ -74,7 +74,7 @@ const normalizeAttendanceSummary = (summary, monthKey) => {
 
   const latePenaltyDays = Number(s.latePenaltyDays || s.latePenalty || 0);
   const pUnits = present + (half * 0.5) + paidLeave + weeklyOff + holidays;
-  const payableDays = Math.max(0, pUnits - (s.latePenaltyDays || 0));
+  const payableDays = s.payableDays !== undefined ? Number(s.payableDays) : Math.max(0, pUnits - (s.latePenaltyDays || 0));
 
   return {
     ...s,
@@ -768,6 +768,7 @@ const PayrollList = () => {
     {
       title: 'Employee',
       key: 'emp',
+      width: 240,
       render: (_, r) => {
         const userId = Number(r.userId || r.user_id);
         const name = staffMap[userId] || userId;
@@ -809,24 +810,28 @@ const PayrollList = () => {
       title: 'Gross', 
       dataIndex: ['totals', 'grossSalary'], 
       key: 'gross', 
+      width: 130,
       render: (v) => <span style={{ fontWeight: '500' }}>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> 
     },
     {
       title: 'Earnings',
       dataIndex: ['totals', 'totalEarnings'],
       key: 'earnings',
+      width: 130,
       render: (v) => <span style={{ fontWeight: '500' }}>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
     },
     { 
       title: 'Deductions', 
       dataIndex: ['totals', 'totalDeductions'], 
       key: 'deductions', 
+      width: 130,
       render: (v) => <span style={{ fontWeight: '500', color: v > 0 ? '#ff4d4f' : 'inherit' }}>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> 
     },
     { 
       title: 'Net', 
       dataIndex: ['totals', 'netSalary'], 
       key: 'net', 
+      width: 130,
       render: (v) => <span style={{ fontWeight: '700', color: '#52c41a' }}>₹{Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> 
     },
     {
@@ -971,7 +976,7 @@ const PayrollList = () => {
                   pageSizeOptions: ['10', '20', '50', '100'],
                   showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
                 }}
-                scroll={{ y: 'calc(100vh - 280px)', x: 1000 }}
+                scroll={{ x: 1140 }}
               />
             ))}
           </Card>

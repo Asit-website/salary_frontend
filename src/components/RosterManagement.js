@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Layout, Table, Button, DatePicker, Select, Input, Popover, message, Space, Card, Typography, Modal, Form, Checkbox, Divider } from 'antd';
-import { LeftOutlined, RightOutlined, SearchOutlined, CalendarOutlined, SaveOutlined, AppstoreAddOutlined } from '@ant-design/icons';
+import { Layout, Table, Button, DatePicker, Select, Input, Popover, message, Space, Card, Typography, Modal, Form, Checkbox, Divider, Tabs, InputNumber } from 'antd';
+import { LeftOutlined, RightOutlined, SearchOutlined, CalendarOutlined, SaveOutlined, AppstoreAddOutlined, SyncOutlined, UsergroupAddOutlined, SettingOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import api from '../api';
@@ -25,6 +25,28 @@ const RosterManagement = () => {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkForm] = Form.useForm();
   const [bulkLoading, setBulkLoading] = useState(false);
+
+  // Shift Rotation Modal States
+  const [isRotationModalOpen, setIsRotationModalOpen] = useState(false);
+  const [rotationActiveTab, setRotationActiveTab] = useState("1");
+  const [rotationGroups, setRotationGroups] = useState([]);
+  const [unassignedStaff, setUnassignedStaff] = useState([]);
+  const [groupAStaff, setGroupAStaff] = useState([]);
+  const [groupBStaff, setGroupBStaff] = useState([]);
+  const [rotationLoading, setRotationLoading] = useState(false);
+  const [savingGroups, setSavingGroups] = useState(false);
+  const [runningRotation, setRunningRotation] = useState(false);
+  
+  // Rotation Rules Settings States
+  const [groupAStartShift, setGroupAStartShift] = useState(undefined);
+  const [groupAAltShift, setGroupAAltShift] = useState(undefined);
+  const [groupBStartShift, setGroupBStartShift] = useState(undefined);
+  const [groupBAltShift, setGroupBAltShift] = useState(undefined);
+  const [cycleDays, setCycleDays] = useState(15);
+  const [cycleStartType, setCycleStartType] = useState('FIRST_MONDAY_OF_MONTH');
+  const [excludeWeeklyOff, setExcludeWeeklyOff] = useState(true);
+  const [anchorDate, setAnchorDate] = useState(null);
+  const [rotationRange, setRotationRange] = useState([dayjs().startOf('month'), dayjs().endOf('month')]);
 
   const navigate = useNavigate();
 
@@ -71,6 +93,222 @@ const RosterManagement = () => {
     fetchRoster();
   }, [fetchRoster]);
 
+  const fetchRotationData = async () => {
+    try {
+      setRotationLoading(true);
+      const [groupsResp, rulesResp] = await Promise.all([
+        api.get('/admin/shift-rotation/groups'),
+        api.get('/admin/shift-rotation/rules')
+      ]);
+
+      const groups = groupsResp.data?.groups || [];
+      const unassigned = groupsResp.data?.unassignedStaff || [];
+      setRotationGroups(groups);
+      setUnassignedStaff(unassigned);
+
+      // Find Group A and Group B
+      const gA = groups.find(g => g.name === 'Group A');
+      const gB = groups.find(g => g.name === 'Group B');
+
+      setGroupAStaff(gA?.staff?.map(s => s.id) || []);
+      setGroupBStaff(gB?.staff?.map(s => s.id) || []);
+
+      // Rules mapping
+      const rules = rulesResp.data?.rules || [];
+
+      const rA = rules.find(r => r.shiftRotationGroupId === gA?.id);
+      const rB = rules.find(r => r.shiftRotationGroupId === gB?.id);
+
+      if (rA) {
+        setGroupAStartShift(rA.startShiftTemplateId);
+        setGroupAAltShift(rA.alternateShiftTemplateId);
+        setCycleDays(rA.cycleDays || 14);
+        setCycleStartType(rA.cycleStartType || 'FIRST_MONDAY_OF_MONTH');
+        setExcludeWeeklyOff(rA.excludeWeeklyOff !== undefined ? !!rA.excludeWeeklyOff : true);
+        setAnchorDate(rA.anchorDate ? dayjs(rA.anchorDate) : null);
+      }
+      if (rB) {
+        setGroupBStartShift(rB.startShiftTemplateId);
+        setGroupBAltShift(rB.alternateShiftTemplateId);
+      }
+    } catch (error) {
+      console.error('Error fetching rotation data:', error);
+      message.error('Failed to load shift rotation configurations');
+    } finally {
+      setRotationLoading(false);
+    }
+  };
+
+  const handleSaveGroups = async () => {
+    try {
+      setSavingGroups(true);
+      const gA = rotationGroups.find(g => g.name === 'Group A');
+      const gB = rotationGroups.find(g => g.name === 'Group B');
+
+      if (!gA || !gB) {
+        message.error('Group A or Group B not initialized on server');
+        return;
+      }
+
+      // Assign to Group A
+      await api.post('/admin/shift-rotation/groups/assign', {
+        userIds: groupAStaff,
+        shiftRotationGroupId: gA.id
+      });
+
+      // Assign to Group B
+      await api.post('/admin/shift-rotation/groups/assign', {
+        userIds: groupBStaff,
+        shiftRotationGroupId: gB.id
+      });
+
+      // Clear any other staff assignments (unassigned)
+      const allAssigned = [...groupAStaff, ...groupBStaff];
+      const toClear = staff
+        .filter(s => !allAssigned.includes(s.id) && s.shiftRotationGroupId)
+        .map(s => s.id);
+
+      if (toClear.length > 0) {
+        await api.post('/admin/shift-rotation/groups/assign', {
+          userIds: toClear,
+          shiftRotationGroupId: null
+        });
+      }
+
+      message.success('Group assignments saved successfully!');
+      fetchRotationData();
+    } catch (error) {
+      console.error('Error saving groups:', error);
+      message.error('Failed to save group assignments');
+    } finally {
+      setSavingGroups(false);
+    }
+  };
+
+  const handleRunRotation = async () => {
+    if (!groupAStartShift || !groupAAltShift || !groupBStartShift || !groupBAltShift) {
+      message.warning('Please configure start and alternate shifts for both Group A and Group B');
+      return;
+    }
+    if (!rotationRange || rotationRange.length !== 2) {
+      message.warning('Please select a date range for shift rotation');
+      return;
+    }
+
+    try {
+      setRunningRotation(true);
+
+      const gA = rotationGroups.find(g => g.name === 'Group A');
+      const gB = rotationGroups.find(g => g.name === 'Group B');
+
+      if (!gA || !gB) {
+        message.error('Group A or Group B not found on server');
+        return;
+      }
+
+      // 1. Save Group A rules
+      await api.post('/admin/shift-rotation/rules', {
+        shiftRotationGroupId: gA.id,
+        startShiftTemplateId: groupAStartShift,
+        alternateShiftTemplateId: groupAAltShift,
+        cycleDays,
+        cycleStartType,
+        excludeWeeklyOff,
+        anchorDate: anchorDate ? anchorDate.format('YYYY-MM-DD') : null,
+        active: true
+      });
+
+      // 2. Save Group B rules
+      await api.post('/admin/shift-rotation/rules', {
+        shiftRotationGroupId: gB.id,
+        startShiftTemplateId: groupBStartShift,
+        alternateShiftTemplateId: groupBAltShift,
+        cycleDays,
+        cycleStartType,
+        excludeWeeklyOff,
+        anchorDate: anchorDate ? anchorDate.format('YYYY-MM-DD') : null,
+        active: true
+      });
+
+      // 3. Generate roster shifts
+      const startDate = rotationRange[0].format('YYYY-MM-DD');
+      const endDate = rotationRange[1].format('YYYY-MM-DD');
+
+      const genResp = await api.post('/admin/shift-rotation/generate', {
+        startDate,
+        endDate
+      });
+
+      message.success(genResp.data?.message || 'Shift rotation applied successfully!');
+      setIsRotationModalOpen(false);
+      fetchRoster();
+    } catch (error) {
+      console.error('Error running shift rotation:', error);
+      message.error(error?.response?.data?.message || 'Failed to execute shift rotation pattern');
+    } finally {
+      setRunningRotation(false);
+    }
+  };
+
+  const handleSaveRules = async () => {
+    if (!groupAStartShift || !groupAAltShift || !groupBStartShift || !groupBAltShift) {
+      message.warning('Please configure start and alternate shifts for both Group A and Group B');
+      return;
+    }
+
+    try {
+      setRunningRotation(true);
+
+      const gA = rotationGroups.find(g => g.name === 'Group A');
+      const gB = rotationGroups.find(g => g.name === 'Group B');
+
+      if (!gA || !gB) {
+        message.error('Group A or Group B not found on server');
+        return;
+      }
+
+      // 1. Save Group A rules
+      await api.post('/admin/shift-rotation/rules', {
+        shiftRotationGroupId: gA.id,
+        startShiftTemplateId: groupAStartShift,
+        alternateShiftTemplateId: groupAAltShift,
+        cycleDays,
+        cycleStartType,
+        excludeWeeklyOff,
+        anchorDate: anchorDate ? anchorDate.format('YYYY-MM-DD') : null,
+        active: true
+      });
+
+      // 2. Save Group B rules
+      await api.post('/admin/shift-rotation/rules', {
+        shiftRotationGroupId: gB.id,
+        startShiftTemplateId: groupBStartShift,
+        alternateShiftTemplateId: groupBAltShift,
+        cycleDays,
+        cycleStartType,
+        excludeWeeklyOff,
+        anchorDate: anchorDate ? anchorDate.format('YYYY-MM-DD') : null,
+        active: true
+      });
+
+      message.success('Shift rotation rules saved successfully! The background job will execute them automatically.');
+      setIsRotationModalOpen(false);
+    } catch (error) {
+      console.error('Error saving shift rotation rules:', error);
+      message.error(error?.response?.data?.message || 'Failed to save shift rotation rules');
+    } finally {
+      setRunningRotation(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isRotationModalOpen) {
+      fetchRotationData();
+      // Set default rotation range to current month
+      setRotationRange([currentWeekStart.startOf('month'), currentWeekStart.endOf('month')]);
+    }
+  }, [isRotationModalOpen, currentWeekStart]);
+
   const handleWeekChange = (direction) => {
     setCurrentWeekStart(prev => direction === 'next' ? prev.add(7, 'day') : prev.subtract(7, 'day'));
   };
@@ -89,12 +327,13 @@ const RosterManagement = () => {
     return rosterData.find(r => r.userId === userId && r.date === date);
   };
 
-  const updateRoster = async (userId, date, status, shiftTemplateId, forceHoliday = false) => {
+  const updateRoster = async (userId, date, status, shiftTemplateId, forceHoliday = false, forceWeeklyOff = false) => {
     try {
       setSaving(userId);
       await api.post('/admin/roster', {
         assessments: [{ userId, date, status, shiftTemplateId }],
-        forceHoliday
+        forceHoliday,
+        forceWeeklyOff
       });
       fetchRoster();
       message.success('Roster updated');
@@ -105,7 +344,15 @@ const RosterManagement = () => {
           content: error.response.data.message,
           okText: 'Continue',
           cancelText: 'Cancel',
-          onOk: () => updateRoster(userId, date, status, shiftTemplateId, true)
+          onOk: () => updateRoster(userId, date, status, shiftTemplateId, true, forceWeeklyOff)
+        });
+      } else if (error?.response?.data?.isWeeklyOffWarning) {
+        Modal.confirm({
+          title: 'Weekly Off Warning',
+          content: error.response.data.message,
+          okText: 'Continue',
+          cancelText: 'Cancel',
+          onOk: () => updateRoster(userId, date, status, shiftTemplateId, forceHoliday, true)
         });
       } else {
         message.error(error?.response?.data?.message || 'Failed to update roster');
@@ -115,7 +362,7 @@ const RosterManagement = () => {
     }
   };
 
-  const handleBulkSave = async (values, forceHoliday = false) => {
+  const handleBulkSave = async (values, forceHoliday = false, forceWeeklyOff = false) => {
     try {
       setBulkLoading(true);
       const { staffIds, dateRange, status, shiftTemplateId, selectedDays } = values;
@@ -154,7 +401,7 @@ const RosterManagement = () => {
         return;
       }
 
-      const res = await api.post('/admin/roster', { assessments, isBulk: true, forceHoliday });
+      const res = await api.post('/admin/roster', { assessments, isBulk: true, forceHoliday, forceWeeklyOff });
       if (res.data.success) {
         message.success(`Successfully updated roster for ${staffIds.length} staff over ${dates.length} days`);
         setIsBulkModalOpen(false);
@@ -169,7 +416,15 @@ const RosterManagement = () => {
           content: error.response.data.message,
           okText: 'Continue',
           cancelText: 'Cancel',
-          onOk: () => handleBulkSave(values, true)
+          onOk: () => handleBulkSave(values, true, forceWeeklyOff)
+        });
+      } else if (error?.response?.data?.isWeeklyOffWarning) {
+        Modal.confirm({
+          title: 'Weekly Off Warning',
+          content: error.response.data.message,
+          okText: 'Continue',
+          cancelText: 'Cancel',
+          onOk: () => handleBulkSave(values, forceHoliday, true)
         });
       } else {
         message.error(error?.response?.data?.message || 'Failed to perform bulk roster update');
@@ -414,6 +669,15 @@ const RosterManagement = () => {
                   >
                     Bulk Roster
                   </Button>
+                  <Button 
+                    type="primary" 
+                    shape="round"
+                    icon={<SyncOutlined />} 
+                    onClick={() => setIsRotationModalOpen(true)}
+                    style={{ background: '#722ed1', borderColor: '#722ed1', boxShadow: '0 2px 6px rgba(114, 46, 209, 0.15)' }}
+                  >
+                    Auto Rotate Shift
+                  </Button>
                   <Button shape="round" icon={<SaveOutlined />} onClick={fetchRoster}>Refresh</Button>
                 </Space>
               </div>
@@ -528,6 +792,235 @@ const RosterManagement = () => {
               ) : null}
             </Form.Item>
           </Form>
+        </Modal>
+
+        <Modal
+          title={<Space style={{ color: '#722ed1' }}><SyncOutlined spin={rotationLoading} /><span>Auto Roster Rotation Settings</span></Space>}
+          open={isRotationModalOpen}
+          onCancel={() => setIsRotationModalOpen(false)}
+          footer={null}
+          width={700}
+          bodyStyle={{ padding: '8px 24px 24px' }}
+        >
+          <Tabs activeKey={rotationActiveTab} onChange={setRotationActiveTab}>
+            <Tabs.TabPane tab={<span><UsergroupAddOutlined />1. Staff Group Assignment</span>} key="1">
+              <Space direction="vertical" style={{ width: '100%' }} size={16}>
+                <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '8px' }}>
+                  <Text type="secondary">
+                    Create your staff cohorts below. Assign employees to either <strong>Group A</strong> or <strong>Group B</strong>. Employees in opposite groups will automatically swap shift schedules at each cycle interval.
+                  </Text>
+                </div>
+                
+                <div>
+                  <Text strong style={{ fontSize: '13px', display: 'block', marginBottom: '6px' }}>Group A Members</Text>
+                  <Select
+                    mode="multiple"
+                    style={{ width: '100%' }}
+                    placeholder="Search and assign staff to Group A"
+                    value={groupAStaff}
+                    onChange={(vals) => setGroupAStaff(vals)}
+                    optionFilterProp="label"
+                    loading={rotationLoading}
+                  >
+                    {staff
+                      .filter(s => !groupBStaff.includes(s.id))
+                      .map(s => (
+                        <Option key={s.id} value={s.id} label={s.profile?.name || s.phone}>
+                          {s.profile?.name || s.phone}
+                        </Option>
+                      ))
+                    }
+                  </Select>
+                </div>
+
+                <div>
+                  <Text strong style={{ fontSize: '13px', display: 'block', marginBottom: '6px' }}>Group B Members</Text>
+                  <Select
+                    mode="multiple"
+                    style={{ width: '100%' }}
+                    placeholder="Search and assign staff to Group B"
+                    value={groupBStaff}
+                    onChange={(vals) => setGroupBStaff(vals)}
+                    optionFilterProp="label"
+                    loading={rotationLoading}
+                  >
+                    {staff
+                      .filter(s => !groupAStaff.includes(s.id))
+                      .map(s => (
+                        <Option key={s.id} value={s.id} label={s.profile?.name || s.phone}>
+                          {s.profile?.name || s.phone}
+                        </Option>
+                      ))
+                    }
+                  </Select>
+                </div>
+
+                <Divider style={{ margin: '12px 0' }} />
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button 
+                    type="primary" 
+                    loading={savingGroups} 
+                    onClick={handleSaveGroups} 
+                    icon={<SaveOutlined />}
+                    style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                  >
+                    Save Cohorts & Assignments
+                  </Button>
+                </div>
+              </Space>
+            </Tabs.TabPane>
+            
+            <Tabs.TabPane tab={<span><SettingOutlined />2. Swapping Rules & Generation</span>} key="2">
+              <Space direction="vertical" style={{ width: '100%' }} size={16}>
+                <div style={{ background: '#f5f3ff', padding: '12px 16px', borderRadius: '8px', border: '1px solid #ddd6fe' }}>
+                  <Text style={{ color: '#5b21b6' }}>
+                    Configure the rotating swap shift patterns. The cycle interval swap logic propagates automatically based on your chosen starting shift templates.
+                  </Text>
+                </div>
+
+                <div style={{ border: '1px solid #f1f5f9', borderRadius: '8px', padding: '16px', backgroundColor: '#fafafa' }}>
+                  <Title level={5} style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#722ed1' }}>Shift Patterns Settings</Title>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    <div>
+                      <Text strong style={{ display: 'block', marginBottom: '8px' }}>Group A Starting Pattern</Text>
+                      <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: '11px' }}>Start Cycle Shift</Text>
+                          <Select 
+                            placeholder="Select Shift" 
+                            style={{ width: '100%' }}
+                            value={groupAStartShift}
+                            onChange={setGroupAStartShift}
+                          >
+                            {shifts.map(s => (
+                              <Option key={s.id} value={s.id}>{s.name} ({s.startTime} - {s.endTime})</Option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: '11px' }}>Alternate Cycle Shift (Swap)</Text>
+                          <Select 
+                            placeholder="Select Shift" 
+                            style={{ width: '100%' }}
+                            value={groupAAltShift}
+                            onChange={setGroupAAltShift}
+                          >
+                            {shifts.map(s => (
+                              <Option key={s.id} value={s.id}>{s.name} ({s.startTime} - {s.endTime})</Option>
+                            ))}
+                          </Select>
+                        </div>
+                      </Space>
+                    </div>
+
+                    <div>
+                      <Text strong style={{ display: 'block', marginBottom: '8px' }}>Group B Starting Pattern</Text>
+                      <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: '11px' }}>Start Cycle Shift</Text>
+                          <Select 
+                            placeholder="Select Shift" 
+                            style={{ width: '100%' }}
+                            value={groupBStartShift}
+                            onChange={setGroupBStartShift}
+                          >
+                            {shifts.map(s => (
+                              <Option key={s.id} value={s.id}>{s.name} ({s.startTime} - {s.endTime})</Option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: '11px' }}>Alternate Cycle Shift (Swap)</Text>
+                          <Select 
+                            placeholder="Select Shift" 
+                            style={{ width: '100%' }}
+                            value={groupBAltShift}
+                            onChange={setGroupBAltShift}
+                          >
+                            {shifts.map(s => (
+                              <Option key={s.id} value={s.id}>{s.name} ({s.startTime} - {s.endTime})</Option>
+                            ))}
+                          </Select>
+                        </div>
+                      </Space>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 1fr', gap: '16px', alignItems: 'center' }}>
+                  <div>
+                    <Text strong style={{ fontSize: '13px', display: 'block' }}>Swap Cycle</Text>
+                    <InputNumber
+                      min={1}
+                      max={365}
+                      value={cycleDays}
+                      onChange={setCycleDays}
+                      style={{ width: '100%', marginTop: '6px' }}
+                      formatter={value => `${value} Days`}
+                      parser={value => value.replace(' Days', '')}
+                    />
+                  </div>
+                  <div>
+                    <Text strong style={{ fontSize: '13px', display: 'block' }}>Cycle Start Rule</Text>
+                    <Select
+                      value={cycleStartType}
+                      onChange={setCycleStartType}
+                      style={{ width: '100%', marginTop: '6px' }}
+                    >
+                      <Option value="FIRST_MONDAY_OF_MONTH">First Monday of Month</Option>
+                      <Option value="SPECIFIC_DATE">Specific Start Date</Option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Text strong style={{ fontSize: '13px', display: 'block' }}>Weekly Off Action</Text>
+                    <Select
+                      value={excludeWeeklyOff}
+                      onChange={setExcludeWeeklyOff}
+                      style={{ width: '100%', marginTop: '6px' }}
+                    >
+                      <Option value={true}>Exclude Weekly Off</Option>
+                      <Option value={false}>Include Weekly Off</Option>
+                    </Select>
+                  </div>
+                  {cycleStartType === 'SPECIFIC_DATE' && (
+                    <div>
+                      <Text strong style={{ fontSize: '13px', display: 'block' }}>Anchor Date</Text>
+                      <DatePicker
+                        value={anchorDate}
+                        onChange={setAnchorDate}
+                        style={{ width: '100%', marginTop: '6px' }}
+                        allowClear={false}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <Divider style={{ margin: '12px 0' }} />
+
+                <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <Text strong style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>Roster Target Range & Execution</Text>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <RangePicker 
+                      value={rotationRange} 
+                      onChange={setRotationRange} 
+                      style={{ flex: 1 }} 
+                      allowClear={false}
+                    />
+                    <Button 
+                      type="primary" 
+                      loading={runningRotation} 
+                      onClick={handleRunRotation} 
+                      icon={<SyncOutlined />}
+                      style={{ background: '#722ed1', borderColor: '#722ed1' }}
+                    >
+                      Run Swapping Pattern
+                    </Button>
+                  </div>
+                </div>
+              </Space>
+            </Tabs.TabPane>
+          </Tabs>
         </Modal>
       </Layout>
     </Layout>

@@ -19,7 +19,17 @@ export default function SalaryCalculationLogic() {
     try {
       const resp = await api.get('/admin/settings/salary');
       const s = resp?.data?.settings || {};
-      setMode(s.mode || 'calendar');
+      const apiMode = s.payableDaysMode || 'calendar_month';
+      
+      // Map API value to Frontend UI value
+      let uiMode = 'calendar';
+      if (apiMode === 'calendar_month') uiMode = 'calendar';
+      else if (apiMode === 'every_30') uiMode = 'fixed_30';
+      else if (apiMode === 'every_28') uiMode = 'fixed_28';
+      else if (apiMode === 'every_26') uiMode = 'fixed_26';
+      else if (apiMode === 'exclude_weekly_offs') uiMode = 'exclude_weekly_offs';
+      
+      setMode(uiMode);
     } catch (e) {
       message.error('Failed to load salary calculation settings');
     }
@@ -30,7 +40,16 @@ export default function SalaryCalculationLogic() {
   const save = async () => {
     try {
       setLoading(true);
-      const payload = { mode };
+      
+      // Map Frontend UI value to API value
+      let apiMode = 'calendar_month';
+      if (mode === 'calendar') apiMode = 'calendar_month';
+      else if (mode === 'fixed_30') apiMode = 'every_30';
+      else if (mode === 'fixed_28') apiMode = 'every_28';
+      else if (mode === 'fixed_26') apiMode = 'every_26';
+      else if (mode === 'exclude_weekly_offs') apiMode = 'exclude_weekly_offs';
+
+      const payload = { payableDaysMode: apiMode };
       const resp = await api.put('/admin/settings/salary', payload);
       if (resp.data?.success) {
         message.success('Salary calculation logic saved');
