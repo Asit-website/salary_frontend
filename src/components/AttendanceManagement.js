@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Table, Button, DatePicker, Select, message, Space, Typography, Tag, Menu, Input, Modal, Form, Radio, TimePicker, Input as AntInput, Image, Row, Col } from 'antd';
+import { Layout, Card, Table, Button, DatePicker, Select, message, Space, Typography, Tag, Menu, Input, Modal, Form, Radio, TimePicker, Input as AntInput, Image, Row, Col, Popconfirm } from 'antd';
 import './AttendanceManagement.css';
 import {
   CalendarOutlined,
@@ -346,6 +346,16 @@ const AttendanceManagement = () => {
     }
   };
 
+  const deleteAttendance = async (id) => {
+    try {
+      await api.delete(`/admin/attendance/${id}`);
+      message.success('Attendance record deleted successfully');
+      fetchAttendance();
+    } catch (err) {
+      message.error(err?.response?.data?.message || 'Failed to delete attendance record');
+    }
+  };
+
   const fetchAttendance = async () => {
     if (!selectedDate) {
       setAttendance([]);
@@ -609,6 +619,25 @@ const AttendanceManagement = () => {
                 >
                   View Logs
                 </Button>
+                {record.id && !String(record.id).startsWith('leave-req-') && (
+                  <Popconfirm
+                    title="Delete Attendance"
+                    description="Are you sure you want to delete this attendance record?"
+                    onConfirm={() => deleteAttendance(record.id)}
+                    okText="Yes"
+                    cancelText="No"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button
+                      type="link"
+                      danger
+                      size="small"
+                      style={{ padding: 0, height: 'auto', fontSize: '11px' }}
+                    >
+                      Delete
+                    </Button>
+                  </Popconfirm>
+                )}
               </Space>
             </div>
           </div>

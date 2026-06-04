@@ -567,7 +567,7 @@ const Dashboard = () => {
                 </div>
               </Card>
             </Col>
-            <Col xs={24} sm={12} md={6}>
+            {/* <Col xs={24} sm={12} md={6}>
               <Card
                 style={{
                   background: '#ffffff',
@@ -614,7 +614,7 @@ const Dashboard = () => {
                   </div>
                 </div>
               </Card>
-            </Col>
+            </Col> */}
             <Col xs={24} sm={12} md={6}>
               <Card
                 style={{
@@ -966,7 +966,7 @@ const Dashboard = () => {
             <Col xs={24} lg={12}>
               <Card
                 className="sales-content-card"
-                title={<span style={{ fontSize: '16px', fontWeight: '600', color: '#1f1f1f' }}>Upcoming Events</span>}
+                title={<span style={{ fontSize: '16px', fontWeight: '600', color: '#1f1f1f' }}>Upcoming Holidays</span>}
                 bodyStyle={{ padding: '24px' }}
               >
                 <div style={{ maxHeight: '300px', overflowY: 'auto' }}>

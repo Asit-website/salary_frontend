@@ -23,6 +23,9 @@ import ManageDocuments from './components/ManageDocuments';
 import ManageSalaryTemplate from './components/ManageSalaryTemplate';
 import SalaryCalculationLogic from './components/SalaryCalculationLogic';
 import SalaryDetailsAccess from './components/SalaryDetailsAccess';
+import EsiAsTaSettings from './components/EsiAsTaSettings';
+import NoAbsentPaySettings from './components/NoAbsentPaySettings';
+import WoHolidayAsOtSettings from './components/WoHolidayAsOtSettings';
 import GeofenceSettings from './components/GeofenceSettings';
 import Sales from './components/Sales';
 import PayrollList from './components/PayrollList';
@@ -116,6 +119,9 @@ function App() {
       <Route path="/settings/salary-templates" element={<PrivateRoute><ManageSalaryTemplate /></PrivateRoute>} />
       <Route path="/settings/salary-calculation" element={<PrivateRoute><SalaryCalculationLogic /></PrivateRoute>} />
       <Route path="/settings/salary-access" element={<PrivateRoute><SalaryDetailsAccess /></PrivateRoute>} />
+      <Route path="/settings/esi-as-ta" element={<PrivateRoute><EsiAsTaSettings /></PrivateRoute>} />
+      <Route path="/settings/no-absent-pay" element={<PrivateRoute><NoAbsentPaySettings /></PrivateRoute>} />
+      <Route path="/settings/wo-holiday-as-ot" element={<PrivateRoute><WoHolidayAsOtSettings /></PrivateRoute>} />
       <Route path="/settings/geofence" element={<PrivateRoute><GeofenceSettings /></PrivateRoute>} />
       <Route path="/settings/qr-attendance" element={<PrivateRoute><QrAttendanceSettings /></PrivateRoute>} />
       <Route path="/sales" element={<PrivateRoute><Sales /></PrivateRoute>} />
