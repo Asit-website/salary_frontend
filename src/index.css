@@ -88,11 +88,11 @@ code {
   color: #333;
 }
 
-/* Staff Profile internal sidebar: force selected item icon and label to white */
+/* Staff Profile internal sidebar: force selected item icon and label to black */
 .staff-profile-menu .ant-menu-item-selected .ant-menu-title-content,
 .staff-profile-menu .ant-menu-item-selected .anticon,
 .staff-profile-menu .ant-menu-item-selected .ant-menu-item-icon {
-  color: #fff !important;
+  color: #000 !important;
 }
 
 .staff-profile-menu .ant-menu-item-selected {
@@ -371,4 +371,17 @@ code {
   border-color: #1677ff !important;
 }
 
+/* Fullscreen map wrapper styles to ensure children render correctly */
+#map-fullscreen-wrapper:fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background-color: #ffffff !important;
+  box-sizing: border-box !important;
+  z-index: 99999 !important;
+}
 
+#map-fullscreen-wrapper:fullscreen > div {
+  border-radius: 0 !important;
+}

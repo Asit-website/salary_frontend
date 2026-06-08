@@ -89,6 +89,8 @@ const AttendanceManagement = () => {
   const [staffOffMsg, setStaffOffMsg] = useState(null);
   const [selectedStaffDeactivated, setSelectedStaffDeactivated] = useState(false);
   const [approvedLeaves, setApprovedLeaves] = useState([]);
+  const [rmoStaffIds, setRmoStaffIds] = useState([]);
+  const [isRmoSelected, setIsRmoSelected] = useState(false);
 
   const navigate = useNavigate();
 
@@ -97,6 +99,17 @@ const AttendanceManagement = () => {
     fetchDepartments();
     fetchAttendance();
     fetchApprovedLeaves();
+
+    const fetchRmoSettings = async () => {
+      try {
+        const resp = await api.get('/admin/rmo-settings');
+        const settings = resp?.data?.settings || { targetHours: 480, staffIds: [] };
+        setRmoStaffIds(settings.staffIds || []);
+      } catch (e) {
+        console.error('Failed to load RMO settings:', e);
+      }
+    };
+    fetchRmoSettings();
   }, []);
 
   useEffect(() => {
@@ -207,6 +220,9 @@ const AttendanceManagement = () => {
       message.warning(`Warning: ${staffInfo.name} is currently deactivated. Attendance marked for deactivated staff may be restricted.`);
     }
 
+    const isRmo = rmoStaffIds.map(Number).includes(Number(staffId));
+    setIsRmoSelected(isRmo);
+
     setMarkOpen(true);
     setStaffOnLeave(false);
     setStaffOffMsg(null);
@@ -216,6 +232,12 @@ const AttendanceManagement = () => {
   const submitMark = async () => {
     try {
       const values = await markForm.validateFields();
+
+      // Block save if selected staff is RMO
+      if (rmoStaffIds.map(Number).includes(Number(values.staffId))) {
+        message.warning('This staff is RMO. Intermediate days are automatically marked as Present. You do not need to mark manually.');
+        return;
+      }
       if (values.date && values.date.isSame(dayjs(), 'day') && values.checkIn && values.checkOut) {
         const isNightShift = values.checkOut.isBefore(values.checkIn);
         
@@ -660,13 +682,31 @@ const AttendanceManagement = () => {
       title: 'Check In',
       dataIndex: 'checkIn',
       key: 'checkIn',
-      render: (time) => time || '-',
+      render: (time, record) => {
+        if (!time) return '-';
+        if (record.isRmo && record.punchedInAt) {
+          const punchInDate = dayjs(record.punchedInAt).format('YYYY-MM-DD');
+          if (punchInDate !== record.date) {
+            return `${time} (${dayjs(record.punchedInAt).format('DD MMM')})`;
+          }
+        }
+        return time;
+      },
     },
     {
       title: 'Check Out',
       dataIndex: 'checkOut',
       key: 'checkOut',
-      render: (time) => time || '-',
+      render: (time, record) => {
+        if (!time) return '-';
+        if (record.isRmo && record.punchedOutAt) {
+          const punchOutDate = dayjs(record.punchedOutAt).format('YYYY-MM-DD');
+          if (punchOutDate !== record.date) {
+            return `${time} (${dayjs(record.punchedOutAt).format('DD MMM')})`;
+          }
+        }
+        return time;
+      },
     },
     {
       title: 'Break',
@@ -998,6 +1038,9 @@ const AttendanceManagement = () => {
                   onSelect={async (uid) => {
                     const dateStr = selectedDate.format('YYYY-MM-DD');
 
+                    const isRmo = rmoStaffIds.map(Number).includes(Number(uid));
+                    setIsRmoSelected(isRmo);
+
                     const staffInfo = staffList.find(s => s.id === uid || s.id === Number(uid));
                     if (staffInfo && staffInfo.active === false) {
                       setSelectedStaffDeactivated(true);
@@ -1069,6 +1112,12 @@ const AttendanceManagement = () => {
               {staffOffMsg && (
                 <div style={{ marginBottom: 16, padding: '8px 12px', background: '#fff7e6', border: '1px solid #ffe58f', borderRadius: 4, color: '#d46b08', fontWeight: 500 }}>
                   {staffOffMsg}
+                </div>
+              )}
+
+              {isRmoSelected && (
+                <div style={{ marginBottom: 16, padding: '8px 12px', background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: 4, color: '#0050b3', fontWeight: 500 }}>
+                  ℹ️ This staff is RMO. Intermediate days are automatically marked as Present. You do not need to mark manually.
                 </div>
               )}
 
@@ -1148,7 +1197,7 @@ const AttendanceManagement = () => {
                   String(option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                 }
               >
-                {Array.isArray(staffList) && staffList.map(s => (
+                {Array.isArray(staffList) && staffList.filter(s => !rmoStaffIds.map(Number).includes(Number(s.id))).map(s => (
                   <Option key={s.id} value={s.id}>{s.name} ({s.staffId || 'N/A'})</Option>
                 ))}
               </Select>

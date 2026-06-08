@@ -136,6 +136,20 @@ export default function SuperadminClients() {
     const comparisonEnabled = sub.comparisonEnabled !== null && sub.comparisonEnabled !== undefined ? sub.comparisonEnabled : (plan.comparisonEnabled !== undefined ? plan.comparisonEnabled : true);
     const otImpactEnabled = sub.otImpactEnabled !== null && sub.otImpactEnabled !== undefined ? sub.otImpactEnabled : (plan.otImpactEnabled !== undefined ? plan.otImpactEnabled : true);
     const latePenaltyEnabled = sub.latePenaltyEnabled !== null && sub.latePenaltyEnabled !== undefined ? sub.latePenaltyEnabled : (plan.latePenaltyEnabled !== undefined ? plan.latePenaltyEnabled : true);
+    const esiAsTaEnabled = (() => {
+      let meta = {};
+      if (sub.meta) {
+        try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+      }
+      return !!meta?.esiAsTaEnabled;
+    })();
+    const rmoEnabled = (() => {
+      let meta = {};
+      if (sub.meta) {
+        try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+      }
+      return !!meta?.rmoEnabled;
+    })();
 
     console.log('Opening limit modal for client:', client.name);
 
@@ -157,6 +171,8 @@ export default function SuperadminClients() {
       comparisonEnabled,
       otImpactEnabled,
       latePenaltyEnabled,
+      esiAsTaEnabled,
+      rmoEnabled,
       rosterEnabled: sub.rosterEnabled !== null ? sub.rosterEnabled : (plan.rosterEnabled || false),
       recruitmentEnabled: sub.recruitmentEnabled !== null ? sub.recruitmentEnabled : (plan.recruitmentEnabled || false),
       communityEnabled: sub.communityEnabled !== null ? sub.communityEnabled : (plan.communityEnabled || false)
@@ -199,7 +215,9 @@ export default function SuperadminClients() {
         perDaySalaryEnabled: !!values.perDaySalaryEnabled,
         comparisonEnabled: !!values.comparisonEnabled,
         otImpactEnabled: !!values.otImpactEnabled,
-        latePenaltyEnabled: !!values.latePenaltyEnabled
+        latePenaltyEnabled: !!values.latePenaltyEnabled,
+        esiAsTaEnabled: !!values.esiAsTaEnabled,
+        rmoEnabled: !!values.rmoEnabled,
       };
 
       const res = await api.post(`/superadmin/clients/${selectedClientForLimit.id}/subscription`, payload);
@@ -343,7 +361,21 @@ export default function SuperadminClients() {
       perDaySalaryEnabled: sub.perDaySalaryEnabled !== null && sub.perDaySalaryEnabled !== undefined ? !!sub.perDaySalaryEnabled : (resolvedPlan.perDaySalaryEnabled !== undefined ? !!resolvedPlan.perDaySalaryEnabled : true),
       comparisonEnabled: sub.comparisonEnabled !== null && sub.comparisonEnabled !== undefined ? !!sub.comparisonEnabled : (resolvedPlan.comparisonEnabled !== undefined ? !!resolvedPlan.comparisonEnabled : true),
       otImpactEnabled: sub.otImpactEnabled !== null && sub.otImpactEnabled !== undefined ? !!sub.otImpactEnabled : (resolvedPlan.otImpactEnabled !== undefined ? !!resolvedPlan.otImpactEnabled : true),
-      latePenaltyEnabled: sub.latePenaltyEnabled !== null && sub.latePenaltyEnabled !== undefined ? !!sub.latePenaltyEnabled : (resolvedPlan.latePenaltyEnabled !== undefined ? !!resolvedPlan.latePenaltyEnabled : true)
+      latePenaltyEnabled: sub.latePenaltyEnabled !== null && sub.latePenaltyEnabled !== undefined ? !!sub.latePenaltyEnabled : (resolvedPlan.latePenaltyEnabled !== undefined ? !!resolvedPlan.latePenaltyEnabled : true),
+      esiAsTaEnabled: (() => {
+        let meta = {};
+        if (sub.meta) {
+          try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+        }
+        return !!meta?.esiAsTaEnabled;
+      })(),
+      rmoEnabled: (() => {
+        let meta = {};
+        if (sub.meta) {
+          try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+        }
+        return !!meta?.rmoEnabled;
+      })(),
     });
     setAssignModalTitle('Assign/Renew Subscription');
     setIsUpgrade(false);
@@ -385,7 +417,21 @@ export default function SuperadminClients() {
       perDaySalaryEnabled: plan.perDaySalaryEnabled !== undefined ? !!plan.perDaySalaryEnabled : true,
       comparisonEnabled: plan.comparisonEnabled !== undefined ? !!plan.comparisonEnabled : true,
       otImpactEnabled: plan.otImpactEnabled !== undefined ? !!plan.otImpactEnabled : true,
-      latePenaltyEnabled: plan.latePenaltyEnabled !== undefined ? !!plan.latePenaltyEnabled : true
+      latePenaltyEnabled: plan.latePenaltyEnabled !== undefined ? !!plan.latePenaltyEnabled : true,
+      esiAsTaEnabled: (() => {
+        let meta = {};
+        if (sub.meta) {
+          try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+        }
+        return !!meta?.esiAsTaEnabled;
+      })(),
+      rmoEnabled: (() => {
+        let meta = {};
+        if (sub.meta) {
+          try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+        }
+        return !!meta?.rmoEnabled;
+      })(),
     });
     setAssignModalTitle('Upgrade Plan (Queued)');
     setIsUpgrade(true);
@@ -456,6 +502,8 @@ export default function SuperadminClients() {
         comparisonEnabled: !!values.comparisonEnabled,
         otImpactEnabled: !!values.otImpactEnabled,
         latePenaltyEnabled: !!values.latePenaltyEnabled,
+        esiAsTaEnabled: !!values.esiAsTaEnabled,
+        rmoEnabled: !!values.rmoEnabled,
       };
       await api.post(`/superadmin/clients/${editing.id}/subscription`, payload);
       message.success('Subscription assigned');
@@ -833,6 +881,16 @@ export default function SuperadminClients() {
                     <Checkbox>Enable Community Module</Checkbox>
                   </Form.Item>
                 </Col>
+                <Col span={8}>
+                  <Form.Item name="esiAsTaEnabled" valuePropName="checked">
+                    <Checkbox>Enable ESI as TA Mapping</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="rmoEnabled" valuePropName="checked">
+                    <Checkbox>Enable RMO Configuration</Checkbox>
+                  </Form.Item>
+                </Col>
                 <Col span={24} style={{ marginTop: 8, marginBottom: 8 }}>
                   <div style={{ fontWeight: 600, color: '#1890ff', borderBottom: '1px solid #f0f0f0', paddingBottom: 4, marginBottom: 12 }}>
                     Report Visibilities
@@ -1046,6 +1104,16 @@ export default function SuperadminClients() {
             <Col span={8}>
               <Form.Item name="communityEnabled" valuePropName="checked">
                 <Checkbox>Enable Community Module</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="esiAsTaEnabled" valuePropName="checked">
+                <Checkbox>Enable ESI as TA Mapping</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="rmoEnabled" valuePropName="checked">
+                <Checkbox>Enable RMO Configuration</Checkbox>
               </Form.Item>
             </Col>
             <Col span={24} style={{ marginTop: 8, marginBottom: 8 }}>

@@ -300,7 +300,7 @@ const Geolocation = () => {
     const firstTs = valid.length > 0 ? new Date(valid[0].timestamp).getTime() : null;
     const lastTs = valid.length > 0 ? new Date(valid[valid.length - 1].timestamp).getTime() : null;
     const haltDistanceThresholdM = 50;
-    const haltTimeThresholdMs = 3 * 60 * 1000;
+    const haltTimeThresholdMs = 5 * 60 * 1000;
     const halts = [];
     let haltStart = null;
     let haltEnd = null;
@@ -490,6 +490,29 @@ const Geolocation = () => {
     const markerIndexRef = useRef(new Map());
     const pathRef = useRef(null);
     const infoWindowRef = useRef(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    useEffect(() => {
+      const handleFullscreenChange = () => {
+        setIsFullscreen(!!document.fullscreenElement);
+      };
+      document.addEventListener('fullscreenchange', handleFullscreenChange);
+      return () => {
+        document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      };
+    }, []);
+
+    const handleFullscreenToggle = () => {
+      const element = document.getElementById('map-fullscreen-wrapper');
+      if (!element) return;
+      if (!document.fullscreenElement) {
+        element.requestFullscreen().catch((err) => {
+          console.error(`Error attempting to enable fullscreen: ${err.message}`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    };
 
     useEffect(() => {
       let mounted = true;
@@ -513,12 +536,30 @@ const Geolocation = () => {
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
+          styles: [
+            { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+            { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+            { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+            { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
+            { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#bdbdbd" }] },
+            { featureType: "poi", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
+            { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+            { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+            { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+            { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#dadada" }] },
+            { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+            { featureType: "road.local", elementType: "labels.text.fill", stylers: [{ color: "#9e9e9e" }] },
+            { featureType: "transit.line", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] },
+            { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
+            { featureType: "water", elementType: "geometry", stylers: [{ color: "#e0f2fe" }] },
+            { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#0284c7" }] }
+          ]
         });
 
         infoWindowRef.current = new window.google.maps.InfoWindow();
         setMapInstance(map);
       }
-    }, [mapLoaded, mapInstance]);
+    }, [mapLoaded, mapInstance, locations]);
 
     useEffect(() => {
       if (!mapLoaded || !mapInstance || !window.google?.maps) return;
@@ -561,7 +602,7 @@ const Geolocation = () => {
       validLocations.forEach((location, index) => {
         const isFirst = index === 0;
         const isLast = index === validLocations.length - 1;
-        const markerColor = isFirst ? '#13c2c2' : (isLast ? '#f5222d' : '#1890ff');
+        const markerColor = isFirst ? '#13c2c2' : (isLast ? '#722ed1' : '#1890ff');
         const marker = new window.google.maps.Marker({
           position: { lat: location.lat, lng: location.lng },
           map: mapInstance,
@@ -572,7 +613,7 @@ const Geolocation = () => {
             fillOpacity: 1,
             strokeColor: '#fff',
             strokeWeight: 2,
-            scale: 10,
+            scale: isLast ? 12 : 10,
           },
         });
         marker.addListener('click', () => {
@@ -582,8 +623,9 @@ const Geolocation = () => {
           if (!infoWindowRef.current) return;
           infoWindowRef.current.setContent(
             `<div style="padding: 8px;">
-              <strong>${selectedStaffData?.name || 'Unknown'}</strong><br/>
-              <small>Time: ${dayjs(location.timestamp).format('HH:mm:ss')}</small><br/>
+              <strong>${selectedStaffData?.name || 'Unknown'}</strong>${selectedStaffData?.staffId ? ` <span style="color: #666;">(ID: ${selectedStaffData.staffId})</span>` : ''}<br/>
+              <small>${isFirst ? 'Start Location' : (isLast ? 'Last Known Location' : 'Movement Ping')}</small><br/>
+              <small>Time: ${dayjs(location.timestamp).format('hh:mm:ss A')}</small><br/>
               <small>Accuracy: ${location.accuracy || 'N/A'}m</small>
             </div>`
           );
@@ -593,11 +635,59 @@ const Geolocation = () => {
         markersRef.current.push(marker);
       });
 
-      const punchInLoc = findNearestLocation(selectedDayRecord?.punchInTime, validLocations);
-      const punchOutLoc = findNearestLocation(selectedDayRecord?.punchOutTime, validLocations);
-      if (punchInLoc) {
+      // Render Unplanned Stops (Halts) on the map
+      if (insights?.halts && insights.halts.length > 0) {
+        insights.halts.forEach((halt, idx) => {
+          if (hasValidCoord(halt.lat, halt.lng)) {
+            const haltMarker = new window.google.maps.Marker({
+              position: { lat: Number(halt.lat), lng: Number(halt.lng) },
+              map: mapInstance,
+              label: { text: '!', color: '#fff', fontWeight: '700' },
+              icon: {
+                path: window.google.maps.SymbolPath.CIRCLE,
+                fillColor: '#faad14', // Warning orange
+                fillOpacity: 1,
+                strokeColor: '#fff',
+                strokeWeight: 2,
+                scale: 10,
+              },
+            });
+
+            haltMarker.addListener('click', () => {
+              if (setPanelVisible) {
+                setPanelVisible(true);
+              }
+              if (!infoWindowRef.current) return;
+              infoWindowRef.current.setContent(
+                `<div style="padding: 8px; font-family: Inter, sans-serif;">
+                  <strong style="color: #ad6800;">⚠️ Unplanned Stop #${idx + 1}</strong><br/>
+                  <strong>Duration:</strong> ${formatDuration(halt.durationMs)}<br/>
+                  <strong>Time:</strong> ${dayjs(halt.startTs).format('hh:mm A')} - ${dayjs(halt.endTs).format('hh:mm A')}<br/>
+                  ${halt.address ? `<strong>Address:</strong> ${halt.address}<br/>` : ''}
+                </div>`
+              );
+              infoWindowRef.current.open({ anchor: haltMarker, map: mapInstance });
+            });
+
+            markersRef.current.push(haltMarker);
+          }
+        });
+      }
+
+      // Punch-in/out logic using attendance table coordinates directly if available, falling back to pings
+      const hasPunchInCoords = hasValidCoord(selectedDayRecord?.punchInLatitude, selectedDayRecord?.punchInLongitude);
+      const punchInLoc = hasPunchInCoords
+        ? { lat: Number(selectedDayRecord.punchInLatitude), lng: Number(selectedDayRecord.punchInLongitude) }
+        : findNearestLocation(selectedDayRecord?.punchInTime, validLocations);
+
+      const hasPunchOutCoords = hasValidCoord(selectedDayRecord?.punchOutLatitude, selectedDayRecord?.punchOutLongitude);
+      const punchOutLoc = hasPunchOutCoords
+        ? { lat: Number(selectedDayRecord.punchOutLatitude), lng: Number(selectedDayRecord.punchOutLongitude) }
+        : findNearestLocation(selectedDayRecord?.punchOutTime, validLocations);
+
+      if (punchInLoc && hasValidCoord(punchInLoc.lat, punchInLoc.lng)) {
         const inMarker = new window.google.maps.Marker({
-          position: { lat: punchInLoc.lat, lng: punchInLoc.lng },
+          position: { lat: Number(punchInLoc.lat), lng: Number(punchInLoc.lng) },
           map: mapInstance,
           label: { text: 'IN', color: '#fff', fontWeight: '700' },
           icon: {
@@ -613,12 +703,23 @@ const Geolocation = () => {
           if (setPanelVisible) {
             setPanelVisible(true);
           }
+          if (!infoWindowRef.current) return;
+          infoWindowRef.current.setContent(
+            `<div style="padding: 8px;">
+              <strong>${selectedStaffData?.name || 'Unknown'}</strong><br/>
+              <strong style="color: #52c41a;">PUNCH-IN</strong><br/>
+              <small>Time: ${selectedDayRecord?.punchInTime ? dayjs(selectedDayRecord.punchInTime).format('hh:mm:ss A') : 'N/A'}</small><br/>
+              ${selectedDayRecord?.punchInAddress ? `<small>Address: ${selectedDayRecord.punchInAddress}</small>` : ''}
+            </div>`
+          );
+          infoWindowRef.current.open({ anchor: inMarker, map: mapInstance });
         });
         markersRef.current.push(inMarker);
       }
-      if (punchOutLoc) {
+
+      if (punchOutLoc && hasValidCoord(punchOutLoc.lat, punchOutLoc.lng)) {
         const outMarker = new window.google.maps.Marker({
-          position: { lat: punchOutLoc.lat, lng: punchOutLoc.lng },
+          position: { lat: Number(punchOutLoc.lat), lng: Number(punchOutLoc.lng) },
           map: mapInstance,
           label: { text: 'OUT', color: '#fff', fontWeight: '700' },
           icon: {
@@ -634,25 +735,62 @@ const Geolocation = () => {
           if (setPanelVisible) {
             setPanelVisible(true);
           }
+          if (!infoWindowRef.current) return;
+          infoWindowRef.current.setContent(
+            `<div style="padding: 8px;">
+              <strong>${selectedStaffData?.name || 'Unknown'}</strong><br/>
+              <strong style="color: #ff4d4f;">PUNCH-OUT</strong><br/>
+              <small>Time: ${selectedDayRecord?.punchOutTime ? dayjs(selectedDayRecord.punchOutTime).format('hh:mm:ss A') : 'N/A'}</small><br/>
+              ${selectedDayRecord?.punchOutAddress ? `<small>Address: ${selectedDayRecord.punchOutAddress}</small>` : ''}
+            </div>`
+          );
+          infoWindowRef.current.open({ anchor: outMarker, map: mapInstance });
         });
         markersRef.current.push(outMarker);
       }
 
+      // Route Polyline (Uber style blue line)
       if (validLocations.length > 1) {
         pathRef.current = new window.google.maps.Polyline({
           path: validLocations.map((loc) => ({ lat: loc.lat, lng: loc.lng })),
           geodesic: true,
           strokeColor: '#1677ff',
-          strokeOpacity: 0.85,
-          strokeWeight: 4,
+          strokeOpacity: 0.9,
+          strokeWeight: 5,
           map: mapInstance,
         });
       }
 
+      // Calculate Map Bounds
       const bounds = new window.google.maps.LatLngBounds();
-      validLocations.forEach((loc) => bounds.extend({ lat: loc.lat, lng: loc.lng }));
-      mapInstance.fitBounds(bounds, 50);
-    }, [mapLoaded, mapInstance, locations, selectedStaffData, selectedDayRecord]);
+      let hasBounds = false;
+      
+      validLocations.forEach((loc) => {
+        bounds.extend({ lat: loc.lat, lng: loc.lng });
+        hasBounds = true;
+      });
+
+      if (punchInLoc && hasValidCoord(punchInLoc.lat, punchInLoc.lng)) {
+        bounds.extend({ lat: Number(punchInLoc.lat), lng: Number(punchInLoc.lng) });
+        hasBounds = true;
+      }
+      if (punchOutLoc && hasValidCoord(punchOutLoc.lat, punchOutLoc.lng)) {
+        bounds.extend({ lat: Number(punchOutLoc.lat), lng: Number(punchOutLoc.lng) });
+        hasBounds = true;
+      }
+      if (insights?.halts && insights.halts.length > 0) {
+        insights.halts.forEach((halt) => {
+          if (hasValidCoord(halt.lat, halt.lng)) {
+            bounds.extend({ lat: Number(halt.lat), lng: Number(halt.lng) });
+            hasBounds = true;
+          }
+        });
+      }
+
+      if (hasBounds) {
+        mapInstance.fitBounds(bounds, 50);
+      }
+    }, [mapLoaded, mapInstance, locations, selectedStaffData, selectedDayRecord, insights]);
 
     useEffect(() => {
       if (!mapLoaded || !mapInstance || !focusedLocation) return;
@@ -756,9 +894,41 @@ const Geolocation = () => {
     }
 
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <div 
+        id="map-fullscreen-wrapper" 
+        style={{ 
+          height: '100%', 
+          width: '100%',
+          display: 'flex', 
+          flexDirection: 'column', 
+          position: 'relative',
+          backgroundColor: '#ffffff'
+        }}
+      >
         {/* Map Container */}
-        <div ref={mapContainerRef} style={{ height: '100%', minHeight: 350, borderRadius: 8 }} />
+        <div ref={mapContainerRef} style={{ height: '100%', minHeight: 350, borderRadius: isFullscreen ? 0 : 8 }} />
+
+        {/* Custom Fullscreen Control Floating Button (Uber style) */}
+        <Button
+          type="default"
+          shape="circle"
+          icon={isFullscreen ? <CompressOutlined /> : <ExpandOutlined />}
+          onClick={handleFullscreenToggle}
+          style={{
+            position: 'absolute',
+            top: '16px',
+            left: '16px',
+            zIndex: 1000,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            backgroundColor: '#ffffff',
+            border: '1px solid #d9d9d9',
+            width: '40px',
+            height: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        />
 
         {/* Floating Box (Overlay matching Screenshot 2) */}
         {selectedStaffData && panelVisible && (
@@ -795,7 +965,7 @@ const Geolocation = () => {
               />
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
                 <span style={{ fontSize: '15px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '0.3px', textTransform: 'capitalize' }}>
-                  {selectedStaffData.name || 'Unknown Staff'}
+                  {selectedStaffData.name || 'Unknown Staff'} {selectedStaffData.staffId ? `(ID: ${selectedStaffData.staffId})` : ''}
                 </span>
                 <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', marginTop: '2px', fontWeight: 500 }}>
                   {selectedDayRecord?.punchInTime 

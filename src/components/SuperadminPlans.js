@@ -60,6 +60,8 @@ export default function SuperadminPlans() {
       comparisonEnabled: rec.comparisonEnabled !== undefined ? !!rec.comparisonEnabled : true,
       otImpactEnabled: rec.otImpactEnabled !== undefined ? !!rec.otImpactEnabled : true,
       latePenaltyEnabled: rec.latePenaltyEnabled !== undefined ? !!rec.latePenaltyEnabled : true,
+      esiAsTaEnabled: rec.features?.esiAsTaEnabled !== undefined ? !!rec.features.esiAsTaEnabled : false,
+      rmoEnabled: rec.features?.rmoEnabled !== undefined ? !!rec.features.rmoEnabled : false,
       active: rec.active,
     });
     setOpen(true);
@@ -222,6 +224,16 @@ export default function SuperadminPlans() {
             </Col>
             <Col span={8}>
               <Form.Item label="Community Enabled" name="communityEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Enable ESI as TA Mapping" name="esiAsTaEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Enable RMO Configuration" name="rmoEnabled" valuePropName="checked" initialValue={false}>
                 <Switch />
               </Form.Item>
             </Col>

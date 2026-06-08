@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layout, Card, Radio, Button, message, Space, Switch, Table, Input } from 'antd';
+import { Layout, Card, Button, message, Space, Table, Input, InputNumber } from 'antd';
 import { ArrowLeftOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
@@ -15,95 +15,59 @@ const getInitials = (name) => {
   return name.slice(0, 2).toUpperCase();
 };
 
-export default function EsiAsTaSettings() {
+export default function RmoSettings() {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [subLoading, setSubLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [items, setItems] = useState([]);
-  const [mode, setMode] = useState('none');
-  const [enabled, setEnabled] = useState(true);
+  const [staff, setStaff] = useState([]);
+  const [targetHours, setTargetHours] = useState(480);
   const [selectedIds, setSelectedIds] = useState([]);
   const [q, setQ] = useState('');
 
-  const fetchList = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const resp = await api.get('/admin/salary/esi-as-ta');
-      const rows = resp?.data?.items || [];
-      setItems(rows);
-      const allTrue = rows.length > 0 && rows.every(r => !!r.esiAsTa);
-      const allFalse = rows.length > 0 && rows.every(r => !r.esiAsTa);
-      if (allTrue) setMode('all');
-      else if (allFalse) setMode('none');
-      else setMode('selected');
-      setSelectedIds(rows.filter(r => r.esiAsTa).map(r => r.userId));
-      setEnabled(rows.some(r => r.esiAsTa));
+      // Fetch RMO settings
+      const settingsResp = await api.get('/admin/rmo-settings');
+      const settings = settingsResp?.data?.settings || { targetHours: 480, staffIds: [] };
+      setTargetHours(settings.targetHours || 480);
+      setSelectedIds(settings.staffIds || []);
+
+      // Fetch all staff
+      const staffResp = await api.get('/admin/staff');
+      setStaff(staffResp?.data?.staff || staffResp?.data?.data || []);
     } catch (e) {
-      message.error('Failed to load ESI as TA list');
+      message.error('Failed to load configuration data');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    const checkSub = async () => {
-      try {
-        const resp = await api.get('/subscription/subscription-info');
-        const info = resp.data?.subscriptionInfo;
-        if (!info?.esiAsTaEnabled) {
-          message.error('This addon is not enabled for your subscription');
-          navigate('/settings');
-        } else {
-          setSubLoading(false);
-          fetchList();
-        }
-      } catch (e) {
-        navigate('/settings');
-      }
-    };
-    checkSub();
+    fetchData();
   }, []);
-
-  useEffect(() => {
-    if (mode === 'all') setSelectedIds(items.map(r => r.userId));
-    if (mode === 'none') setSelectedIds([]);
-  }, [mode, items]);
-
-  const allIds = useMemo(() => items.map(r => r.userId), [items]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter(r =>
+    if (!term) return staff;
+    return staff.filter(r =>
       String(r.name || '').toLowerCase().includes(term) ||
       String(r.phone || '').toLowerCase().includes(term) ||
       String(r.staffId || '').toLowerCase().includes(term)
     );
-  }, [items, q]);
+  }, [staff, q]);
 
   const onConfirm = async () => {
     try {
       setSaving(true);
-      if (!enabled) {
-        if (allIds.length) await api.put('/admin/salary/esi-as-ta-bulk', { userIds: allIds, esiAsTa: false });
-        message.success('Settings saved successfully');
-        fetchList();
-        return;
-      }
-      if (mode === 'all') {
-        if (allIds.length) await api.put('/admin/salary/esi-as-ta-bulk', { userIds: allIds, esiAsTa: true });
-      } else if (mode === 'none') {
-        if (allIds.length) await api.put('/admin/salary/esi-as-ta-bulk', { userIds: allIds, esiAsTa: false });
-      } else {
-        const sel = Array.from(new Set(selectedIds));
-        const unSel = allIds.filter(id => !sel.includes(id));
-        if (sel.length) await api.put('/admin/salary/esi-as-ta-bulk', { userIds: sel, esiAsTa: true });
-        if (unSel.length) await api.put('/admin/salary/esi-as-ta-bulk', { userIds: unSel, esiAsTa: false });
-      }
+      const payload = {
+        targetHours: Number(targetHours || 480),
+        staffIds: selectedIds.map(Number),
+      };
+      await api.post('/admin/rmo-settings', payload);
       message.success('Settings saved successfully');
-      fetchList();
+      fetchData();
     } catch (e) {
       message.error(e?.response?.data?.message || 'Failed to save settings');
     } finally {
@@ -146,6 +110,15 @@ export default function EsiAsTaSettings() {
       )
     },
     { 
+      title: 'Department/Designation',
+      key: 'deptDesg',
+      render: (_, r) => (
+        <span style={{ color: '#64748b', fontSize: '13px' }}>
+          {[r.department, r.designation].filter(Boolean).join(' / ') || '—'}
+        </span>
+      )
+    },
+    { 
       title: 'Phone', 
       dataIndex: 'phone', 
       key: 'phone', 
@@ -153,10 +126,10 @@ export default function EsiAsTaSettings() {
       render: (text) => <span style={{ color: '#64748b', fontSize: '13px' }}>{text || '—'}</span>
     },
     {
-      title: 'Assignment Status', 
-      key: 'esiAsTa', 
+      title: 'RMO Status', 
+      key: 'status', 
       width: 160,
-      render: (_, r) => r.esiAsTa ? (
+      render: (_, r) => selectedIds.includes(r.id) ? (
         <span style={{ 
           padding: '4px 10px', 
           borderRadius: '20px', 
@@ -167,7 +140,7 @@ export default function EsiAsTaSettings() {
           border: '1px solid #bbf7d0',
           letterSpacing: '0.5px'
         }}>
-          ENABLED (ESI as TA)
+          RMO STAFF
         </span>
       ) : (
         <span style={{ 
@@ -180,19 +153,16 @@ export default function EsiAsTaSettings() {
           border: '1px solid #cbd5e1',
           letterSpacing: '0.5px'
         }}>
-          DISABLED
+          REGULAR
         </span>
       )
     },
   ];
 
-  const rowSelection = mode === 'selected' ? {
+  const rowSelection = {
     selectedRowKeys: selectedIds,
     onChange: (keys) => setSelectedIds(keys),
-    getCheckboxProps: () => ({ disabled: !enabled }),
-  } : undefined;
-
-  if (subLoading) return null;
+  };
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -201,7 +171,7 @@ export default function EsiAsTaSettings() {
         <MainHeader 
           collapsed={collapsed} 
           setCollapsed={setCollapsed} 
-          title="ESI as TA Mapping Settings" 
+          title="RMO Settings" 
         />
         <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -226,9 +196,9 @@ export default function EsiAsTaSettings() {
               bodyStyle={{ padding: '24px' }}
             >
               <div style={{ marginBottom: '24px' }}>
-                <div style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b' }}>Configure ESI as Travel Allowance Mapping</div>
+                <div style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b' }}>Configure RMO Target Hours & Staff Mapping</div>
                 <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
-                  Assign ESI reimbursement rules for your staff. For selected staff, ESI deductions will remain visible in the payroll but will be automatically added as Travel Allowance (TA) earnings.
+                  Assign staff as Resident Medical Officers (RMOs). RMOs work continuous multi-day duties (open shifts). Their salary is dynamically pro-rated against the monthly target hours defined below.
                 </div>
               </div>
 
@@ -236,8 +206,6 @@ export default function EsiAsTaSettings() {
               <div style={{ 
                 display: 'flex', 
                 alignItems: 'center', 
-                justifyContent: 'space-between', 
-                flexWrap: 'wrap', 
                 gap: '16px', 
                 padding: '16px 20px', 
                 background: '#f8fafc', 
@@ -245,44 +213,37 @@ export default function EsiAsTaSettings() {
                 border: '1px solid #e2e8f0',
                 marginBottom: '24px'
               }}>
-                <Radio.Group 
-                  value={mode} 
-                  onChange={(e) => setMode(e.target.value)} 
-                  disabled={!enabled}
-                  optionType="button"
-                  buttonStyle="solid"
-                >
-                  <Radio.Button value="all" style={{ borderRadius: '6px 0 0 6px' }}>All Staff</Radio.Button>
-                  <Radio.Button value="none">None</Radio.Button>
-                  <Radio.Button value="selected" style={{ borderRadius: '0 6px 6px 0' }}>Selected Staff</Radio.Button>
-                </Radio.Group>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Switch checked={enabled} onChange={setEnabled} />
-                  <span style={{ fontWeight: '600', color: '#334155', fontSize: '13px' }}>Reimburse ESI as Travel Allowance (TA)</span>
-                </div>
+                <span style={{ fontWeight: '600', color: '#334155', fontSize: '13px' }}>Target Monthly Hours:</span>
+                <InputNumber
+                  min={1}
+                  max={720}
+                  style={{ width: 120 }}
+                  value={targetHours}
+                  onChange={setTargetHours}
+                  addonAfter="hrs"
+                />
               </div>
 
-              {mode === 'selected' ? (
-                <div style={{ marginTop: 16 }}>
-                  <Input
-                    prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
-                    placeholder="Search by name, phone or staff ID..." 
-                    allowClear 
-                    style={{ width: 280, borderRadius: '20px', marginBottom: '16px' }} 
-                    value={q} 
-                    onChange={(e) => setQ(e.target.value)} 
-                  />
-                  <Table
-                    loading={loading}
-                    dataSource={filtered}
-                    columns={columns}
-                    rowKey="userId"
-                    pagination={{ pageSize: 10 }}
-                    rowSelection={rowSelection}
-                    bordered={false}
-                  />
-                </div>
-              ) : null}
+              {/* Staff Table */}
+              <div style={{ marginTop: 16 }}>
+                <Input
+                  prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                  placeholder="Search by name, phone or staff ID..." 
+                  allowClear 
+                  style={{ width: 280, borderRadius: '20px', marginBottom: '16px' }} 
+                  value={q} 
+                  onChange={(e) => setQ(e.target.value)} 
+                />
+                <Table
+                  loading={loading}
+                  dataSource={filtered}
+                  columns={columns}
+                  rowKey="id"
+                  pagination={{ pageSize: 10 }}
+                  rowSelection={rowSelection}
+                  bordered={false}
+                />
+              </div>
 
               {/* Action Buttons Row */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #f1f5f9' }}>

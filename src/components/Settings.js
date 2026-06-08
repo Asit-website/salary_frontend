@@ -212,6 +212,7 @@ export default function Settings() {
   const [kioskUsername, setKioskUsername] = useState('');
   const [kioskPassword, setKioskPassword] = useState('');
   const [kioskPasswordSet, setKioskPasswordSet] = useState(false);
+  const [subscriptionInfo, setSubscriptionInfo] = useState(null);
 
   const [mobileRestricted, setMobileRestricted] = useState(false);
   const [mobileRestrictedOpen, setMobileRestrictedOpen] = useState(false);
@@ -274,6 +275,10 @@ export default function Settings() {
         const r5 = await api.get('/admin/settings/kiosk');
         setKioskUsername(r5.data?.username || '');
         setKioskPasswordSet(!!r5.data?.passwordSet);
+      } catch (_) { }
+      try {
+        const subResp = await api.get('/subscription/subscription-info');
+        setSubscriptionInfo(subResp.data?.subscriptionInfo);
       } catch (_) { }
     };
     loadData();
@@ -912,9 +917,14 @@ export default function Settings() {
         { key: 'sal-template', icon: <AppstoreOutlined />, label: 'Manage Salary Template', desc: 'Create and apply standard salary structures', onClick: () => navigate('/settings/salary-templates') },
         { key: 'sal-bonus', icon: <ThunderboltOutlined />, label: 'Tenure Bonus Rules', desc: 'Manage service-length based dynamic bonuses', onClick: () => navigate('/settings/tenure-bonus-rules') },
         { key: 'sal-access', icon: <EyeOutlined />, label: 'Salary Details Access', desc: 'Control who can view salary information', onClick: () => navigate('/settings/salary-access') },
-        { key: 'esi-as-ta', icon: <SwapOutlined />, label: 'ESI as Travel Allowance Mapping', desc: 'Reimburse ESI deductions as Travel Allowance', onClick: () => navigate('/settings/esi-as-ta') },
+        ...(subscriptionInfo?.esiAsTaEnabled ? [
+          { key: 'esi-as-ta', icon: <SwapOutlined />, label: 'ESI as Travel Allowance Mapping', desc: 'Reimburse ESI deductions as Travel Allowance', onClick: () => navigate('/settings/esi-as-ta') }
+        ] : []),
         { key: 'no-absent-pay', icon: <CheckCircleOutlined />, label: 'No Absent Pay Settings', desc: 'Configure perfect attendance pay for staff', onClick: () => navigate('/settings/no-absent-pay') },
         { key: 'wo-holiday-as-ot', icon: <ThunderboltOutlined />, label: 'Weekly Off & Holiday Work as OT', desc: 'Pay weekly off/holiday work hours as Overtime', onClick: () => navigate('/settings/wo-holiday-as-ot') },
+        ...(subscriptionInfo?.rmoEnabled ? [
+          { key: 'rmo-settings', icon: <SwapOutlined />, label: 'RMO Configuration', desc: 'Configure RMO staff mapping and monthly target hours', onClick: () => navigate('/settings/rmo') }
+        ] : []),
       ],
     },
     {
@@ -1001,7 +1011,7 @@ export default function Settings() {
         { key: 'manage-integrations', icon: <ApiOutlined />, label: 'Manage Integrations', desc: 'Connect to third-party applications and services' },
       ],
     },
-  ], [brandName, bizState, bizCity, addr1, addr2, addrPin, logoUrl, accName, accPhone, accEmail, bankMasked, sidebarHeaderType]);
+  ], [brandName, bizState, bizCity, addr1, addr2, addrPin, logoUrl, accName, accPhone, accEmail, bankMasked, sidebarHeaderType, subscriptionInfo]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');

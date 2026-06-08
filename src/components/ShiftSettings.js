@@ -358,7 +358,7 @@ export default function ShiftSettings() {
                       </div>
                       <Space size={12}>
                         <Form.Item name="workHours" noStyle>
-                          <InputNumber min={0} max={23} addonAfter="hh" style={{ width: 120 }} />
+                          <InputNumber min={0} max={720} addonAfter="hh" style={{ width: 120 }} />
                         </Form.Item>
                         <Form.Item name="workMins" noStyle>
                           <InputNumber min={0} max={59} addonAfter="mm" style={{ width: 120 }} />

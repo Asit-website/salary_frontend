@@ -27,6 +27,7 @@ import EsiAsTaSettings from './components/EsiAsTaSettings';
 import NoAbsentPaySettings from './components/NoAbsentPaySettings';
 import WoHolidayAsOtSettings from './components/WoHolidayAsOtSettings';
 import GeofenceSettings from './components/GeofenceSettings';
+import RmoSettings from './components/RmoSettings';
 import Sales from './components/Sales';
 import PayrollList from './components/PayrollList';
 import PayrollCycle from './components/PayrollCycle';
@@ -122,6 +123,7 @@ function App() {
       <Route path="/settings/esi-as-ta" element={<PrivateRoute><EsiAsTaSettings /></PrivateRoute>} />
       <Route path="/settings/no-absent-pay" element={<PrivateRoute><NoAbsentPaySettings /></PrivateRoute>} />
       <Route path="/settings/wo-holiday-as-ot" element={<PrivateRoute><WoHolidayAsOtSettings /></PrivateRoute>} />
+      <Route path="/settings/rmo" element={<PrivateRoute><RmoSettings /></PrivateRoute>} />
       <Route path="/settings/geofence" element={<PrivateRoute><GeofenceSettings /></PrivateRoute>} />
       <Route path="/settings/qr-attendance" element={<PrivateRoute><QrAttendanceSettings /></PrivateRoute>} />
       <Route path="/sales" element={<PrivateRoute><Sales /></PrivateRoute>} />
