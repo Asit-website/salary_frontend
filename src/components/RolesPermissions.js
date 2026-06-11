@@ -96,6 +96,31 @@ const RolesPermissions = () => {
 
   const onBulkAssign = () => { setAssigningUser(null); assignForm.resetFields(); setAssignOpen(true); };
 
+  const onUnassignRoles = async (userId) => {
+    try {
+      await api.post('/admin/roles/assign-role', { userId, roleIds: [] });
+      message.success('Roles unassigned');
+      loadStaff();
+      loadGeoLimits();
+    } catch (e) {
+      if (e?.response?.data?.message) message.error(e.response.data.message);
+      else message.error('Failed to unassign roles');
+    }
+  };
+
+  const onBulkUnassign = async () => {
+    try {
+      await api.post('/admin/roles/bulk-assign-role', { userIds: selectedRowKeys, roleIds: [] });
+      setSelectedRowKeys([]);
+      message.success('Roles unassigned');
+      loadStaff();
+      loadGeoLimits();
+    } catch (e) {
+      if (e?.response?.data?.message) message.error(e.response.data.message);
+      else message.error('Failed to unassign roles');
+    }
+  };
+
   const onAssignSubmit = async () => {
     try {
       const values = await assignForm.validateFields();
@@ -239,13 +264,30 @@ const RolesPermissions = () => {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
-        <Button
-          size="small"
-          onClick={() => onAssignRole(record)}
-          style={{ borderRadius: 20, fontWeight: 600, fontSize: 12, height: 28, paddingInline: 14, color: '#1677ff', border: '1px solid #bfdbfe', background: '#eff6ff' }}
-        >
-          Assign Roles
-        </Button>
+        <Space size={6}>
+          <Button
+            size="small"
+            onClick={() => onAssignRole(record)}
+            style={{ borderRadius: 20, fontWeight: 600, fontSize: 12, height: 28, paddingInline: 14, color: '#1677ff', border: '1px solid #bfdbfe', background: '#eff6ff' }}
+          >
+            Assign Roles
+          </Button>
+          {(record.roles || []).length > 0 && (
+            <Popconfirm
+              title="Unassign all roles from this staff?"
+              onConfirm={() => onUnassignRoles(record.id)}
+              okText="Yes"
+              cancelText="No"
+            >
+              <Button
+                size="small"
+                style={{ borderRadius: 20, fontWeight: 600, fontSize: 12, height: 28, paddingInline: 14, color: '#dc2626', border: '1px solid #fca5a5', background: '#fff1f0' }}
+              >
+                Unassign
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
       ),
     },
   ];
@@ -348,14 +390,30 @@ const RolesPermissions = () => {
             }
             extra={
               selectedRowKeys.length > 0 && (
-                <Button
-                  type="primary"
-                  icon={<TeamOutlined />}
-                  onClick={onBulkAssign}
-                  style={{ borderRadius: 20, fontWeight: 600 }}
-                >
-                  Bulk Assign ({selectedRowKeys.length})
-                </Button>
+                <Space size={8}>
+                  <Button
+                    type="primary"
+                    icon={<TeamOutlined />}
+                    onClick={onBulkAssign}
+                    style={{ borderRadius: 20, fontWeight: 600 }}
+                  >
+                    Bulk Assign ({selectedRowKeys.length})
+                  </Button>
+                  <Popconfirm
+                    title={`Unassign roles from ${selectedRowKeys.length} staff?`}
+                    onConfirm={onBulkUnassign}
+                    okText="Yes"
+                    cancelText="No"
+                  >
+                    <Button
+                      danger
+                      icon={<DeleteOutlined />}
+                      style={{ borderRadius: 20, fontWeight: 600 }}
+                    >
+                      Bulk Unassign ({selectedRowKeys.length})
+                    </Button>
+                  </Popconfirm>
+                </Space>
               )
             }
           >
@@ -451,7 +509,7 @@ const RolesPermissions = () => {
         cancelButtonProps={{ style: { borderRadius: 20, paddingInline: 20 } }}
       >
         <Form layout="vertical" form={assignForm} style={{ marginTop: 8 }}>
-          <Form.Item label={<span style={{ fontWeight: 600, fontSize: 13 }}>Selected Roles</span>} name="roleIds" rules={[{ required: true }]}>
+          <Form.Item label={<span style={{ fontWeight: 600, fontSize: 13 }}>Selected Roles</span>} name="roleIds" rules={[]}>
             <Select mode="multiple" placeholder="Select roles" style={{ borderRadius: 8 }}>
               {roles.map(r => (
                 <Option key={r.id} value={r.id}>{r.displayName}</Option>

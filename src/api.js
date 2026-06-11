@@ -73,6 +73,22 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
+const parseJwt = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      (typeof window !== 'undefined' ? window.atob(base64) : Buffer.from(base64, 'base64').toString('binary'))
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+};
+
 // Response interceptor for automatic transparent token refresh
 api.interceptors.response.use(
   (response) => response,
@@ -123,6 +139,34 @@ api.interceptors.response.use(
           { withCredentials: true }
         );
         const { token } = resp.data;
+
+        // Parse token claims and update local storage/session storage user object
+        const decoded = parseJwt(token);
+        if (decoded) {
+          const uStr = sessionStorage.getItem('impersonate_user') || localStorage.getItem('user');
+          if (uStr) {
+            try {
+              const uObj = JSON.parse(uStr);
+              const updatedUser = {
+                ...uObj,
+                id: decoded.id,
+                role: decoded.role,
+                phone: decoded.phone,
+                name: decoded.name,
+                staffId: decoded.staffId,
+                orgAccountId: decoded.orgAccountId,
+                channelPartnerId: decoded.channelPartnerId,
+                isSuperadminPanel: decoded.isSuperadminPanel,
+                permissions: decoded.permissions
+              };
+              if (sessionStorage.getItem('impersonate_token')) {
+                sessionStorage.setItem('impersonate_user', JSON.stringify(updatedUser));
+              } else {
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+              }
+            } catch (_) {}
+          }
+        }
 
         if (sessionStorage.getItem('impersonate_token')) {
           sessionStorage.setItem('impersonate_token', token);

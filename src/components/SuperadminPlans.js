@@ -62,6 +62,7 @@ export default function SuperadminPlans() {
       latePenaltyEnabled: rec.latePenaltyEnabled !== undefined ? !!rec.latePenaltyEnabled : true,
       esiAsTaEnabled: rec.features?.esiAsTaEnabled !== undefined ? !!rec.features.esiAsTaEnabled : false,
       rmoEnabled: rec.features?.rmoEnabled !== undefined ? !!rec.features.rmoEnabled : false,
+      attendanceLocationEnabled: rec.attendanceLocationEnabled !== undefined ? !!rec.attendanceLocationEnabled : false,
       active: rec.active,
     });
     setOpen(true);
@@ -101,6 +102,7 @@ export default function SuperadminPlans() {
     { title: 'Roster', dataIndex: 'rosterEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
     { title: 'ATS', dataIndex: 'recruitmentEnabled', width: 80, render: (v) => v ? '✅' : '❌' },
     { title: 'Community', dataIndex: 'communityEnabled', width: 100, render: (v) => v ? '✅' : '❌' },
+    { title: 'Loc Addon', dataIndex: 'attendanceLocationEnabled', width: 100, render: (v) => v ? '✅' : '❌' },
     // { title: 'Max Geo Staff', dataIndex: 'maxGeolocationStaff', width: 120, render: (v) => v || 0 },
     { title: 'Active', dataIndex: 'active', width: 90, render: (v) => v ? 'Yes' : 'No' },
     {
@@ -234,6 +236,11 @@ export default function SuperadminPlans() {
             </Col>
             <Col span={8}>
               <Form.Item label="Enable RMO Configuration" name="rmoEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Attendance Location Details" name="attendanceLocationEnabled" valuePropName="checked" initialValue={false}>
                 <Switch />
               </Form.Item>
             </Col>

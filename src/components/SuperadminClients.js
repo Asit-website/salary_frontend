@@ -173,6 +173,7 @@ export default function SuperadminClients() {
       latePenaltyEnabled,
       esiAsTaEnabled,
       rmoEnabled,
+      attendanceLocationEnabled: sub.attendanceLocationEnabled !== null ? sub.attendanceLocationEnabled : (plan.attendanceLocationEnabled || false),
       rosterEnabled: sub.rosterEnabled !== null ? sub.rosterEnabled : (plan.rosterEnabled || false),
       recruitmentEnabled: sub.recruitmentEnabled !== null ? sub.recruitmentEnabled : (plan.recruitmentEnabled || false),
       communityEnabled: sub.communityEnabled !== null ? sub.communityEnabled : (plan.communityEnabled || false)
@@ -218,6 +219,7 @@ export default function SuperadminClients() {
         latePenaltyEnabled: !!values.latePenaltyEnabled,
         esiAsTaEnabled: !!values.esiAsTaEnabled,
         rmoEnabled: !!values.rmoEnabled,
+        attendanceLocationEnabled: !!values.attendanceLocationEnabled,
       };
 
       const res = await api.post(`/superadmin/clients/${selectedClientForLimit.id}/subscription`, payload);
@@ -362,6 +364,7 @@ export default function SuperadminClients() {
       comparisonEnabled: sub.comparisonEnabled !== null && sub.comparisonEnabled !== undefined ? !!sub.comparisonEnabled : (resolvedPlan.comparisonEnabled !== undefined ? !!resolvedPlan.comparisonEnabled : true),
       otImpactEnabled: sub.otImpactEnabled !== null && sub.otImpactEnabled !== undefined ? !!sub.otImpactEnabled : (resolvedPlan.otImpactEnabled !== undefined ? !!resolvedPlan.otImpactEnabled : true),
       latePenaltyEnabled: sub.latePenaltyEnabled !== null && sub.latePenaltyEnabled !== undefined ? !!sub.latePenaltyEnabled : (resolvedPlan.latePenaltyEnabled !== undefined ? !!resolvedPlan.latePenaltyEnabled : true),
+      attendanceLocationEnabled: sub.attendanceLocationEnabled !== null && sub.attendanceLocationEnabled !== undefined ? !!sub.attendanceLocationEnabled : (resolvedPlan.attendanceLocationEnabled !== undefined ? !!resolvedPlan.attendanceLocationEnabled : false),
       esiAsTaEnabled: (() => {
         let meta = {};
         if (sub.meta) {
@@ -418,6 +421,7 @@ export default function SuperadminClients() {
       comparisonEnabled: plan.comparisonEnabled !== undefined ? !!plan.comparisonEnabled : true,
       otImpactEnabled: plan.otImpactEnabled !== undefined ? !!plan.otImpactEnabled : true,
       latePenaltyEnabled: plan.latePenaltyEnabled !== undefined ? !!plan.latePenaltyEnabled : true,
+      attendanceLocationEnabled: sub.attendanceLocationEnabled !== null && sub.attendanceLocationEnabled !== undefined ? !!sub.attendanceLocationEnabled : (plan.attendanceLocationEnabled !== undefined ? !!plan.attendanceLocationEnabled : false),
       esiAsTaEnabled: (() => {
         let meta = {};
         if (sub.meta) {
@@ -462,7 +466,8 @@ export default function SuperadminClients() {
         perDaySalaryEnabled: plan.perDaySalaryEnabled !== undefined ? !!plan.perDaySalaryEnabled : true,
         comparisonEnabled: plan.comparisonEnabled !== undefined ? !!plan.comparisonEnabled : true,
         otImpactEnabled: plan.otImpactEnabled !== undefined ? !!plan.otImpactEnabled : true,
-        latePenaltyEnabled: plan.latePenaltyEnabled !== undefined ? !!plan.latePenaltyEnabled : true
+        latePenaltyEnabled: plan.latePenaltyEnabled !== undefined ? !!plan.latePenaltyEnabled : true,
+        attendanceLocationEnabled: plan.attendanceLocationEnabled !== undefined ? !!plan.attendanceLocationEnabled : false
       });
     }
   };
@@ -504,6 +509,7 @@ export default function SuperadminClients() {
         latePenaltyEnabled: !!values.latePenaltyEnabled,
         esiAsTaEnabled: !!values.esiAsTaEnabled,
         rmoEnabled: !!values.rmoEnabled,
+        attendanceLocationEnabled: !!values.attendanceLocationEnabled,
       };
       await api.post(`/superadmin/clients/${editing.id}/subscription`, payload);
       message.success('Subscription assigned');
@@ -891,6 +897,11 @@ export default function SuperadminClients() {
                     <Checkbox>Enable RMO Configuration</Checkbox>
                   </Form.Item>
                 </Col>
+                <Col span={8}>
+                  <Form.Item name="attendanceLocationEnabled" valuePropName="checked">
+                    <Checkbox>Enable Attendance Location Details</Checkbox>
+                  </Form.Item>
+                </Col>
                 <Col span={24} style={{ marginTop: 8, marginBottom: 8 }}>
                   <div style={{ fontWeight: 600, color: '#1890ff', borderBottom: '1px solid #f0f0f0', paddingBottom: 4, marginBottom: 12 }}>
                     Report Visibilities
@@ -1114,6 +1125,11 @@ export default function SuperadminClients() {
             <Col span={8}>
               <Form.Item name="rmoEnabled" valuePropName="checked">
                 <Checkbox>Enable RMO Configuration</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="attendanceLocationEnabled" valuePropName="checked">
+                <Checkbox>Enable Attendance Location Details</Checkbox>
               </Form.Item>
             </Col>
             <Col span={24} style={{ marginTop: 8, marginBottom: 8 }}>

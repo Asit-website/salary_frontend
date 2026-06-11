@@ -157,6 +157,16 @@ export default function UserAccess() {
     finally { setAssignSaving(false); }
   };
 
+  const handleUnassignBadges = async (userId) => {
+    try {
+      await api.post('/admin/user-access/assign-badges', { userId, badgeIds: [] });
+      message.success('Badges unassigned');
+      loadStaff();
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to unassign badges');
+    }
+  };
+
   // Stat card component matching StaffManagement style
   const StatCard = ({ label, value, icon, bg, iconColor, shadow }) => (
     <Card
@@ -317,18 +327,40 @@ export default function UserAccess() {
       title: 'Actions',
       key: 'actions',
       render: (_, row) => (
-        <Button
-          size="small"
-          onClick={() => openAssignBadges(row)}
-          style={{
-            borderRadius: 20, fontWeight: 600, fontSize: 12,
-            height: 28, paddingInline: 14,
-            color: '#1677ff', border: '1px solid #bfdbfe',
-            background: '#eff6ff',
-          }}
-        >
-          Assign Badges
-        </Button>
+        <Space size={6}>
+          <Button
+            size="small"
+            onClick={() => openAssignBadges(row)}
+            style={{
+              borderRadius: 20, fontWeight: 600, fontSize: 12,
+              height: 28, paddingInline: 14,
+              color: '#1677ff', border: '1px solid #bfdbfe',
+              background: '#eff6ff',
+            }}
+          >
+            Assign Badges
+          </Button>
+          {(row.badges || []).length > 0 && (
+            <Popconfirm
+              title="Unassign all badges from this staff?"
+              onConfirm={() => handleUnassignBadges(row.id)}
+              okText="Yes"
+              cancelText="No"
+            >
+              <Button
+                size="small"
+                style={{
+                  borderRadius: 20, fontWeight: 600, fontSize: 12,
+                  height: 28, paddingInline: 14,
+                  color: '#dc2626', border: '1px solid #fca5a5',
+                  background: '#fff1f0',
+                }}
+              >
+                Unassign
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
       ),
     },
   ];

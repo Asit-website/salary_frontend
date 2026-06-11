@@ -1066,7 +1066,7 @@ const PayrollList = () => {
               editForm.setFieldsValue({ absent });
 
               const payableDays = p + (h * 0.5) + pl + wo + ho;
-              const newRatio = daysInMonth > 0 ? Math.min(1, Math.max(0, payableDays / daysInMonth)) : 1;
+              const newRatio = daysInMonth > 0 ? Math.max(0, payableDays / daysInMonth) : 1;
 
               const userId = editRow?.userId || editRow?.user_id;
               const staffObj = staffDataMap[userId];

@@ -91,6 +91,7 @@ const AttendanceManagement = () => {
   const [approvedLeaves, setApprovedLeaves] = useState([]);
   const [rmoStaffIds, setRmoStaffIds] = useState([]);
   const [isRmoSelected, setIsRmoSelected] = useState(false);
+  const [subscriptionInfo, setSubscriptionInfo] = useState(null);
 
   const navigate = useNavigate();
 
@@ -110,6 +111,16 @@ const AttendanceManagement = () => {
       }
     };
     fetchRmoSettings();
+
+    const fetchSubscriptionInfo = async () => {
+      try {
+        const resp = await api.get('/subscription/subscription-info');
+        setSubscriptionInfo(resp.data?.subscriptionInfo || null);
+      } catch (e) {
+        console.error('Failed to load subscription info:', e);
+      }
+    };
+    fetchSubscriptionInfo();
   }, []);
 
   useEffect(() => {
@@ -790,12 +801,11 @@ const AttendanceManagement = () => {
             className="sales-action-btn"
             icon={<EnvironmentOutlined style={{ color: '#1677ff', fontSize: '16px' }} />}
             onClick={() => {
-              const perms = record.user?.permissions || [];
-              if (perms.includes('geolocation_access')) {
+              if (subscriptionInfo?.attendanceLocationEnabled) {
                 setLocationData(record);
                 setLocationModalOpen(true);
               } else {
-                message.warning('Staff does not have geolocation access');
+                message.warning("Subscription addon 'Attendance Location Details' is required to view locations");
               }
             }}
           />

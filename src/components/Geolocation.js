@@ -16,7 +16,7 @@ import {
   CloseOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import api from '../api';
+import api, { API_BASE_URL } from '../api';
 import Sidebar from './Sidebar';
 import MainHeader from './MainHeader';
 import dayjs from 'dayjs';
@@ -25,6 +25,27 @@ const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 const { Option } = Select;
+
+const getFullImageUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  return `${API_BASE_URL}${url}`;
+};
+
+const MINIMAL_MAP_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#f1f5f9" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "on" }, { saturation: -20 }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#334155" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#cbd5e1" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#dcfce7" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#166534" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#fed7aa" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#ea580c" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#bae6fd" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#0369a1" }] }
+];
 
 const toRad = (deg) => (Number(deg) * Math.PI) / 180;
 const haversineMeters = (a, b) => {
@@ -54,8 +75,13 @@ const formatCoord = (value) => {
   return Number.isFinite(n) ? n.toFixed(6) : '-';
 };
 
-const hasValidCoord = (lat, lng) =>
-  Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+const hasValidCoord = (lat, lng) => {
+  if (lat === null || lat === undefined || lat === '' || lat === 0 || lat === '0') return false;
+  if (lng === null || lng === undefined || lng === '' || lng === 0 || lng === '0') return false;
+  const nLat = Number(lat);
+  const nLng = Number(lng);
+  return Number.isFinite(nLat) && Number.isFinite(nLng) && nLat !== 0 && nLng !== 0;
+};
 
 const formatLocationLabel = (address, lat, lng) => {
   const cleanAddress = String(address || '').trim();
@@ -95,6 +121,839 @@ const ensureGoogleMaps = () => new Promise((resolve) => {
   document.body.appendChild(script);
 });
 
+// Map component
+const SimpleMap = ({ locations, selectedStaffData, selectedDayRecord, insights, focusedLocation, setFocusedLocation, panelVisible, setPanelVisible, mapStyle, selectedDate }) => {
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapInstance, setMapInstance] = useState(null);
+  const mapContainerRef = useRef(null);
+  const markersRef = useRef([]);
+  const markerIndexRef = useRef(new Map());
+  const pathRef = useRef(null);
+  const infoWindowRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const handleFullscreenToggle = () => {
+    const element = document.getElementById('map-fullscreen-wrapper');
+    if (!element) return;
+    if (!document.fullscreenElement) {
+      element.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    const loadGoogle = async () => {
+      await ensureGoogleMaps();
+      if (mounted) setMapLoaded(true);
+    };
+    if (!mapLoaded) loadGoogle();
+    return () => { mounted = false; };
+  }, [mapLoaded]);
+
+  useEffect(() => {
+    if (mapLoaded && !mapInstance && mapContainerRef.current && window.google?.maps) {
+      const firstValid = (locations || []).find((loc) => hasValidCoord(loc?.lat, loc?.lng));
+      const defaultCenter = firstValid
+        ? { lat: Number(firstValid.lat), lng: Number(firstValid.lng) }
+        : { lat: 28.6139, lng: 77.2090 };
+      const map = new window.google.maps.Map(mapContainerRef.current, {
+        center: defaultCenter,
+        zoom: 13,
+        mapTypeControl: true,
+        mapTypeControlOptions: {
+          position: window.google.maps.ControlPosition.TOP_LEFT
+        },
+        streetViewControl: true,
+        streetViewControlOptions: {
+          position: window.google.maps.ControlPosition.LEFT_BOTTOM
+        },
+        zoomControl: true,
+        zoomControlOptions: {
+          position: window.google.maps.ControlPosition.LEFT_BOTTOM
+        },
+        fullscreenControl: false,
+        styles: []
+      });
+
+      infoWindowRef.current = new window.google.maps.InfoWindow();
+      setMapInstance(map);
+    }
+  }, [mapLoaded, mapInstance]);
+
+  useEffect(() => {
+    if (!mapInstance || !window.google?.maps) return;
+    if (mapStyle === 'standard') {
+      mapInstance.setMapTypeId(window.google.maps.MapTypeId.ROADMAP);
+      mapInstance.setOptions({ styles: [] });
+    } else if (mapStyle === 'satellite') {
+      mapInstance.setMapTypeId(window.google.maps.MapTypeId.HYBRID);
+      mapInstance.setOptions({ styles: [] });
+    } else if (mapStyle === 'minimal') {
+      mapInstance.setMapTypeId(window.google.maps.MapTypeId.ROADMAP);
+      mapInstance.setOptions({ styles: MINIMAL_MAP_STYLES });
+    }
+  }, [mapInstance, mapStyle]);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapInstance || !window.google?.maps) return;
+
+    markersRef.current.forEach((marker) => marker.setMap(null));
+    markersRef.current = [];
+    markerIndexRef.current = new Map();
+    if (pathRef.current) {
+      if (pathRef.current.bgPath) {
+        pathRef.current.bgPath.setMap(null);
+      }
+      pathRef.current.setMap(null);
+      pathRef.current = null;
+    }
+
+    const findNearestLocation = (targetTime, points) => {
+      if (!targetTime) return null;
+      const target = new Date(targetTime).getTime();
+      if (!Number.isFinite(target)) return null;
+      let nearest = null;
+      let diff = Number.MAX_SAFE_INTEGER;
+      (points || []).forEach((loc) => {
+        const t = new Date(loc.timestamp).getTime();
+        const d = Math.abs(t - target);
+        if (d < diff) {
+          diff = d;
+          nearest = loc;
+        }
+      });
+      return nearest;
+    };
+
+    const rawValidLocations = (locations || [])
+      .filter((loc) => hasValidCoord(loc?.lat, loc?.lng))
+      .map((loc) => ({ ...loc, lat: Number(loc.lat), lng: Number(loc.lng) }));
+
+    // Consolidate stationary pings and filter out GPS drift (20 meters threshold)
+    const filterDrift = (points, thresholdMeters = 20) => {
+      if (points.length <= 1) return points;
+      const filtered = [points[0]];
+      let lastAdded = points[0];
+      for (let i = 1; i < points.length; i++) {
+        const pt = points[i];
+        const dist = haversineMeters(lastAdded, pt);
+        if (dist >= thresholdMeters) {
+          filtered.push(pt);
+          lastAdded = pt;
+        }
+      }
+      const lastPt = points[points.length - 1];
+      if (filtered[filtered.length - 1] !== lastPt) {
+        if (haversineMeters(lastAdded, lastPt) >= 10) {
+          filtered.push(lastPt);
+        } else {
+          filtered[filtered.length - 1] = lastPt;
+        }
+      }
+      return filtered;
+    };
+
+    const validLocations = filterDrift(rawValidLocations, 20);
+
+    if (validLocations.length === 0) {
+      mapInstance.setCenter({ lat: 28.6139, lng: 77.2090 });
+      mapInstance.setZoom(13);
+      return;
+    }
+
+    validLocations.forEach((location, index) => {
+      const isFirst = index === 0;
+      const isLast = index === validLocations.length - 1;
+      const markerColor = isFirst ? '#52c41a' : (isLast ? '#722ed1' : '#1677ff');
+      
+      let markerLabel = undefined;
+      let markerIcon = {};
+
+      if (isFirst || isLast) {
+        markerLabel = {
+          text: isFirst ? 'S' : 'L',
+          color: '#ffffff',
+          fontWeight: '900',
+          fontSize: '11px'
+        };
+        markerIcon = {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          fillColor: markerColor,
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+          scale: 12
+        };
+      } else {
+        markerIcon = {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          fillColor: '#1677ff',
+          fillOpacity: 0.75,
+          strokeColor: '#ffffff',
+          strokeWeight: 1,
+          scale: 5
+        };
+      }
+
+      const marker = new window.google.maps.Marker({
+        position: { lat: location.lat, lng: location.lng },
+        map: mapInstance,
+        label: markerLabel,
+        icon: markerIcon,
+      });
+
+      marker.addListener('click', () => {
+        if (setPanelVisible) {
+          setPanelVisible(true);
+        }
+        if (!infoWindowRef.current) return;
+        infoWindowRef.current.setContent(
+          `<div style="display: flex; align-items: center; gap: 10px; padding: 4px; font-family: Inter, sans-serif; min-width: 180px;">
+            <div style="flex-shrink: 0;">
+              ${selectedStaffData?.photoUrl 
+                ? `<img src="${getFullImageUrl(selectedStaffData.photoUrl)}" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #1677ff;" />`
+                : `<div style="width: 44px; height: 44px; border-radius: 50%; background-color: #e6f7ff; color: #1677ff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; border: 2px solid #91d5ff;">${(selectedStaffData?.name || 'U').charAt(0).toUpperCase()}</div>`
+              }
+            </div>
+            <div style="display: flex; flex-direction: column; line-height: 1.3;">
+              <span style="font-weight: 700; font-size: 13px; color: #1f2937;">${selectedStaffData?.name || 'Unknown'}</span>
+              ${selectedStaffData?.staffId ? `<span style="font-size: 11px; color: #6b7280; font-weight: 500;">ID: ${selectedStaffData.staffId}</span>` : ''}
+              <span style="font-weight: 600; font-size: 11px; color: ${markerColor}; margin-top: 2px;">${isFirst ? '🟢 Start Location' : (isLast ? '🟣 Last Known Location' : '🔵 Movement Ping')}</span>
+              <span style="font-size: 11px; color: #4b5563; margin-top: 2px;">Time: ${dayjs(location.timestamp).format('hh:mm:ss A')}</span>
+              <span style="font-size: 10px; color: #9ca3af;">Accuracy: ${location.accuracy || 'N/A'}m</span>
+              <span style="font-size: 10px; color: #4b5563; margin-top: 2px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${formatLocationLabel(location.address, location.lat, location.lng)}">Location: ${formatLocationLabel(location.address, location.lat, location.lng)}</span>
+            </div>
+          </div>`
+        );
+        infoWindowRef.current.open({ anchor: marker, map: mapInstance });
+      });
+      markerIndexRef.current.set(`${location.timestamp}|${location.lat}|${location.lng}`, marker);
+      markersRef.current.push(marker);
+    });
+
+    // Render Unplanned Stops (Halts) on the map
+    if (insights?.halts && insights.halts.length > 0) {
+      insights.halts.forEach((halt, idx) => {
+        if (hasValidCoord(halt.lat, halt.lng)) {
+          const haltMarker = new window.google.maps.Marker({
+            position: { lat: Number(halt.lat), lng: Number(halt.lng) },
+            map: mapInstance,
+            label: { text: '!', color: '#fff', fontWeight: '700' },
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              fillColor: '#faad14', // Warning orange
+              fillOpacity: 1,
+              strokeColor: '#fff',
+              strokeWeight: 2,
+              scale: 10,
+            },
+          });
+
+          haltMarker.addListener('click', () => {
+            if (setPanelVisible) {
+              setPanelVisible(true);
+            }
+            if (!infoWindowRef.current) return;
+            infoWindowRef.current.setContent(
+              `<div style="display: flex; align-items: center; gap: 10px; padding: 4px; font-family: Inter, sans-serif; min-width: 200px;">
+                <div style="flex-shrink: 0;">
+                  ${selectedStaffData?.photoUrl 
+                    ? `<img src="${getFullImageUrl(selectedStaffData.photoUrl)}" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #faad14;" />`
+                    : `<div style="width: 44px; height: 44px; border-radius: 50%; background-color: #fffbe6; color: #faad14; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; border: 2px solid #ffe58f;">${(selectedStaffData?.name || 'U').charAt(0).toUpperCase()}</div>`
+                  }
+                </div>
+                <div style="display: flex; flex-direction: column; line-height: 1.3;">
+                  <span style="font-weight: 700; font-size: 13px; color: #1f2937;">${selectedStaffData?.name || 'Unknown'}</span>
+                  <span style="font-weight: 700; font-size: 11px; color: #d46b08; margin-top: 1px;">⚠️ Unplanned Stop #${idx + 1}</span>
+                  <span style="font-size: 11px; color: #1f2937; font-weight: 600;">Duration: ${formatDuration(halt.durationMs)}</span>
+                  <span style="font-size: 11px; color: #4b5563;">Time: ${dayjs(halt.startTs).format('hh:mm A')} - ${dayjs(halt.endTs).format('hh:mm A')}</span>
+                  <span style="font-size: 10px; color: #6b7280; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${formatLocationLabel(halt.address, halt.lat, halt.lng)}">Location: ${formatLocationLabel(halt.address, halt.lat, halt.lng)}</span>
+                </div>
+              </div>`
+            );
+            infoWindowRef.current.open({ anchor: haltMarker, map: mapInstance });
+          });
+
+          markersRef.current.push(haltMarker);
+        }
+      });
+    }
+
+    // Punch-in/out logic using attendance table coordinates directly if available, falling back to pings
+    const hasPunchInCoords = hasValidCoord(selectedDayRecord?.punchInLatitude, selectedDayRecord?.punchInLongitude);
+    const punchInLoc = hasPunchInCoords
+      ? { lat: Number(selectedDayRecord.punchInLatitude), lng: Number(selectedDayRecord.punchInLongitude) }
+      : findNearestLocation(selectedDayRecord?.punchInTime, validLocations);
+
+    const hasPunchOutCoords = hasValidCoord(selectedDayRecord?.punchOutLatitude, selectedDayRecord?.punchOutLongitude);
+    const punchOutLoc = hasPunchOutCoords
+      ? { lat: Number(selectedDayRecord.punchOutLatitude), lng: Number(selectedDayRecord.punchOutLongitude) }
+      : findNearestLocation(selectedDayRecord?.punchOutTime, validLocations);
+
+    if (punchInLoc && hasValidCoord(punchInLoc.lat, punchInLoc.lng)) {
+      const inMarker = new window.google.maps.Marker({
+        position: { lat: Number(punchInLoc.lat), lng: Number(punchInLoc.lng) },
+        map: mapInstance,
+        label: { text: 'IN', color: '#fff', fontWeight: '700' },
+        icon: {
+          path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+          fillColor: '#52c41a',
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: 2,
+          scale: 6,
+        },
+      });
+      inMarker.addListener('click', () => {
+        if (setPanelVisible) {
+          setPanelVisible(true);
+        }
+        if (!infoWindowRef.current) return;
+        infoWindowRef.current.setContent(
+          `<div style="display: flex; align-items: center; gap: 10px; padding: 4px; font-family: Inter, sans-serif; min-width: 180px;">
+            <div style="flex-shrink: 0;">
+              ${selectedStaffData?.photoUrl 
+                ? `<img src="${getFullImageUrl(selectedStaffData.photoUrl)}" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #52c41a;" />`
+                : `<div style="width: 44px; height: 44px; border-radius: 50%; background-color: #f6ffed; color: #52c41a; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; border: 2px solid #b7eb8f;">${(selectedStaffData?.name || 'U').charAt(0).toUpperCase()}</div>`
+              }
+            </div>
+            <div style="display: flex; flex-direction: column; line-height: 1.3;">
+              <span style="font-weight: 700; font-size: 13px; color: #1f2937;">${selectedStaffData?.name || 'Unknown'}</span>
+              <span style="font-weight: 700; font-size: 11px; color: #52c41a; margin-top: 1px;">🟢 PUNCH-IN</span>
+              <span style="font-size: 11px; color: #4b5563;">Time: ${selectedDayRecord?.punchInTime ? dayjs(selectedDayRecord.punchInTime).format('hh:mm:ss A') : 'N/A'}</span>
+              <span style="font-size: 10px; color: #6b7280; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${formatLocationLabel(selectedDayRecord?.punchInAddress, punchInLoc.lat, punchInLoc.lng)}">Location: ${formatLocationLabel(selectedDayRecord?.punchInAddress, punchInLoc.lat, punchInLoc.lng)}</span>
+            </div>
+          </div>`
+        );
+        infoWindowRef.current.open({ anchor: inMarker, map: mapInstance });
+      });
+      markersRef.current.push(inMarker);
+    }
+
+    if (punchOutLoc && hasValidCoord(punchOutLoc.lat, punchOutLoc.lng)) {
+      const outMarker = new window.google.maps.Marker({
+        position: { lat: Number(punchOutLoc.lat), lng: Number(punchOutLoc.lng) },
+        map: mapInstance,
+        label: { text: 'OUT', color: '#fff', fontWeight: '700' },
+        icon: {
+          path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          fillColor: '#ff4d4f',
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: 2,
+          scale: 6,
+        },
+      });
+      outMarker.addListener('click', () => {
+        if (setPanelVisible) {
+          setPanelVisible(true);
+        }
+        if (!infoWindowRef.current) return;
+        infoWindowRef.current.setContent(
+          `<div style="display: flex; align-items: center; gap: 10px; padding: 4px; font-family: Inter, sans-serif; min-width: 180px;">
+            <div style="flex-shrink: 0;">
+              ${selectedStaffData?.photoUrl 
+                ? `<img src="${getFullImageUrl(selectedStaffData.photoUrl)}" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #ff4d4f;" />`
+                : `<div style="width: 44px; height: 44px; border-radius: 50%; background-color: #fff2f0; color: #ff4d4f; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; border: 2px solid #ffccc7;">${(selectedStaffData?.name || 'U').charAt(0).toUpperCase()}</div>`
+              }
+            </div>
+            <div style="display: flex; flex-direction: column; line-height: 1.3;">
+              <span style="font-weight: 700; font-size: 13px; color: #1f2937;">${selectedStaffData?.name || 'Unknown'}</span>
+              <span style="font-weight: 700; font-size: 11px; color: #ff4d4f; margin-top: 1px;">🔴 PUNCH-OUT</span>
+              <span style="font-size: 11px; color: #4b5563;">Time: ${selectedDayRecord?.punchOutTime ? dayjs(selectedDayRecord.punchOutTime).format('hh:mm:ss A') : 'N/A'}</span>
+              <span style="font-size: 10px; color: #6b7280; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${formatLocationLabel(selectedDayRecord?.punchOutAddress, punchOutLoc.lat, punchOutLoc.lng)}">Location: ${formatLocationLabel(selectedDayRecord?.punchOutAddress, punchOutLoc.lat, punchOutLoc.lng)}</span>
+            </div>
+          </div>`
+        );
+        infoWindowRef.current.open({ anchor: outMarker, map: mapInstance });
+      });
+      markersRef.current.push(outMarker);
+    }
+
+    // Route Polyline (Uber style blue line with professional glow and directional arrows)
+    if (validLocations.length > 1) {
+      const bgPath = new window.google.maps.Polyline({
+        path: validLocations.map((loc) => ({ lat: loc.lat, lng: loc.lng })),
+        geodesic: true,
+        strokeColor: '#93c5fd',
+        strokeOpacity: 0.45,
+        strokeWeight: 9,
+        map: mapInstance,
+      });
+
+      pathRef.current = new window.google.maps.Polyline({
+        path: validLocations.map((loc) => ({ lat: loc.lat, lng: loc.lng })),
+        geodesic: true,
+        strokeColor: '#1677ff',
+        strokeOpacity: 0.9,
+        strokeWeight: 4,
+        icons: [{
+          icon: {
+            path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+            scale: 2,
+            strokeColor: '#ffffff',
+            fillColor: '#1677ff',
+            fillOpacity: 1,
+            strokeWeight: 1,
+          },
+          offset: '10px',
+          repeat: '80px'
+        }],
+        map: mapInstance,
+      });
+      
+      pathRef.current.bgPath = bgPath;
+    }
+
+    // Calculate Map Bounds
+    const bounds = new window.google.maps.LatLngBounds();
+    let hasBounds = false;
+    
+    validLocations.forEach((loc) => {
+      bounds.extend({ lat: loc.lat, lng: loc.lng });
+      hasBounds = true;
+    });
+
+    if (punchInLoc && hasValidCoord(punchInLoc.lat, punchInLoc.lng)) {
+      bounds.extend({ lat: Number(punchInLoc.lat), lng: Number(punchInLoc.lng) });
+      hasBounds = true;
+    }
+    if (punchOutLoc && hasValidCoord(punchOutLoc.lat, punchOutLoc.lng)) {
+      bounds.extend({ lat: Number(punchOutLoc.lat), lng: Number(punchOutLoc.lng) });
+      hasBounds = true;
+    }
+    if (insights?.halts && insights.halts.length > 0) {
+      insights.halts.forEach((halt) => {
+        if (hasValidCoord(halt.lat, halt.lng)) {
+          bounds.extend({ lat: Number(halt.lat), lng: Number(halt.lng) });
+          hasBounds = true;
+        }
+      });
+    }
+
+    if (hasBounds) {
+      mapInstance.fitBounds(bounds, 50);
+      // Prevent excessive zoom when points are extremely close
+      window.google.maps.event.addListenerOnce(mapInstance, 'idle', () => {
+        if (mapInstance.getZoom() > 18) {
+          mapInstance.setZoom(18);
+        }
+      });
+    }
+  }, [mapLoaded, mapInstance, locations, selectedStaffData, selectedDayRecord, insights]);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapInstance || !focusedLocation) return;
+    if (!hasValidCoord(focusedLocation.lat, focusedLocation.lng)) return;
+    const lat = Number(focusedLocation.lat);
+    const lng = Number(focusedLocation.lng);
+    mapInstance.panTo({ lat, lng });
+    mapInstance.setZoom(18);
+    
+    if (infoWindowRef.current) {
+      infoWindowRef.current.setContent(
+        `<div style="display: flex; align-items: center; gap: 10px; padding: 4px; font-family: Inter, sans-serif; min-width: 180px;">
+          <div style="flex-shrink: 0;">
+            ${selectedStaffData?.photoUrl 
+              ? `<img src="${getFullImageUrl(selectedStaffData.photoUrl)}" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #1677ff;" />`
+              : `<div style="width: 44px; height: 44px; border-radius: 50%; background-color: #e6f7ff; color: #1677ff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; border: 2px solid #91d5ff;">${(selectedStaffData?.name || 'U').charAt(0).toUpperCase()}</div>`
+            }
+          </div>
+          <div style="display: flex; flex-direction: column; line-height: 1.3;">
+            <span style="font-weight: 700; font-size: 13px; color: #1f2937;">${selectedStaffData?.name || 'Unknown'}</span>
+            ${selectedStaffData?.staffId ? `<span style="font-size: 11px; color: #6b7280; font-weight: 500;">ID: ${selectedStaffData.staffId}</span>` : ''}
+            <span style="font-size: 11px; color: #4b5563; margin-top: 2px;">Time: ${dayjs(focusedLocation.timestamp).format('hh:mm:ss A')}</span>
+            <span style="font-size: 10px; color: #9ca3af;">Accuracy: ${focusedLocation.accuracy || 'N/A'}m</span>
+            <span style="font-size: 10px; color: #4b5563; margin-top: 2px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${formatLocationLabel(focusedLocation.address, focusedLocation.lat, focusedLocation.lng)}">Location: ${formatLocationLabel(focusedLocation.address, focusedLocation.lat, focusedLocation.lng)}</span>
+          </div>
+        </div>`
+      );
+      const markerKey = `${focusedLocation.timestamp}|${lat}|${lng}`;
+      const marker = markerIndexRef.current.get(markerKey);
+      if (marker) {
+        infoWindowRef.current.open({ anchor: marker, map: mapInstance });
+      } else {
+        infoWindowRef.current.setPosition({ lat, lng });
+        infoWindowRef.current.open(mapInstance);
+      }
+    }
+  }, [mapLoaded, mapInstance, focusedLocation]);
+
+  // Check if we have valid locations
+  const validLocationCount = (locations || []).filter((loc) => hasValidCoord(loc?.lat, loc?.lng)).length;
+  const hasValidLocations = validLocationCount > 0;
+
+  const timelineItems = useMemo(() => {
+    const items = [];
+
+    // 1. Punch-in
+    if (selectedDayRecord?.punchInTime) {
+      items.push({
+        type: 'punch-in',
+        time: dayjs(selectedDayRecord.punchInTime).format('hh:mm A'),
+        title: `PUNCH-IN @ ${dayjs(selectedDayRecord.punchInTime).format('hh:mm A')}`,
+        rawTime: new Date(selectedDayRecord.punchInTime).getTime(),
+        color: '#52c41a',
+      });
+    }
+
+    // 2. Halts (stops)
+    if (insights?.halts && insights.halts.length > 0) {
+      insights.halts.forEach((halt) => {
+        items.push({
+          type: 'halt',
+          time: dayjs(halt.startTs).format('hh:mm A'),
+          title: 'UNPLANNED STOP',
+          duration: formatDuration(halt.durationMs),
+          subTitle: `${dayjs(halt.startTs).format('hh:mm A')} - ${dayjs(halt.endTs).format('hh:mm A')} (${formatDuration(halt.durationMs)})`,
+          address: halt.address,
+          lat: halt.lat,
+          lng: halt.lng,
+          rawTime: halt.startTs,
+          color: '#faad14',
+        });
+      });
+    }
+
+    // 3. Last Known Location
+    if (locations && locations.length > 0) {
+      const valid = locations.filter((loc) => hasValidCoord(loc?.lat, loc?.lng));
+      if (valid.length > 0) {
+        const lastLoc = valid[valid.length - 1];
+        items.push({
+          type: 'last-seen',
+          time: dayjs(lastLoc.timestamp).format('hh:mm A'),
+          title: 'LAST KNOWN LOCATION',
+          subTitle: dayjs(lastLoc.timestamp).format('hh:mm A'),
+          address: lastLoc.address,
+          lat: lastLoc.lat,
+          lng: lastLoc.lng,
+          rawTime: new Date(lastLoc.timestamp).getTime(),
+          color: '#1890ff',
+        });
+      }
+    }
+
+    // 4. Punch-out
+    if (selectedDayRecord?.punchOutTime) {
+      items.push({
+        type: 'punch-out',
+        time: dayjs(selectedDayRecord.punchOutTime).format('hh:mm A'),
+        title: `PUNCH-OUT @ ${dayjs(selectedDayRecord.punchOutTime).format('hh:mm A')}`,
+        rawTime: new Date(selectedDayRecord.punchOutTime).getTime(),
+        color: '#ff4d4f',
+      });
+    }
+
+    // Sort chronologically by time
+    items.sort((a, b) => a.rawTime - b.rawTime);
+    return items;
+  }, [selectedDayRecord, insights, locations]);
+
+  // Show loading state while map is loading
+  if (!mapLoaded) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: 400 }}>
+        <Spin size="large" tip="Loading map..." />
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      id="map-fullscreen-wrapper" 
+      style={{ 
+        height: '100%', 
+        width: '100%',
+        display: 'flex', 
+        flexDirection: 'column', 
+        position: 'relative',
+        backgroundColor: '#ffffff'
+      }}
+    >
+      {/* Map Container */}
+      <div ref={mapContainerRef} style={{ height: '100%', minHeight: 350, borderRadius: isFullscreen ? 0 : 8 }} />
+
+      {/* Custom Fullscreen Control Floating Button (Uber style) */}
+      <Button
+        type="default"
+        shape="circle"
+        icon={isFullscreen ? <CompressOutlined /> : <ExpandOutlined />}
+        onClick={handleFullscreenToggle}
+        style={{
+          position: 'absolute',
+          top: '16px',
+          left: '16px',
+          zIndex: 1000,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          backgroundColor: '#ffffff',
+          border: '1px solid #d9d9d9',
+          width: '40px',
+          height: '40px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      />
+
+      {/* Floating Box (Overlay matching Screenshot 2) */}
+      {selectedStaffData && panelVisible && (
+        <div style={{
+          position: 'absolute',
+          top: '16px',
+          right: '16px',
+          width: '320px',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: '12px',
+          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+          zIndex: 1000,
+          maxHeight: 'calc(100% - 100px)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          border: '1px solid rgba(226, 232, 240, 0.8)',
+          fontFamily: 'Inter, system-ui, sans-serif'
+        }}>
+          {/* Profile Header */}
+          <div style={{
+            background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+            padding: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            color: '#ffffff',
+            borderBottom: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <Avatar 
+              size={44} 
+              src={selectedStaffData?.photoUrl ? getFullImageUrl(selectedStaffData.photoUrl) : undefined}
+              icon={!selectedStaffData?.photoUrl ? <UserOutlined /> : undefined}
+              style={{ backgroundColor: 'rgba(255, 255, 255, 0.25)', marginRight: '12px', border: '2px solid rgba(255,255,255,0.4)', objectFit: 'cover' }}
+            >
+              {!selectedStaffData?.photoUrl && selectedStaffData?.name ? selectedStaffData.name.charAt(0).toUpperCase() : ''}
+            </Avatar>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+              <span style={{ fontSize: '15px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '0.3px', textTransform: 'capitalize' }}>
+                {selectedStaffData.name || 'Unknown Staff'} {selectedStaffData.staffId ? `(ID: ${selectedStaffData.staffId})` : ''}
+              </span>
+              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', marginTop: '2px', fontWeight: 500 }}>
+                {selectedDayRecord?.punchInTime 
+                  ? `Punched-in @ ${dayjs(selectedDayRecord.punchInTime).format('hh:mm A')}`
+                  : 'Not Punched-in'
+                }
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: '50%',
+                width: '28px',
+                height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <PhoneOutlined style={{ fontSize: '12px', color: '#fff' }} />
+              </div>
+              <div 
+                onClick={() => setPanelVisible(false)}
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.25s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.35)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'}
+              >
+                <CloseOutlined style={{ fontSize: '12px', color: '#fff' }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Metrics Row */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '6px',
+            padding: '10px',
+            backgroundColor: '#f8fafc',
+            borderBottom: '1px solid #f1f5f9'
+          }}>
+            {/* Metric 1 */}
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Accuracy</span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
+                {insights?.avgAccuracy ? `${insights.avgAccuracy.toFixed(0)}m` : 'N/A'}
+              </span>
+            </div>
+
+            {/* Metric 2 */}
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Visits</span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
+                {selectedDayRecord?.visitCount || 0}
+              </span>
+            </div>
+
+            {/* Metric 3 */}
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Distance</span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px', whiteSpace: 'nowrap' }}>
+                {insights?.distanceKm ? `${insights.distanceKm.toFixed(1)} km` : '0 km'}
+              </span>
+            </div>
+
+            {/* Metric 4 */}
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Span</span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {insights?.span || '0m'}
+              </span>
+            </div>
+          </div>
+
+          {/* Timeline Title Header */}
+          <div style={{
+            padding: '12px 16px 6px 16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            borderBottom: '1px solid #f1f5f9'
+          }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Timeline</span>
+            <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+              {dayjs(selectedDayRecord?.date || selectedDate).format('DD MMM YYYY')}
+            </span>
+          </div>
+
+          {/* Scrollable Timeline List */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '16px 16px 4px 16px',
+            backgroundColor: '#ffffff'
+          }}>
+            {timelineItems.length === 0 ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No timeline events recorded" style={{ margin: '20px 0' }} />
+            ) : (
+              <Timeline mode="left" style={{ marginLeft: '4px' }}>
+                {timelineItems.map((item, idx) => (
+                  <Timeline.Item
+                    key={idx}
+                    color={item.color}
+                    dot={
+                      item.type === 'punch-in' ? <ClockCircleOutlined style={{ fontSize: '13px', color: '#52c41a' }} /> :
+                      item.type === 'punch-out' ? <ClockCircleOutlined style={{ fontSize: '13px', color: '#ff4d4f' }} /> :
+                      item.type === 'halt' ? <EnvironmentOutlined style={{ fontSize: '13px', color: '#faad14' }} /> :
+                      <EnvironmentOutlined style={{ fontSize: '13px', color: '#1890ff' }} />
+                    }
+                    style={{ paddingBottom: '16px' }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontWeight: 700, fontSize: '12px', color: '#1e293b' }}>
+                        {item.title}
+                      </span>
+                      {item.subTitle && (
+                        <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', fontWeight: 500 }}>
+                          {item.subTitle}
+                        </span>
+                      )}
+
+                      {/* Interactive Geofocus Link */}
+                      {(item.type === 'halt' || item.type === 'last-seen') && (
+                        <div style={{ marginTop: '4px' }}>
+                          <Button
+                            type="link"
+                            size="small"
+                            onClick={() => {
+                              if (setFocusedLocation) {
+                                setFocusedLocation({
+                                  lat: item.lat,
+                                  lng: item.lng,
+                                  timestamp: item.rawTime,
+                                  accuracy: insights?.avgAccuracy
+                                });
+                              }
+                            }}
+                            style={{ padding: 0, height: 'auto', fontSize: '11px', color: '#0284c7', fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}
+                          >
+                            <EnvironmentOutlined style={{ marginRight: '4px' }} /> Click here to Show Address
+                          </Button>
+                          {item.address && (
+                            <div style={{
+                              fontSize: '10px',
+                              color: '#475569',
+                              marginTop: '3px',
+                              backgroundColor: '#f8fafc',
+                              padding: '4px 6px',
+                              borderRadius: '4px',
+                              border: '1px dashed #e2e8f0',
+                              lineHeight: '1.4'
+                            }}>
+                              {item.address}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </Timeline.Item>
+                ))}
+              </Timeline>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Status Message */}
+      <div style={{
+        padding: '12px 16px',
+        backgroundColor: hasValidLocations ? '#f6ffed' : '#fff2f0',
+        borderTop: '1px solid #f0f0f0',
+        borderRadius: '0 0 8px 8px'
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          color: hasValidLocations ? '#52c41a' : '#ff4d4f',
+          fontSize: '14px',
+          fontWeight: 500
+        }}>
+          <EnvironmentOutlined style={{ marginRight: 8 }} />
+          {hasValidLocations ?
+            `Tracking active - ${validLocationCount} location${validLocationCount > 1 ? 's' : ''} recorded` :
+            'Location Not Available'
+          }
+        </div>
+        {hasValidLocations && insights ? (
+          <div style={{ marginTop: 6, fontSize: 12, color: '#3f8600' }}>
+            Last seen: {insights.lastSeen ? insights.lastSeen.format('HH:mm:ss') : '-'} | Avg accuracy: {insights.avgAccuracy ? `${insights.avgAccuracy.toFixed(1)}m` : '-'} | Distance: {insights.distanceKm.toFixed(2)} km
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
 const Geolocation = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -110,6 +969,7 @@ const Geolocation = () => {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [isMapFullWidth, setIsMapFullWidth] = useState(false);
+  const [mapStyle, setMapStyle] = useState('standard');
   const autoRefreshRef = useRef(null);
   const [stats, setStats] = useState({
     totalStaff: 0,
@@ -481,695 +1341,7 @@ const Geolocation = () => {
     },
   ];
 
-  // Map component
-  const SimpleMap = ({ locations, selectedStaffData, selectedDayRecord, insights, focusedLocation, setFocusedLocation, panelVisible, setPanelVisible }) => {
-    const [mapLoaded, setMapLoaded] = useState(false);
-    const [mapInstance, setMapInstance] = useState(null);
-    const mapContainerRef = useRef(null);
-    const markersRef = useRef([]);
-    const markerIndexRef = useRef(new Map());
-    const pathRef = useRef(null);
-    const infoWindowRef = useRef(null);
-    const [isFullscreen, setIsFullscreen] = useState(false);
 
-    useEffect(() => {
-      const handleFullscreenChange = () => {
-        setIsFullscreen(!!document.fullscreenElement);
-      };
-      document.addEventListener('fullscreenchange', handleFullscreenChange);
-      return () => {
-        document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      };
-    }, []);
-
-    const handleFullscreenToggle = () => {
-      const element = document.getElementById('map-fullscreen-wrapper');
-      if (!element) return;
-      if (!document.fullscreenElement) {
-        element.requestFullscreen().catch((err) => {
-          console.error(`Error attempting to enable fullscreen: ${err.message}`);
-        });
-      } else {
-        document.exitFullscreen();
-      }
-    };
-
-    useEffect(() => {
-      let mounted = true;
-      const loadGoogle = async () => {
-        await ensureGoogleMaps();
-        if (mounted) setMapLoaded(true);
-      };
-      if (!mapLoaded) loadGoogle();
-      return () => { mounted = false; };
-    }, [mapLoaded]);
-
-    useEffect(() => {
-      if (mapLoaded && !mapInstance && mapContainerRef.current && window.google?.maps) {
-        const firstValid = (locations || []).find((loc) => hasValidCoord(loc?.lat, loc?.lng));
-        const defaultCenter = firstValid
-          ? { lat: Number(firstValid.lat), lng: Number(firstValid.lng) }
-          : { lat: 28.6139, lng: 77.2090 };
-        const map = new window.google.maps.Map(mapContainerRef.current, {
-          center: defaultCenter,
-          zoom: 13,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-          styles: [
-            { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-            { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-            { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-            { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
-            { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#bdbdbd" }] },
-            { featureType: "poi", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
-            { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
-            { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-            { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
-            { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#dadada" }] },
-            { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-            { featureType: "road.local", elementType: "labels.text.fill", stylers: [{ color: "#9e9e9e" }] },
-            { featureType: "transit.line", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] },
-            { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
-            { featureType: "water", elementType: "geometry", stylers: [{ color: "#e0f2fe" }] },
-            { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#0284c7" }] }
-          ]
-        });
-
-        infoWindowRef.current = new window.google.maps.InfoWindow();
-        setMapInstance(map);
-      }
-    }, [mapLoaded, mapInstance, locations]);
-
-    useEffect(() => {
-      if (!mapLoaded || !mapInstance || !window.google?.maps) return;
-
-      markersRef.current.forEach((marker) => marker.setMap(null));
-      markersRef.current = [];
-      markerIndexRef.current = new Map();
-      if (pathRef.current) {
-        pathRef.current.setMap(null);
-        pathRef.current = null;
-      }
-
-      const findNearestLocation = (targetTime, points) => {
-        if (!targetTime) return null;
-        const target = new Date(targetTime).getTime();
-        if (!Number.isFinite(target)) return null;
-        let nearest = null;
-        let diff = Number.MAX_SAFE_INTEGER;
-        (points || []).forEach((loc) => {
-          const t = new Date(loc.timestamp).getTime();
-          const d = Math.abs(t - target);
-          if (d < diff) {
-            diff = d;
-            nearest = loc;
-          }
-        });
-        return nearest;
-      };
-
-      const validLocations = (locations || [])
-        .filter((loc) => hasValidCoord(loc?.lat, loc?.lng))
-        .map((loc) => ({ ...loc, lat: Number(loc.lat), lng: Number(loc.lng) }));
-
-      if (validLocations.length === 0) {
-        mapInstance.setCenter({ lat: 28.6139, lng: 77.2090 });
-        mapInstance.setZoom(13);
-        return;
-      }
-
-      validLocations.forEach((location, index) => {
-        const isFirst = index === 0;
-        const isLast = index === validLocations.length - 1;
-        const markerColor = isFirst ? '#13c2c2' : (isLast ? '#722ed1' : '#1890ff');
-        const marker = new window.google.maps.Marker({
-          position: { lat: location.lat, lng: location.lng },
-          map: mapInstance,
-          label: validLocations.length > 1 ? { text: String(index + 1), color: '#fff', fontWeight: '700' } : undefined,
-          icon: {
-            path: window.google.maps.SymbolPath.CIRCLE,
-            fillColor: markerColor,
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 2,
-            scale: isLast ? 12 : 10,
-          },
-        });
-        marker.addListener('click', () => {
-          if (setPanelVisible) {
-            setPanelVisible(true);
-          }
-          if (!infoWindowRef.current) return;
-          infoWindowRef.current.setContent(
-            `<div style="padding: 8px;">
-              <strong>${selectedStaffData?.name || 'Unknown'}</strong>${selectedStaffData?.staffId ? ` <span style="color: #666;">(ID: ${selectedStaffData.staffId})</span>` : ''}<br/>
-              <small>${isFirst ? 'Start Location' : (isLast ? 'Last Known Location' : 'Movement Ping')}</small><br/>
-              <small>Time: ${dayjs(location.timestamp).format('hh:mm:ss A')}</small><br/>
-              <small>Accuracy: ${location.accuracy || 'N/A'}m</small>
-            </div>`
-          );
-          infoWindowRef.current.open({ anchor: marker, map: mapInstance });
-        });
-        markerIndexRef.current.set(`${location.timestamp}|${location.lat}|${location.lng}`, marker);
-        markersRef.current.push(marker);
-      });
-
-      // Render Unplanned Stops (Halts) on the map
-      if (insights?.halts && insights.halts.length > 0) {
-        insights.halts.forEach((halt, idx) => {
-          if (hasValidCoord(halt.lat, halt.lng)) {
-            const haltMarker = new window.google.maps.Marker({
-              position: { lat: Number(halt.lat), lng: Number(halt.lng) },
-              map: mapInstance,
-              label: { text: '!', color: '#fff', fontWeight: '700' },
-              icon: {
-                path: window.google.maps.SymbolPath.CIRCLE,
-                fillColor: '#faad14', // Warning orange
-                fillOpacity: 1,
-                strokeColor: '#fff',
-                strokeWeight: 2,
-                scale: 10,
-              },
-            });
-
-            haltMarker.addListener('click', () => {
-              if (setPanelVisible) {
-                setPanelVisible(true);
-              }
-              if (!infoWindowRef.current) return;
-              infoWindowRef.current.setContent(
-                `<div style="padding: 8px; font-family: Inter, sans-serif;">
-                  <strong style="color: #ad6800;">⚠️ Unplanned Stop #${idx + 1}</strong><br/>
-                  <strong>Duration:</strong> ${formatDuration(halt.durationMs)}<br/>
-                  <strong>Time:</strong> ${dayjs(halt.startTs).format('hh:mm A')} - ${dayjs(halt.endTs).format('hh:mm A')}<br/>
-                  ${halt.address ? `<strong>Address:</strong> ${halt.address}<br/>` : ''}
-                </div>`
-              );
-              infoWindowRef.current.open({ anchor: haltMarker, map: mapInstance });
-            });
-
-            markersRef.current.push(haltMarker);
-          }
-        });
-      }
-
-      // Punch-in/out logic using attendance table coordinates directly if available, falling back to pings
-      const hasPunchInCoords = hasValidCoord(selectedDayRecord?.punchInLatitude, selectedDayRecord?.punchInLongitude);
-      const punchInLoc = hasPunchInCoords
-        ? { lat: Number(selectedDayRecord.punchInLatitude), lng: Number(selectedDayRecord.punchInLongitude) }
-        : findNearestLocation(selectedDayRecord?.punchInTime, validLocations);
-
-      const hasPunchOutCoords = hasValidCoord(selectedDayRecord?.punchOutLatitude, selectedDayRecord?.punchOutLongitude);
-      const punchOutLoc = hasPunchOutCoords
-        ? { lat: Number(selectedDayRecord.punchOutLatitude), lng: Number(selectedDayRecord.punchOutLongitude) }
-        : findNearestLocation(selectedDayRecord?.punchOutTime, validLocations);
-
-      if (punchInLoc && hasValidCoord(punchInLoc.lat, punchInLoc.lng)) {
-        const inMarker = new window.google.maps.Marker({
-          position: { lat: Number(punchInLoc.lat), lng: Number(punchInLoc.lng) },
-          map: mapInstance,
-          label: { text: 'IN', color: '#fff', fontWeight: '700' },
-          icon: {
-            path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-            fillColor: '#52c41a',
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 2,
-            scale: 6,
-          },
-        });
-        inMarker.addListener('click', () => {
-          if (setPanelVisible) {
-            setPanelVisible(true);
-          }
-          if (!infoWindowRef.current) return;
-          infoWindowRef.current.setContent(
-            `<div style="padding: 8px;">
-              <strong>${selectedStaffData?.name || 'Unknown'}</strong><br/>
-              <strong style="color: #52c41a;">PUNCH-IN</strong><br/>
-              <small>Time: ${selectedDayRecord?.punchInTime ? dayjs(selectedDayRecord.punchInTime).format('hh:mm:ss A') : 'N/A'}</small><br/>
-              ${selectedDayRecord?.punchInAddress ? `<small>Address: ${selectedDayRecord.punchInAddress}</small>` : ''}
-            </div>`
-          );
-          infoWindowRef.current.open({ anchor: inMarker, map: mapInstance });
-        });
-        markersRef.current.push(inMarker);
-      }
-
-      if (punchOutLoc && hasValidCoord(punchOutLoc.lat, punchOutLoc.lng)) {
-        const outMarker = new window.google.maps.Marker({
-          position: { lat: Number(punchOutLoc.lat), lng: Number(punchOutLoc.lng) },
-          map: mapInstance,
-          label: { text: 'OUT', color: '#fff', fontWeight: '700' },
-          icon: {
-            path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            fillColor: '#ff4d4f',
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 2,
-            scale: 6,
-          },
-        });
-        outMarker.addListener('click', () => {
-          if (setPanelVisible) {
-            setPanelVisible(true);
-          }
-          if (!infoWindowRef.current) return;
-          infoWindowRef.current.setContent(
-            `<div style="padding: 8px;">
-              <strong>${selectedStaffData?.name || 'Unknown'}</strong><br/>
-              <strong style="color: #ff4d4f;">PUNCH-OUT</strong><br/>
-              <small>Time: ${selectedDayRecord?.punchOutTime ? dayjs(selectedDayRecord.punchOutTime).format('hh:mm:ss A') : 'N/A'}</small><br/>
-              ${selectedDayRecord?.punchOutAddress ? `<small>Address: ${selectedDayRecord.punchOutAddress}</small>` : ''}
-            </div>`
-          );
-          infoWindowRef.current.open({ anchor: outMarker, map: mapInstance });
-        });
-        markersRef.current.push(outMarker);
-      }
-
-      // Route Polyline (Uber style blue line)
-      if (validLocations.length > 1) {
-        pathRef.current = new window.google.maps.Polyline({
-          path: validLocations.map((loc) => ({ lat: loc.lat, lng: loc.lng })),
-          geodesic: true,
-          strokeColor: '#1677ff',
-          strokeOpacity: 0.9,
-          strokeWeight: 5,
-          map: mapInstance,
-        });
-      }
-
-      // Calculate Map Bounds
-      const bounds = new window.google.maps.LatLngBounds();
-      let hasBounds = false;
-      
-      validLocations.forEach((loc) => {
-        bounds.extend({ lat: loc.lat, lng: loc.lng });
-        hasBounds = true;
-      });
-
-      if (punchInLoc && hasValidCoord(punchInLoc.lat, punchInLoc.lng)) {
-        bounds.extend({ lat: Number(punchInLoc.lat), lng: Number(punchInLoc.lng) });
-        hasBounds = true;
-      }
-      if (punchOutLoc && hasValidCoord(punchOutLoc.lat, punchOutLoc.lng)) {
-        bounds.extend({ lat: Number(punchOutLoc.lat), lng: Number(punchOutLoc.lng) });
-        hasBounds = true;
-      }
-      if (insights?.halts && insights.halts.length > 0) {
-        insights.halts.forEach((halt) => {
-          if (hasValidCoord(halt.lat, halt.lng)) {
-            bounds.extend({ lat: Number(halt.lat), lng: Number(halt.lng) });
-            hasBounds = true;
-          }
-        });
-      }
-
-      if (hasBounds) {
-        mapInstance.fitBounds(bounds, 50);
-      }
-    }, [mapLoaded, mapInstance, locations, selectedStaffData, selectedDayRecord, insights]);
-
-    useEffect(() => {
-      if (!mapLoaded || !mapInstance || !focusedLocation) return;
-      if (!hasValidCoord(focusedLocation.lat, focusedLocation.lng)) return;
-      const lat = Number(focusedLocation.lat);
-      const lng = Number(focusedLocation.lng);
-      mapInstance.panTo({ lat, lng });
-      mapInstance.setZoom(17);
-      const markerKey = `${focusedLocation.timestamp}|${lat}|${lng}`;
-      const marker = markerIndexRef.current.get(markerKey);
-      if (marker && infoWindowRef.current) {
-        infoWindowRef.current.setContent(
-          `<div style="padding: 8px;">
-            <strong>${selectedStaffData?.name || 'Unknown'}</strong><br/>
-            <small>Time: ${dayjs(focusedLocation.timestamp).format('HH:mm:ss')}</small><br/>
-            <small>Accuracy: ${focusedLocation.accuracy || 'N/A'}m</small>
-          </div>`
-        );
-        infoWindowRef.current.open({ anchor: marker, map: mapInstance });
-      }
-    }, [mapLoaded, mapInstance, focusedLocation]);
-
-    // Check if we have valid locations
-    const validLocationCount = (locations || []).filter((loc) => hasValidCoord(loc?.lat, loc?.lng)).length;
-    const hasValidLocations = validLocationCount > 0;
-
-    const timelineItems = useMemo(() => {
-      const items = [];
-
-      // 1. Punch-in
-      if (selectedDayRecord?.punchInTime) {
-        items.push({
-          type: 'punch-in',
-          time: dayjs(selectedDayRecord.punchInTime).format('hh:mm A'),
-          title: `PUNCH-IN @ ${dayjs(selectedDayRecord.punchInTime).format('hh:mm A')}`,
-          rawTime: new Date(selectedDayRecord.punchInTime).getTime(),
-          color: '#52c41a',
-        });
-      }
-
-      // 2. Halts (stops)
-      if (insights?.halts && insights.halts.length > 0) {
-        insights.halts.forEach((halt) => {
-          items.push({
-            type: 'halt',
-            time: dayjs(halt.startTs).format('hh:mm A'),
-            title: 'UNPLANNED STOP',
-            duration: formatDuration(halt.durationMs),
-            subTitle: `${dayjs(halt.startTs).format('hh:mm A')} - ${dayjs(halt.endTs).format('hh:mm A')} (${formatDuration(halt.durationMs)})`,
-            address: halt.address,
-            lat: halt.lat,
-            lng: halt.lng,
-            rawTime: halt.startTs,
-            color: '#faad14',
-          });
-        });
-      }
-
-      // 3. Last Known Location
-      if (locations && locations.length > 0) {
-        const valid = locations.filter((loc) => hasValidCoord(loc?.lat, loc?.lng));
-        if (valid.length > 0) {
-          const lastLoc = valid[valid.length - 1];
-          items.push({
-            type: 'last-seen',
-            time: dayjs(lastLoc.timestamp).format('hh:mm A'),
-            title: 'LAST KNOWN LOCATION',
-            subTitle: dayjs(lastLoc.timestamp).format('hh:mm A'),
-            address: lastLoc.address,
-            lat: lastLoc.lat,
-            lng: lastLoc.lng,
-            rawTime: new Date(lastLoc.timestamp).getTime(),
-            color: '#1890ff',
-          });
-        }
-      }
-
-      // 4. Punch-out
-      if (selectedDayRecord?.punchOutTime) {
-        items.push({
-          type: 'punch-out',
-          time: dayjs(selectedDayRecord.punchOutTime).format('hh:mm A'),
-          title: `PUNCH-OUT @ ${dayjs(selectedDayRecord.punchOutTime).format('hh:mm A')}`,
-          rawTime: new Date(selectedDayRecord.punchOutTime).getTime(),
-          color: '#ff4d4f',
-        });
-      }
-
-      // Sort chronologically by time
-      items.sort((a, b) => a.rawTime - b.rawTime);
-      return items;
-    }, [selectedDayRecord, insights, locations]);
-
-    // Show loading state while map is loading
-    if (!mapLoaded) {
-      return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: 400 }}>
-          <Spin size="large" tip="Loading map..." />
-        </div>
-      );
-    }
-
-    return (
-      <div 
-        id="map-fullscreen-wrapper" 
-        style={{ 
-          height: '100%', 
-          width: '100%',
-          display: 'flex', 
-          flexDirection: 'column', 
-          position: 'relative',
-          backgroundColor: '#ffffff'
-        }}
-      >
-        {/* Map Container */}
-        <div ref={mapContainerRef} style={{ height: '100%', minHeight: 350, borderRadius: isFullscreen ? 0 : 8 }} />
-
-        {/* Custom Fullscreen Control Floating Button (Uber style) */}
-        <Button
-          type="default"
-          shape="circle"
-          icon={isFullscreen ? <CompressOutlined /> : <ExpandOutlined />}
-          onClick={handleFullscreenToggle}
-          style={{
-            position: 'absolute',
-            top: '16px',
-            left: '16px',
-            zIndex: 1000,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            backgroundColor: '#ffffff',
-            border: '1px solid #d9d9d9',
-            width: '40px',
-            height: '40px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        />
-
-        {/* Floating Box (Overlay matching Screenshot 2) */}
-        {selectedStaffData && panelVisible && (
-          <div style={{
-            position: 'absolute',
-            top: '16px',
-            right: '16px',
-            width: '320px',
-            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(10px)',
-            borderRadius: '12px',
-            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
-            zIndex: 1000,
-            maxHeight: 'calc(100% - 100px)',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            border: '1px solid rgba(226, 232, 240, 0.8)',
-            fontFamily: 'Inter, system-ui, sans-serif'
-          }}>
-            {/* Profile Header */}
-            <div style={{
-              background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
-              padding: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              color: '#ffffff',
-              borderBottom: '1px solid rgba(255,255,255,0.1)'
-            }}>
-              <Avatar 
-                size={44} 
-                icon={<UserOutlined />} 
-                style={{ backgroundColor: 'rgba(255, 255, 255, 0.25)', marginRight: '12px', border: '2px solid rgba(255,255,255,0.4)' }}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-                <span style={{ fontSize: '15px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '0.3px', textTransform: 'capitalize' }}>
-                  {selectedStaffData.name || 'Unknown Staff'} {selectedStaffData.staffId ? `(ID: ${selectedStaffData.staffId})` : ''}
-                </span>
-                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', marginTop: '2px', fontWeight: 500 }}>
-                  {selectedDayRecord?.punchInTime 
-                    ? `Punched-in @ ${dayjs(selectedDayRecord.punchInTime).format('hh:mm A')}`
-                    : 'Not Punched-in'
-                  }
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                  borderRadius: '50%',
-                  width: '28px',
-                  height: '28px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <PhoneOutlined style={{ fontSize: '12px', color: '#fff' }} />
-                </div>
-                <div 
-                  onClick={() => setPanelVisible(false)}
-                  style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                    borderRadius: '50%',
-                    width: '28px',
-                    height: '28px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.25s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.35)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'}
-                >
-                  <CloseOutlined style={{ fontSize: '12px', color: '#fff' }} />
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Metrics Row */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '6px',
-              padding: '10px',
-              backgroundColor: '#f8fafc',
-              borderBottom: '1px solid #f1f5f9'
-            }}>
-              {/* Metric 1 */}
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Accuracy</span>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
-                  {insights?.avgAccuracy ? `${insights.avgAccuracy.toFixed(0)}m` : 'N/A'}
-                </span>
-              </div>
-
-              {/* Metric 2 */}
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Visits</span>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
-                  {selectedDayRecord?.visitCount || 0}
-                </span>
-              </div>
-
-              {/* Metric 3 */}
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Distance</span>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px', whiteSpace: 'nowrap' }}>
-                  {insights?.distanceKm ? `${insights.distanceKm.toFixed(1)} km` : '0 km'}
-                </span>
-              </div>
-
-              {/* Metric 4 */}
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 4px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <span style={{ fontSize: '9px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Span</span>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {insights?.span || '0m'}
-                </span>
-              </div>
-            </div>
-
-            {/* Timeline Title Header */}
-            <div style={{
-              padding: '12px 16px 6px 16px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'baseline',
-              borderBottom: '1px solid #f1f5f9'
-            }}>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Timeline</span>
-              <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
-                {dayjs(selectedDayRecord?.date || selectedDate).format('DD MMM YYYY')}
-              </span>
-            </div>
-
-            {/* Scrollable Timeline List */}
-            <div style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: '16px 16px 4px 16px',
-              backgroundColor: '#ffffff'
-            }}>
-              {timelineItems.length === 0 ? (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No timeline events recorded" style={{ margin: '20px 0' }} />
-              ) : (
-                <Timeline mode="left" style={{ marginLeft: '4px' }}>
-                  {timelineItems.map((item, idx) => (
-                    <Timeline.Item
-                      key={idx}
-                      color={item.color}
-                      dot={
-                        item.type === 'punch-in' ? <ClockCircleOutlined style={{ fontSize: '13px', color: '#52c41a' }} /> :
-                        item.type === 'punch-out' ? <ClockCircleOutlined style={{ fontSize: '13px', color: '#ff4d4f' }} /> :
-                        item.type === 'halt' ? <EnvironmentOutlined style={{ fontSize: '13px', color: '#faad14' }} /> :
-                        <EnvironmentOutlined style={{ fontSize: '13px', color: '#1890ff' }} />
-                      }
-                      style={{ paddingBottom: '16px' }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: 700, fontSize: '12px', color: '#1e293b' }}>
-                          {item.title}
-                        </span>
-                        {item.subTitle && (
-                          <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', fontWeight: 500 }}>
-                            {item.subTitle}
-                          </span>
-                        )}
-
-                        {/* Interactive Geofocus Link */}
-                        {(item.type === 'halt' || item.type === 'last-seen') && (
-                          <div style={{ marginTop: '4px' }}>
-                            <Button
-                              type="link"
-                              size="small"
-                              onClick={() => {
-                                if (setFocusedLocation) {
-                                  setFocusedLocation({
-                                    lat: item.lat,
-                                    lng: item.lng,
-                                    timestamp: item.rawTime,
-                                    accuracy: insights?.avgAccuracy
-                                  });
-                                }
-                              }}
-                              style={{ padding: 0, height: 'auto', fontSize: '11px', color: '#0284c7', fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}
-                            >
-                              <EnvironmentOutlined style={{ marginRight: '4px' }} /> Click here to Show Address
-                            </Button>
-                            {item.address && (
-                              <div style={{
-                                fontSize: '10px',
-                                color: '#475569',
-                                marginTop: '3px',
-                                backgroundColor: '#f8fafc',
-                                padding: '4px 6px',
-                                borderRadius: '4px',
-                                border: '1px dashed #e2e8f0',
-                                lineHeight: '1.4'
-                              }}>
-                                {item.address}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </Timeline.Item>
-                  ))}
-                </Timeline>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Status Message */}
-        <div style={{
-          padding: '12px 16px',
-          backgroundColor: hasValidLocations ? '#f6ffed' : '#fff2f0',
-          borderTop: '1px solid #f0f0f0',
-          borderRadius: '0 0 8px 8px'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            color: hasValidLocations ? '#52c41a' : '#ff4d4f',
-            fontSize: '14px',
-            fontWeight: 500
-          }}>
-            <EnvironmentOutlined style={{ marginRight: 8 }} />
-            {hasValidLocations ?
-              `Tracking active - ${validLocationCount} location${validLocationCount > 1 ? 's' : ''} recorded` :
-              'Location Not Available'
-            }
-          </div>
-          {hasValidLocations && insights ? (
-            <div style={{ marginTop: 6, fontSize: 12, color: '#3f8600' }}>
-              Last seen: {insights.lastSeen ? insights.lastSeen.format('HH:mm:ss') : '-'} | Avg accuracy: {insights.avgAccuracy ? `${insights.avgAccuracy.toFixed(1)}m` : '-'} | Distance: {insights.distanceKm.toFixed(2)} km
-            </div>
-          ) : null}
-        </div>
-      </div>
-    );
-  };
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -1347,16 +1519,18 @@ const Geolocation = () => {
                                 <div style={{ display: 'flex', alignItems: 'center' }}>
                                   <Avatar 
                                     size={36} 
-                                    icon={<UserOutlined />} 
+                                    src={record.photoUrl ? getFullImageUrl(record.photoUrl) : undefined}
+                                    icon={!record.photoUrl ? <UserOutlined /> : undefined}
                                     style={{ 
                                       backgroundColor: '#e6f7ff', 
                                       color: '#1677ff',
                                       marginRight: '12px',
                                       fontWeight: '700',
-                                      boxShadow: '0 2px 6px rgba(22, 119, 255, 0.06)'
+                                      boxShadow: '0 2px 6px rgba(22, 119, 255, 0.06)',
+                                      objectFit: 'cover'
                                     }}
                                   >
-                                    {text ? text.charAt(0).toUpperCase() : 'U'}
+                                    {!record.photoUrl && text ? text.charAt(0).toUpperCase() : ''}
                                   </Avatar>
                                   <span style={{ fontWeight: '600', color: '#262626' }}>{text}</span>
                                 </div>
@@ -1419,12 +1593,22 @@ const Geolocation = () => {
                         </Title>
                       }
                       extra={(
-                        <Space>
+                        <Space size="middle">
                           {selectedStaff && (
                             <span style={{ fontSize: '13px', color: '#595959', fontWeight: '500' }}>
                               {selectedStaffData?.name || 'Unknown'} | {selectedDate.format('DD MMM YYYY')}
                             </span>
                           )}
+                          <Select
+                            value={mapStyle}
+                            onChange={setMapStyle}
+                            size="small"
+                            style={{ borderRadius: '20px', width: 130 }}
+                          >
+                            <Option value="standard">Standard Map</Option>
+                            <Option value="satellite">Satellite Map</Option>
+                            <Option value="minimal">Minimal Map</Option>
+                          </Select>
                           <Button
                             size="small"
                             shape="round"
@@ -1450,6 +1634,8 @@ const Geolocation = () => {
                           setFocusedLocation={setFocusedLocation}
                           panelVisible={panelVisible}
                           setPanelVisible={setPanelVisible}
+                          mapStyle={mapStyle}
+                          selectedDate={selectedDate}
                         />
                       ) : (
                         <div style={{
