@@ -62,6 +62,7 @@ export default function SuperadminPlans() {
       latePenaltyEnabled: rec.latePenaltyEnabled !== undefined ? !!rec.latePenaltyEnabled : true,
       esiAsTaEnabled: rec.features?.esiAsTaEnabled !== undefined ? !!rec.features.esiAsTaEnabled : false,
       rmoEnabled: rec.features?.rmoEnabled !== undefined ? !!rec.features.rmoEnabled : false,
+      pfSettingsEnabled: rec.features?.pfSettingsEnabled !== undefined ? !!rec.features.pfSettingsEnabled : false,
       attendanceLocationEnabled: rec.attendanceLocationEnabled !== undefined ? !!rec.attendanceLocationEnabled : false,
       active: rec.active,
     });
@@ -236,6 +237,11 @@ export default function SuperadminPlans() {
             </Col>
             <Col span={8}>
               <Form.Item label="Enable RMO Configuration" name="rmoEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Enable Provident Fund Settings" name="pfSettingsEnabled" valuePropName="checked" initialValue={false}>
                 <Switch />
               </Form.Item>
             </Col>

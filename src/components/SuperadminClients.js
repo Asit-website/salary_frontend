@@ -140,15 +140,37 @@ export default function SuperadminClients() {
       let meta = {};
       if (sub.meta) {
         try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+        if (meta?.esiAsTaEnabled !== undefined) return !!meta.esiAsTaEnabled;
       }
-      return !!meta?.esiAsTaEnabled;
+      let planFeatures = {};
+      if (plan?.features) {
+        try { planFeatures = typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features; } catch(e) {}
+      }
+      return !!planFeatures?.esiAsTaEnabled;
     })();
     const rmoEnabled = (() => {
       let meta = {};
       if (sub.meta) {
         try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+        if (meta?.rmoEnabled !== undefined) return !!meta.rmoEnabled;
       }
-      return !!meta?.rmoEnabled;
+      let planFeatures = {};
+      if (plan?.features) {
+        try { planFeatures = typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features; } catch(e) {}
+      }
+      return !!planFeatures?.rmoEnabled;
+    })();
+    const pfSettingsEnabled = (() => {
+      let meta = {};
+      if (sub.meta) {
+        try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+        if (meta?.pfSettingsEnabled !== undefined) return !!meta.pfSettingsEnabled;
+      }
+      let planFeatures = {};
+      if (plan?.features) {
+        try { planFeatures = typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features; } catch(e) {}
+      }
+      return !!planFeatures?.pfSettingsEnabled;
     })();
 
     console.log('Opening limit modal for client:', client.name);
@@ -173,6 +195,7 @@ export default function SuperadminClients() {
       latePenaltyEnabled,
       esiAsTaEnabled,
       rmoEnabled,
+      pfSettingsEnabled,
       attendanceLocationEnabled: sub.attendanceLocationEnabled !== null ? sub.attendanceLocationEnabled : (plan.attendanceLocationEnabled || false),
       rosterEnabled: sub.rosterEnabled !== null ? sub.rosterEnabled : (plan.rosterEnabled || false),
       recruitmentEnabled: sub.recruitmentEnabled !== null ? sub.recruitmentEnabled : (plan.recruitmentEnabled || false),
@@ -219,6 +242,7 @@ export default function SuperadminClients() {
         latePenaltyEnabled: !!values.latePenaltyEnabled,
         esiAsTaEnabled: !!values.esiAsTaEnabled,
         rmoEnabled: !!values.rmoEnabled,
+        pfSettingsEnabled: !!values.pfSettingsEnabled,
         attendanceLocationEnabled: !!values.attendanceLocationEnabled,
       };
 
@@ -369,15 +393,37 @@ export default function SuperadminClients() {
         let meta = {};
         if (sub.meta) {
           try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+          if (meta?.esiAsTaEnabled !== undefined) return !!meta.esiAsTaEnabled;
         }
-        return !!meta?.esiAsTaEnabled;
+        let planFeatures = {};
+        if (resolvedPlan?.features) {
+          try { planFeatures = typeof resolvedPlan.features === 'string' ? JSON.parse(resolvedPlan.features) : resolvedPlan.features; } catch(e) {}
+        }
+        return !!planFeatures?.esiAsTaEnabled;
       })(),
       rmoEnabled: (() => {
         let meta = {};
         if (sub.meta) {
           try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+          if (meta?.rmoEnabled !== undefined) return !!meta.rmoEnabled;
         }
-        return !!meta?.rmoEnabled;
+        let planFeatures = {};
+        if (resolvedPlan?.features) {
+          try { planFeatures = typeof resolvedPlan.features === 'string' ? JSON.parse(resolvedPlan.features) : resolvedPlan.features; } catch(e) {}
+        }
+        return !!planFeatures?.rmoEnabled;
+      })(),
+      pfSettingsEnabled: (() => {
+        let meta = {};
+        if (sub.meta) {
+          try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+          if (meta?.pfSettingsEnabled !== undefined) return !!meta.pfSettingsEnabled;
+        }
+        let planFeatures = {};
+        if (resolvedPlan?.features) {
+          try { planFeatures = typeof resolvedPlan.features === 'string' ? JSON.parse(resolvedPlan.features) : resolvedPlan.features; } catch(e) {}
+        }
+        return !!planFeatures?.pfSettingsEnabled;
       })(),
     });
     setAssignModalTitle('Assign/Renew Subscription');
@@ -426,15 +472,37 @@ export default function SuperadminClients() {
         let meta = {};
         if (sub.meta) {
           try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+          if (meta?.esiAsTaEnabled !== undefined) return !!meta.esiAsTaEnabled;
         }
-        return !!meta?.esiAsTaEnabled;
+        let planFeatures = {};
+        if (plan?.features) {
+          try { planFeatures = typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features; } catch(e) {}
+        }
+        return !!planFeatures?.esiAsTaEnabled;
       })(),
       rmoEnabled: (() => {
         let meta = {};
         if (sub.meta) {
           try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+          if (meta?.rmoEnabled !== undefined) return !!meta.rmoEnabled;
         }
-        return !!meta?.rmoEnabled;
+        let planFeatures = {};
+        if (plan?.features) {
+          try { planFeatures = typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features; } catch(e) {}
+        }
+        return !!planFeatures?.rmoEnabled;
+      })(),
+      pfSettingsEnabled: (() => {
+        let meta = {};
+        if (sub.meta) {
+          try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+          if (meta?.pfSettingsEnabled !== undefined) return !!meta.pfSettingsEnabled;
+        }
+        let planFeatures = {};
+        if (plan?.features) {
+          try { planFeatures = typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features; } catch(e) {}
+        }
+        return !!planFeatures?.pfSettingsEnabled;
       })(),
     });
     setAssignModalTitle('Upgrade Plan (Queued)');
@@ -447,6 +515,10 @@ export default function SuperadminClients() {
     setSelectedPlan(plan);
     // If no active subscription, set defaults from plan
     if (plan && (!editing?.currentSubscription || editing?.currentSubscription.status !== 'ACTIVE')) {
+      let planFeatures = {};
+      if (plan.features) {
+        try { planFeatures = typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features; } catch(e) {}
+      }
       assignForm.setFieldsValue({
         staffLimit: plan.staffLimit || '',
         maxGeolocationStaff: plan.maxGeolocationStaff || 0,
@@ -467,7 +539,10 @@ export default function SuperadminClients() {
         comparisonEnabled: plan.comparisonEnabled !== undefined ? !!plan.comparisonEnabled : true,
         otImpactEnabled: plan.otImpactEnabled !== undefined ? !!plan.otImpactEnabled : true,
         latePenaltyEnabled: plan.latePenaltyEnabled !== undefined ? !!plan.latePenaltyEnabled : true,
-        attendanceLocationEnabled: plan.attendanceLocationEnabled !== undefined ? !!plan.attendanceLocationEnabled : false
+        attendanceLocationEnabled: plan.attendanceLocationEnabled !== undefined ? !!plan.attendanceLocationEnabled : false,
+        esiAsTaEnabled: !!planFeatures.esiAsTaEnabled,
+        rmoEnabled: !!planFeatures.rmoEnabled,
+        pfSettingsEnabled: !!planFeatures.pfSettingsEnabled,
       });
     }
   };
@@ -509,6 +584,7 @@ export default function SuperadminClients() {
         latePenaltyEnabled: !!values.latePenaltyEnabled,
         esiAsTaEnabled: !!values.esiAsTaEnabled,
         rmoEnabled: !!values.rmoEnabled,
+        pfSettingsEnabled: !!values.pfSettingsEnabled,
         attendanceLocationEnabled: !!values.attendanceLocationEnabled,
       };
       await api.post(`/superadmin/clients/${editing.id}/subscription`, payload);
@@ -898,6 +974,11 @@ export default function SuperadminClients() {
                   </Form.Item>
                 </Col>
                 <Col span={8}>
+                  <Form.Item name="pfSettingsEnabled" valuePropName="checked">
+                    <Checkbox>Enable Provident Fund Settings</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
                   <Form.Item name="attendanceLocationEnabled" valuePropName="checked">
                     <Checkbox>Enable Attendance Location Details</Checkbox>
                   </Form.Item>
@@ -1125,6 +1206,11 @@ export default function SuperadminClients() {
             <Col span={8}>
               <Form.Item name="rmoEnabled" valuePropName="checked">
                 <Checkbox>Enable RMO Configuration</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="pfSettingsEnabled" valuePropName="checked">
+                <Checkbox>Enable Provident Fund Settings</Checkbox>
               </Form.Item>
             </Col>
             <Col span={8}>

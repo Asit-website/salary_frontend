@@ -914,6 +914,9 @@ export default function Settings() {
       items: [
         // { key: 'sal-settings', icon: <SettingOutlined />, label: 'Salary Settings', desc: 'Manage salaries, leaves, and other HR-related policies.' },
         { key: 'sal-calendar', icon: <CalendarOutlined />, label: 'Salary Calculation logic', desc: 'Calendar Month', onClick: () => navigate('/settings/salary-calculation') },
+        ...(subscriptionInfo?.pfSettingsEnabled ? [
+          { key: 'provident-fund', icon: <SafetyCertificateOutlined />, label: 'Provident Fund (PF) Settings', desc: 'Configure base salary mode for PF calculation', onClick: () => navigate('/settings/provident-fund') }
+        ] : []),
         { key: 'sal-template', icon: <AppstoreOutlined />, label: 'Manage Salary Template', desc: 'Create and apply standard salary structures', onClick: () => navigate('/settings/salary-templates') },
         { key: 'sal-bonus', icon: <ThunderboltOutlined />, label: 'Tenure Bonus Rules', desc: 'Manage service-length based dynamic bonuses', onClick: () => navigate('/settings/tenure-bonus-rules') },
         { key: 'sal-access', icon: <EyeOutlined />, label: 'Salary Details Access', desc: 'Control who can view salary information', onClick: () => navigate('/settings/salary-access') },
