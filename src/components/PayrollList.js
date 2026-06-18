@@ -20,7 +20,12 @@ import {
   Row,
   Col,
   Popover,
-  Tooltip
+  Tooltip,
+  Checkbox,
+  Tabs,
+  Alert,
+  Spin,
+  Statistic
 } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, PlusOutlined, MinusCircleOutlined, InfoCircleOutlined, SearchOutlined } from '@ant-design/icons';
 import moment from 'moment';
@@ -128,6 +133,182 @@ const PayrollList = () => {
   // Tenure Bonus Breakdown State
   const [bonusModalVisible, setBonusModalVisible] = useState(false);
   const [bonusData, setBonusData] = useState(null);
+
+  const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
+  const [payoutConfigs, setPayoutConfigs] = useState([]);
+  const [selectedLayoutId, setSelectedLayoutId] = useState(null);
+  const [bypassPayoutValidation, setBypassPayoutValidation] = useState(false);
+  const [payoutErrors, setPayoutErrors] = useState([]);
+  const [payoutExportLoading, setPayoutExportLoading] = useState(false);
+
+  const [disburseActiveTab, setDisburseActiveTab] = useState('bank-file');
+  const [walletInfo, setWalletInfo] = useState({ balance: 0, used: 0 });
+  const [cashfreeProcessing, setCashfreeProcessing] = useState(false);
+  const [disburseSummary, setDisburseSummary] = useState(null);
+
+
+  const openPayoutModal = async () => {
+    if (!cycle) return;
+    if (cycle.status === 'DRAFT') {
+      Modal.warning({
+        title: 'Lock Cycle Required',
+        content: 'You need to lock the payroll cycle before you can download the salary bank file or initiate payouts.',
+        okText: 'OK',
+      });
+      return;
+    }
+    try {
+      setLoading(true);
+      setDisburseActiveTab('bank-file');
+      setDisburseSummary(null);
+
+      const resp = await api.get('/admin/settings/payout-bank-config');
+      if (resp?.data?.success) {
+        const list = resp.data.configs || [];
+        setPayoutConfigs(list);
+        setPayoutErrors([]);
+        setBypassPayoutValidation(false);
+        if (list.length > 0) {
+          setSelectedLayoutId(list[0].id);
+        } else {
+          setSelectedLayoutId(null);
+        }
+      }
+
+      // Fetch wallet details
+      const walletResp = await api.get('/admin/settings/payout-wallet');
+      if (walletResp?.data?.success) {
+        setWalletInfo(walletResp.data.wallet || { balance: 0, used: 0 });
+      }
+
+      setIsPayoutModalOpen(true);
+    } catch (_) {
+      message.error('Failed to load payout bank configurations');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onExportPayoutFile = async () => {
+    if (!cycle || !selectedLayoutId) return;
+    try {
+      setPayoutExportLoading(true);
+      setPayoutErrors([]);
+      
+      const resp = await api.get(`/admin/payroll/${cycle.id}/export-bank-file`, {
+        params: {
+          layoutId: selectedLayoutId,
+          bypassValidation: bypassPayoutValidation ? 'true' : 'false'
+        },
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([resp.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const layout = payoutConfigs.find(c => c.id === selectedLayoutId);
+      const safeName = String(layout?.name || 'payout').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+      a.download = `payout-${safeName}-${cycle.monthKey}.xlsx`;
+      
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      setIsPayoutModalOpen(false);
+      message.success('Payout bank file exported successfully');
+    } catch (err) {
+      if (err.response && err.response.data instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const resData = JSON.parse(reader.result);
+            if (resData.errors && Array.isArray(resData.errors)) {
+              setPayoutErrors(resData.errors);
+              message.error('Validation failed: Some staff profiles have missing or incorrect bank details.');
+            } else {
+              message.error(resData.message || 'Export failed');
+            }
+          } catch (_) {
+            message.error('Export failed');
+          }
+        };
+        reader.readAsText(err.response.data);
+      } else {
+        message.error('Export failed');
+      }
+    } finally {
+      setPayoutExportLoading(false);
+    }
+  };
+
+  const onInstantCashfreeDisburse = async () => {
+    if (!cycle) return;
+
+    const alreadyPaidStaff = payoutSummaryStats.alreadyPaidCount > 0;
+    const alreadyPaidNames = payoutSummaryStats.alreadyPaidNames.slice(0, 6);
+
+    const confirmDisburse = () => {
+      Modal.confirm({
+        title: 'Confirm Instant Salary Payouts',
+        content: `Are you sure you want to disburse instant salary payouts via Razorpay to all ${payoutSummaryStats.eligibleCount} included staff? This will deduct ₹${payoutSummaryStats.totalNeeded.toLocaleString('en-IN')} from your payroll wallet.`,
+        okText: 'Yes, Disburse',
+        cancelText: 'Cancel',
+        okButtonProps: { style: { background: '#10b981', borderColor: '#10b981' } },
+        onConfirm: async () => {
+          try {
+            setCashfreeProcessing(true);
+            setDisburseSummary(null);
+            const resp = await api.post(`/admin/payroll/${cycle.id}/disburse-cashfree`);
+            if (resp?.data?.success) {
+              setDisburseSummary(resp.data);
+              message.success('Instant payouts processing completed');
+              
+              // Reload wallet balance
+              const walletResp = await api.get('/admin/settings/payout-wallet');
+              if (walletResp?.data?.success) {
+                setWalletInfo(walletResp.data.wallet || { balance: 0, used: 0 });
+              }
+              
+              // Reload payroll cycle to update statuses
+              loadCycle();
+            }
+          } catch (e) {
+            message.error(e?.response?.data?.message || 'Payout disbursement failed');
+          } finally {
+            setCashfreeProcessing(false);
+          }
+        }
+      });
+    };
+
+    if (alreadyPaidStaff) {
+      Modal.warning({
+        title: 'Some staff have already been disbursed',
+        content: (
+          <div>
+            <p>Salary has already been disbursed to {payoutSummaryStats.alreadyPaidCount} staff in this cycle. These staff will be skipped if you continue.</p>
+            <div style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 4 }}>
+              {alreadyPaidNames.map((name, idx) => (
+                <div key={idx} style={{ marginBottom: 4 }}>• {name}</div>
+              ))}
+              {payoutSummaryStats.alreadyPaidCount > alreadyPaidNames.length && (
+                <div>and {payoutSummaryStats.alreadyPaidCount - alreadyPaidNames.length} more...</div>
+              )}
+            </div>
+          </div>
+        ),
+        okText: 'Continue with remaining',
+        cancelText: 'Cancel',
+        onOk: confirmDisburse,
+        width: 520
+      });
+      return;
+    }
+
+    confirmDisburse();
+  };
 
   const showAttendanceDrilldown = async (userId, type) => {
     setDrilldownModalVisible(true);
@@ -764,6 +945,33 @@ const PayrollList = () => {
     return rows;
   }, [cycle, lines, staffMap, selectedStaffId]);
 
+  const payoutSummaryStats = useMemo(() => {
+    let totalNeeded = 0;
+    let eligibleCount = 0;
+    let alreadyPaidCount = 0;
+    const alreadyPaidNames = [];
+
+    combinedData.forEach(row => {
+      const net = Number(row.totals?.netSalary || 0);
+      const isAlreadyPaid = row.status === 'INCLUDED' && (row.paidAt || row.paidMode);
+      if (isAlreadyPaid) {
+        alreadyPaidCount++;
+        alreadyPaidNames.push(row.name || row.profile?.name || row.userName || row.user_id || row.userId || 'Staff');
+      }
+      if (net > 0 && row.status === 'INCLUDED' && !isAlreadyPaid) {
+        totalNeeded += net;
+        eligibleCount++;
+      }
+    });
+    
+    return {
+      totalNeeded: Number(totalNeeded.toFixed(2)),
+      eligibleCount,
+      alreadyPaidCount,
+      alreadyPaidNames
+    };
+  }, [combinedData]);
+
   const columns = [
     {
       title: 'Employee',
@@ -913,6 +1121,15 @@ const PayrollList = () => {
               {/* Actions for Cycle */}
               <Space wrap size={8}>
                 <Button onClick={onExportCSV} disabled={!cycle || lines.length === 0} loading={loading} shape="round">Export Excel</Button>
+                <Button 
+                  onClick={openPayoutModal} 
+                  disabled={!cycle || lines.length === 0} 
+                  loading={loading} 
+                  shape="round"
+                  style={{ background: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0' }}
+                >
+                  Payroll Disbursement
+                </Button>
                 <Button
                   type="primary"
                   onClick={onGeneratePayroll}
@@ -1595,6 +1812,205 @@ const PayrollList = () => {
             </Descriptions.Item>
           </Descriptions>
         )}
+      </Modal>
+
+      <Modal
+        title={
+          <div>
+            <span style={{ fontSize: '18px', fontWeight: '700', color: '#1e293b' }}>Payroll Disbursement</span>
+            <div style={{ fontSize: '12px', fontWeight: 'normal', color: '#64748b', marginTop: '2px' }}>
+              Disburse salaries via bank file export or instant Razorpay Payout transfer.
+            </div>
+          </div>
+        }
+        open={isPayoutModalOpen}
+        onCancel={() => setIsPayoutModalOpen(false)}
+        footer={
+          disburseActiveTab === 'bank-file' ? [
+            <Button key="cancel" onClick={() => setIsPayoutModalOpen(false)}>Cancel</Button>,
+            <Button 
+              key="submit" 
+              type="primary" 
+              loading={payoutExportLoading} 
+              disabled={!selectedLayoutId} 
+              onClick={onExportPayoutFile}
+              style={{ background: '#10b981', borderColor: '#10b981' }}
+            >
+              Download Bank File
+            </Button>
+          ] : null
+        }
+        width={650}
+      >
+        <Tabs activeKey={disburseActiveTab} onChange={setDisburseActiveTab} style={{ marginTop: '10px' }}>
+          <Tabs.TabPane tab="Bank File Export" key="bank-file">
+            <div style={{ padding: '12px 0' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <span style={{ fontWeight: '600', color: '#475569' }}>Select Bank Layout Format</span>
+                <Select
+                  style={{ width: '100%', marginTop: '6px' }}
+                  placeholder="Select Layout"
+                  value={selectedLayoutId}
+                  onChange={setSelectedLayoutId}
+                >
+                  {payoutConfigs.map(c => (
+                    <Select.Option key={c.id} value={c.id}>{c.name}</Select.Option>
+                  ))}
+                </Select>
+                <div style={{ marginTop: '6px', textAlign: 'right' }}>
+                  <a onClick={() => { setIsPayoutModalOpen(false); navigate('/settings/payout-settings'); }} style={{ fontSize: '12px', color: '#2563eb' }}>
+                    ⚙️ Configure Bank Layout Mappings
+                  </a>
+                </div>
+              </div>
+
+              {payoutErrors.length > 0 && (
+                <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
+                  <div style={{ fontWeight: '600', color: '#e11d48', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                    <InfoCircleOutlined /> Validation Errors ({payoutErrors.length})
+                  </div>
+                  <div style={{ maxHeight: '150px', overflowY: 'auto', paddingLeft: '16px', fontSize: '13px', color: '#4c0519' }}>
+                    <ul style={{ margin: 0, paddingLeft: '12px' }}>
+                      {payoutErrors.map((err, idx) => <li key={idx}>{err}</li>)}
+                    </ul>
+                  </div>
+                  <div style={{ marginTop: '12px', borderTop: '1px solid #ffe4e6', paddingTop: '8px' }}>
+                    <Checkbox 
+                      checked={bypassPayoutValidation} 
+                      onChange={(e) => setBypassPayoutValidation(e.target.checked)}
+                    >
+                      <span style={{ color: '#be123c', fontWeight: '500' }}>Bypass validation errors and download file anyway</span>
+                    </Checkbox>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Tabs.TabPane>
+          
+          <Tabs.TabPane tab="Razorpay Instant Payout" key="cashfree">
+            <div style={{ padding: '12px 0' }}>
+              {cashfreeProcessing ? (
+                <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                  <Spin size="large" />
+                  <div style={{ marginTop: '16px', fontWeight: '600', color: '#1e293b' }}>
+                    Processing instant bank transfers via Razorpay Payouts...
+                  </div>
+                  <Text type="secondary" style={{ fontSize: '12px' }}>Please do not close this modal or refresh the page.</Text>
+                </div>
+              ) : disburseSummary ? (
+                <div style={{ padding: '10px 0' }}>
+                  <Alert
+                    message={<span style={{ fontWeight: '700' }}>Disbursement Processing Completed</span>}
+                    description={
+                      <div style={{ marginTop: '6px' }}>
+                        <div>Successfully Paid: <Text strong style={{ color: '#16a34a' }}>{disburseSummary.processed} staff</Text></div>
+                        {disburseSummary.failed > 0 && (
+                          <div style={{ marginTop: '4px' }}>
+                            Failed Payouts: <Text strong style={{ color: '#dc2626' }}>{disburseSummary.failed} staff</Text>
+                          </div>
+                        )}
+                      </div>
+                    }
+                    type={disburseSummary.failed > 0 ? 'warning' : 'success'}
+                    showIcon
+                    style={{ borderRadius: '8px', marginBottom: '16px' }}
+                  />
+                  {disburseSummary.errors && disburseSummary.errors.length > 0 && (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '12px', marginBottom: '16px', maxHeight: '150px', overflowY: 'auto' }}>
+                      <div style={{ fontWeight: '600', color: '#b91c1c', marginBottom: '4px' }}>Disbursement Details/Errors:</div>
+                      <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: '#7f1d1d' }}>
+                        {disburseSummary.errors.map((err, i) => <li key={i}>{err}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  <div style={{ textAlign: 'right', marginTop: '20px' }}>
+                    <Button type="primary" onClick={() => setIsPayoutModalOpen(false)} style={{ borderRadius: '6px' }}>
+                      Close Window
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
+                    <Col span={12}>
+                      <Card size="small" style={{ background: '#f8fafc', borderRadius: '8px' }}>
+                        <Statistic 
+                          title={<span style={{ fontSize: '12px', color: '#64748b' }}>Required Payout Funds</span>}
+                          value={payoutSummaryStats.totalNeeded}
+                          precision={2}
+                          prefix="₹"
+                          valueStyle={{ fontSize: '20px', fontWeight: '700', color: '#1e293b' }}
+                        />
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                          For {payoutSummaryStats.eligibleCount} included employees
+                        </div>
+                      </Card>
+                    </Col>
+                    <Col span={12}>
+                      <Card size="small" style={{ background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                        <Statistic 
+                          title={<span style={{ fontSize: '12px', color: '#166534' }}>Available Wallet Balance</span>}
+                          value={walletInfo.balance}
+                          precision={2}
+                          prefix="₹"
+                          valueStyle={{ fontSize: '20px', fontWeight: '700', color: '#16a34a' }}
+                        />
+                        <div style={{ fontSize: '11px', color: '#166534', marginTop: '2px' }}>
+                          <a onClick={() => { setIsPayoutModalOpen(false); navigate('/settings/payout-wallet'); }}>
+                            ⚙️ Manage Wallet
+                          </a>
+                        </div>
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  {Number(walletInfo.balance) < payoutSummaryStats.totalNeeded ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <Alert
+                        message="Insufficient Wallet Balance"
+                        description="You need to add more funds to your virtual wallet to disburse this cycle. Please navigate to Settings -> Payroll Wallet to top up."
+                        type="warning"
+                        showIcon
+                        style={{ borderRadius: '8px' }}
+                      />
+                      <div style={{ textAlign: 'right', marginTop: '10px' }}>
+                        <Button key="close" style={{ marginRight: '8px' }} onClick={() => setIsPayoutModalOpen(false)}>Cancel</Button>
+                        <Button 
+                          type="primary" 
+                          onClick={() => { setIsPayoutModalOpen(false); navigate('/settings/payout-wallet'); }}
+                          style={{ background: '#2563eb', borderColor: '#2563eb' }}
+                        >
+                          Go to Wallet Settings
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <Alert
+                        message="Sufficient Wallet Funds Available"
+                        description="Funds will be instantly transferred from your wallet to all eligible staff bank accounts. Make sure Razorpay API setup is active."
+                        type="info"
+                        showIcon
+                        style={{ borderRadius: '8px' }}
+                      />
+                      <div style={{ textAlign: 'right', marginTop: '16px' }}>
+                        <Button key="close" style={{ marginRight: '8px' }} onClick={() => setIsPayoutModalOpen(false)}>Cancel</Button>
+                        <Button 
+                          type="primary" 
+                          onClick={onInstantCashfreeDisburse}
+                          disabled={payoutSummaryStats.eligibleCount === 0}
+                          style={{ background: '#10b981', borderColor: '#10b981', borderRadius: '6px' }}
+                        >
+                          Initiate Razorpay Payouts
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </Tabs.TabPane>
+        </Tabs>
       </Modal>
     </Layout>
   );

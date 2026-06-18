@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, InputNumber, Switch, message, Space, Row, Col } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons';
 import api from '../api';
 import Sidebar from './Sidebar';
 
@@ -109,7 +109,7 @@ export default function SuperadminPlans() {
     {
       title: 'Actions', key: 'act', width: 100, fixed: 'right', render: (_, rec) => (
         <Space>
-          <Button size="small" onClick={() => onEdit(rec)}>Edit</Button>
+          <Button icon={<EditOutlined />} onClick={() => onEdit(rec)} />
         </Space>
       )
     },
@@ -137,10 +137,9 @@ export default function SuperadminPlans() {
           <Menu theme="light" mode="horizontal" items={[{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout }]} />
         </Header>
 
-        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-            <h2 style={{ margin: 0 }}>Plans</h2>
-            <Button type="primary" onClick={onCreate}>New Plan</Button>
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', minHeight: 280, overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>New Plan</Button>
           </div>
           <Table
             rowKey="id"

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Input, Button, Radio, Table, Tag, Space, message, Typography, Divider, Modal, Upload } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, MailOutlined, SendOutlined, HistoryOutlined, FileExcelOutlined, EyeOutlined, UploadOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Layout, Card, Input, Button, Radio, Table, Tag, Space, message, Typography, Divider, Modal, Upload, Select, Tooltip } from 'antd';
+import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, MailOutlined, SendOutlined, HistoryOutlined, FileExcelOutlined, EyeOutlined, UploadOutlined, ReloadOutlined, CodeOutlined, EditOutlined } from '@ant-design/icons';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import api from '../api';
@@ -23,6 +23,11 @@ const SuperadminMailing = () => {
     const [loading, setLoading] = useState(false);
     const [queueStats, setQueueStats] = useState(0);
     const [attachment, setAttachment] = useState(null);
+    const [leads, setLeads] = useState([]);
+    const [selectedLeads, setSelectedLeads] = useState(['ALL_LEADS']);
+    const [clients, setClients] = useState([]);
+    const [selectedClients, setSelectedClients] = useState(['ALL_CLIENTS']);
+    const [htmlMode, setHtmlMode] = useState(false);
 
     const insertPlaceholder = (placeholder) => {
         if (!quillRef.current) return;
@@ -51,12 +56,16 @@ const SuperadminMailing = () => {
 
     const loadData = async () => {
         try {
-            const [campResp, statResp] = await Promise.all([
+            const [campResp, statResp, leadResp, clientResp] = await Promise.all([
                 api.get('/superadmin/mail/campaigns'),
-                api.get('/superadmin/mail/queue/stats')
+                api.get('/superadmin/mail/queue/stats'),
+                api.get('/superadmin/leads'),
+                api.get('/superadmin/clients')
             ]);
             if (campResp.data.success) setCampaigns(campResp.data.campaigns);
             if (statResp.data.success) setQueueStats(statResp.data.pendingCount);
+            if (leadResp.data.success) setLeads(leadResp.data.leads || []);
+            if (clientResp.data.success) setClients(clientResp.data.clients || []);
         } catch (err) {
             console.error('Failed to load mailing data:', err);
         }
@@ -105,6 +114,12 @@ const SuperadminMailing = () => {
                         if (recipientType === 'custom') {
                             formData.append('customEmails', JSON.stringify(customEmails.split(',').map(e => e.trim())));
                         }
+                        if (recipientType === 'leads') {
+                            formData.append('selectedLeads', JSON.stringify(selectedLeads));
+                        }
+                        if (recipientType === 'all_clients') {
+                            formData.append('selectedClients', JSON.stringify(selectedClients));
+                        }
                         resp = await api.post('/superadmin/mail/campaign', formData, {
                             headers: { 'Content-Type': 'multipart/form-data' }
                         });
@@ -126,6 +141,30 @@ const SuperadminMailing = () => {
                 }
             }
         });
+    };
+
+    const handleLeadsChange = (value) => {
+        if (value.includes('ALL_LEADS') && !selectedLeads.includes('ALL_LEADS')) {
+            setSelectedLeads(['ALL_LEADS']);
+        } else if (value.includes('ALL_LEADS') && value.length > 1) {
+            setSelectedLeads(value.filter(v => v !== 'ALL_LEADS'));
+        } else if (value.length === 0) {
+            setSelectedLeads(['ALL_LEADS']);
+        } else {
+            setSelectedLeads(value);
+        }
+    };
+
+    const handleClientsChange = (value) => {
+        if (value.includes('ALL_CLIENTS') && !selectedClients.includes('ALL_CLIENTS')) {
+            setSelectedClients(['ALL_CLIENTS']);
+        } else if (value.includes('ALL_CLIENTS') && value.length > 1) {
+            setSelectedClients(value.filter(v => v !== 'ALL_CLIENTS'));
+        } else if (value.length === 0) {
+            setSelectedClients(['ALL_CLIENTS']);
+        } else {
+            setSelectedClients(value);
+        }
     };
 
     const handleResend = async (id) => {
@@ -217,15 +256,9 @@ const SuperadminMailing = () => {
                     </div>
                 </Header>
 
-                <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
-                    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-                        <Title level={2}><MailOutlined /> Client Communication</Title>
-                        <Text type="secondary">Send periodic emails to your clients at a controlled rate (1 per minute).</Text>
-
-                        <Divider />
-
-                        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-                            {/* Composer Section */}
+                <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', minHeight: 280, overflow: 'auto' }}>
+                    <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                        {/* Composer Section */}
                             <Card title="Compose Email" style={{ flex: '1 1 600px' }} extra={
                                 queueStats > 0 && <Tag color="red">Queue: {queueStats} Pending</Tag>
                             }>
@@ -237,11 +270,60 @@ const SuperadminMailing = () => {
                                             onChange={e => setRecipientType(e.target.value)}
                                             style={{ marginLeft: '16px' }}
                                         >
-                                            <Radio value="all_clients">All Active Clients</Radio>
+                                            <Radio value="all_clients">Clients</Radio>
+                                            <Radio value="leads">Leads</Radio>
                                             <Radio value="custom">Custom List</Radio>
                                             <Radio value="excel">Bulk Excel</Radio>
                                         </Radio.Group>
                                     </div>
+
+                                    {recipientType === 'all_clients' && (
+                                        <div style={{ marginBottom: '8px' }}>
+                                            <Text type="secondary" style={{ display: 'block', marginBottom: '8px' }}>
+                                                Select recipient clients. You can select "All Clients" to send to everyone, or choose individual clients.
+                                            </Text>
+                                            <Select
+                                                mode="multiple"
+                                                placeholder="Select Clients (Defaults to All Clients)"
+                                                style={{ width: '100%' }}
+                                                value={selectedClients}
+                                                onChange={handleClientsChange}
+                                                options={[
+                                                    { value: 'ALL_CLIENTS', label: '★ All Clients (Send to all)' },
+                                                    ...clients
+                                                        .filter(c => !!c.businessEmail)
+                                                        .map(c => ({
+                                                            value: c.businessEmail,
+                                                            label: `${c.name || c.businessName} (${c.businessEmail})`
+                                                        }))
+                                                ]}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {recipientType === 'leads' && (
+                                        <div style={{ marginBottom: '8px' }}>
+                                            <Text type="secondary" style={{ display: 'block', marginBottom: '8px' }}>
+                                                Select recipient leads. You can select "All Leads" to send to everyone, or choose individual leads.
+                                            </Text>
+                                            <Select
+                                                mode="multiple"
+                                                placeholder="Select Leads (Defaults to All Leads)"
+                                                style={{ width: '100%' }}
+                                                value={selectedLeads}
+                                                onChange={handleLeadsChange}
+                                                options={[
+                                                    { value: 'ALL_LEADS', label: '★ All Leads (Send to all)' },
+                                                    ...leads
+                                                        .filter(l => !!l.email)
+                                                        .map(l => ({
+                                                            value: l.email,
+                                                            label: `${l.personName || l.companyName} (${l.email})`
+                                                        }))
+                                                ]}
+                                            />
+                                        </div>
+                                    )}
 
                                     {recipientType === 'custom' && (
                                         <TextArea
@@ -296,8 +378,7 @@ const SuperadminMailing = () => {
                                         value={subject}
                                         onChange={e => setSubject(e.target.value)}
                                     />
-
-                                    <div style={{ padding: '8px', background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: '4px', fontSize: '12px' }}>
+                                    <div style={{ padding: '8px', background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                                         <Text type="secondary">Available Placeholders (Click or Drag to use): </Text>
                                         <Tag
                                             color="blue"
@@ -320,16 +401,65 @@ const SuperadminMailing = () => {
                                         <Text type="secondary" style={{ marginLeft: '8px' }}>These will be replaced with recipient details.</Text>
                                     </div>
 
-                                    <div style={{ height: '350px', marginBottom: '40px' }}>
-                                        <ReactQuill
-                                            ref={quillRef}
-                                            theme="snow"
-                                            value={body}
-                                            onChange={setBody}
-                                            modules={modules}
-                                            style={{ height: '300px' }}
-                                        />
+                                    {/* Editor mode toggle */}
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                        <Tooltip title={htmlMode ? 'Switch to Rich Text Editor' : 'Switch to HTML Code Editor'}>
+                                            <Button
+                                                size="small"
+                                                icon={htmlMode ? <EditOutlined /> : <CodeOutlined />}
+                                                onClick={() => setHtmlMode(m => !m)}
+                                                style={{
+                                                    borderRadius: '6px',
+                                                    fontWeight: 500,
+                                                    background: htmlMode ? '#1890ff' : '#f0f0f0',
+                                                    color: htmlMode ? '#fff' : '#333',
+                                                    border: 'none'
+                                                }}
+                                            >
+                                                {htmlMode ? 'Rich Text Mode' : 'HTML Mode'}
+                                            </Button>
+                                        </Tooltip>
                                     </div>
+
+                                    {htmlMode ? (
+                                        <div style={{ marginBottom: '8px' }}>
+                                            <textarea
+                                                value={body}
+                                                onChange={e => setBody(e.target.value)}
+                                                placeholder="Paste or type your HTML code here..."
+                                                style={{
+                                                    width: '100%',
+                                                    height: '350px',
+                                                    fontFamily: 'monospace',
+                                                    fontSize: '13px',
+                                                    padding: '12px',
+                                                    border: '1px solid #d9d9d9',
+                                                    borderRadius: '6px',
+                                                    resize: 'vertical',
+                                                    outline: 'none',
+                                                    background: '#1e1e2e',
+                                                    color: '#cdd6f4',
+                                                    lineHeight: '1.6',
+                                                    boxSizing: 'border-box'
+                                                }}
+                                                spellCheck={false}
+                                            />
+                                            <Text type="secondary" style={{ fontSize: '11px' }}>
+                                                💡 Tip: Write raw HTML here. It will be sent as-is in the email body.
+                                            </Text>
+                                        </div>
+                                    ) : (
+                                        <div style={{ height: '350px', marginBottom: '40px' }}>
+                                            <ReactQuill
+                                                ref={quillRef}
+                                                theme="snow"
+                                                value={body}
+                                                onChange={setBody}
+                                                modules={modules}
+                                                style={{ height: '300px' }}
+                                            />
+                                        </div>
+                                    )}
 
                                     <div>
                                         <Text strong>Attachment:</Text>
@@ -370,7 +500,6 @@ const SuperadminMailing = () => {
                                 />
                             </Card>
                         </div>
-                    </div>
                 </Content>
             </Layout>
         </Layout>

@@ -220,6 +220,10 @@ const Sidebar = ({ collapsed }) => {
             key: '/employee-salary',
             label: 'Employee Salary',
           },
+          {
+            key: '/payroll/fnf',
+            label: 'Full & Final (FnF)',
+          },
         ]
       },
       {
@@ -579,14 +583,13 @@ const Sidebar = ({ collapsed }) => {
     const pathname = location.pathname;
 
     // Handle asset management sub-routes
-    if (pathname.startsWith('/assets-management')) {
-      return '/assets-management';
-    }
+    if (pathname.startsWith('/assets-management')) return '/assets-management';
 
-    // Handle payroll sub-routes
-    if (pathname.startsWith('/payroll') || pathname.startsWith('/employee-salary')) {
-      return pathname.startsWith('/payroll') ? '/payroll' : '/employee-salary';
-    }
+    // Handle payroll sub-routes — FnF must be checked before /payroll
+    if (pathname.startsWith('/payroll/fnf')) return '/payroll/fnf';
+    if (pathname.startsWith('/payroll')) return '/payroll';
+    if (pathname.startsWith('/employee-salary')) return '/employee-salary';
+
     if (pathname.startsWith('/performance/appraisals')) return '/performance/appraisals';
     if (pathname.startsWith('/performance/ratings')) return '/performance/ratings';
     if (pathname.startsWith('/leave/requests')) return '/leave/requests';

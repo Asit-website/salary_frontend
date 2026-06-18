@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, Select, message, Space, Tag, DatePicker } from 'antd';
 import dayjs from 'dayjs';
-import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
@@ -133,7 +133,7 @@ export default function SuperadminChannelPartners() {
       width: 120,
       render: (_, rec) => (
         <Space>
-          <Button size="small" onClick={() => onEdit(rec)}>Edit</Button>
+          <Button icon={<EditOutlined />} onClick={() => onEdit(rec)} />
         </Space>
       )
     }
@@ -155,9 +155,8 @@ export default function SuperadminChannelPartners() {
           <Menu theme="light" mode="horizontal" items={[{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout }]} />
         </Header>
 
-        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ margin: 0 }}>Channel Partners</h2>
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', minHeight: 280, overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16 }}>
             <Space>
               <Input.Search
                 placeholder="Search ID, name or phone"
@@ -166,7 +165,7 @@ export default function SuperadminChannelPartners() {
                 onChange={e => setSearchText(e.target.value)}
                 style={{ width: 300 }}
               />
-              <Button type="primary" onClick={onCreate}>New Channel Partner</Button>
+              <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>New Channel Partner</Button>
             </Space>
           </div>
           <Table

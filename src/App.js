@@ -32,6 +32,8 @@ import RmoSettings from './components/RmoSettings';
 import Sales from './components/Sales';
 import PayrollList from './components/PayrollList';
 import PayrollCycle from './components/PayrollCycle';
+import FnFSettlementList from './components/FnFSettlementList';
+import FnFSettlementProcess from './components/FnFSettlementProcess';
 import OrgReports from './components/OrgReports';
 import Geolocation from './components/Geolocation';
 import SuperadminPlans from './components/SuperadminPlans';
@@ -80,6 +82,8 @@ import SuperadminStaff from './components/SuperadminStaff';
 import QrAttendanceSettings from './components/QrAttendanceSettings';
 import InactivityHandler from './components/InactivityHandler';
 import SessionSettings from './components/SessionSettings';
+import PayoutSettings from './components/PayoutSettings';
+import PayoutWalletSettings from './components/PayoutWalletSettings';
 
 
 const { Content } = Layout;
@@ -128,6 +132,8 @@ function App() {
       <Route path="/settings/rmo" element={<PrivateRoute><RmoSettings /></PrivateRoute>} />
       <Route path="/settings/geofence" element={<PrivateRoute><GeofenceSettings /></PrivateRoute>} />
       <Route path="/settings/qr-attendance" element={<PrivateRoute><QrAttendanceSettings /></PrivateRoute>} />
+      <Route path="/settings/payout-settings" element={<PrivateRoute><PayoutSettings /></PrivateRoute>} />
+      <Route path="/settings/payout-wallet" element={<PrivateRoute><PayoutWalletSettings /></PrivateRoute>} />
       <Route path="/sales" element={<PrivateRoute><Sales /></PrivateRoute>} />
       <Route path="/org-reports" element={<PrivateRoute><OrgReports /></PrivateRoute>} />
       <Route path="/assets-management" element={<PrivateRoute><AssetsManagement /></PrivateRoute>} />
@@ -138,6 +144,8 @@ function App() {
       <Route path="/employee-salary" element={<PrivateRoute><EmployeeSalaryList /></PrivateRoute>} />
       <Route path="/payroll" element={<PrivateRoute><PayrollList /></PrivateRoute>} />
       <Route path="/payroll/:cycleId" element={<PrivateRoute><PayrollCycle /></PrivateRoute>} />
+      <Route path="/payroll/fnf" element={<PrivateRoute><FnFSettlementList /></PrivateRoute>} />
+      <Route path="/payroll/fnf/process" element={<PrivateRoute><FnFSettlementProcess /></PrivateRoute>} />
       <Route path="/superadmin/plans" element={<PrivateRoute allowedRoles={['superadmin']}><SuperadminPlans /></PrivateRoute>} />
       <Route path="/superadmin/dashboard" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminDashboard /></PrivateRoute>} />
       <Route path="/superadmin/clients" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminClients /></PrivateRoute>} />

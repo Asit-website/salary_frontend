@@ -1,4 +1,4 @@
-import { Layout, Typography, Card, Space, Table, Button, Modal, Form, Input, Select, InputNumber, Switch, message, Breadcrumb, Divider, Tag, Checkbox, Row, Col, DatePicker } from 'antd';
+import { Layout, Typography, Card, Space, Table, Button, Modal, Form, Input, Select, InputNumber, Switch, message, Breadcrumb, Divider, Tag, Checkbox, Row, Col, DatePicker, Tooltip } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, HomeOutlined, ThunderboltOutlined, ArrowLeftOutlined, DeleteFilled, InfoCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
@@ -316,12 +316,12 @@ export default function LatePunchInAutomation() {
                     >
                         <Form form={form} layout="vertical" onFinish={handleSave}>
                             <Row gutter={24}>
-                                <Col span={10}>
+                                <Col span={8}>
                                     <Form.Item name="name" label={<span className="modal-field-label">Rule Name <span style={{ color: 'red' }}>*</span></span>} rules={[{ required: true, message: 'Rule name is required' }]}>
                                         <Input placeholder="e.g. Standard 15m Late Penalty" />
                                     </Form.Item>
                                 </Col>
-                                <Col span={8}>
+                                <Col span={6}>
                                     <Form.Item name="penaltyType" label={<span className="modal-field-label">Penalty Calculation Type</span>} initialValue="SLABS">
                                         <Select style={{ width: '100%' }}>
                                             <Option value="SLABS">Tiers / Slabs (Day Deductions)</Option>
@@ -334,6 +334,22 @@ export default function LatePunchInAutomation() {
                                 </Col>
                                 <Col span={3}>
                                     <Form.Item name="bufferMinutes" label={<span className="modal-field-label">Buffer (min)</span>} initialValue={0}>
+                                        <InputNumber style={{ width: '100%' }} min={0} />
+                                    </Form.Item>
+                                </Col>
+                                <Col span={4}>
+                                    <Form.Item 
+                                        name="pardonLimit" 
+                                        label={
+                                            <Space>
+                                                <span className="modal-field-label">Pardon Limit</span>
+                                                <Tooltip title="Specify the number of free lates allowed in a month. E.g., 3 means 3 lates are free. If they exceed this limit (e.g. 4 lates), the pardon is cancelled and penalties are retrospectively applied to all 4 occurrences. Set to 0 to disable pardons.">
+                                                    <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                                                </Tooltip>
+                                            </Space>
+                                        } 
+                                        initialValue={0}
+                                    >
                                         <InputNumber style={{ width: '100%' }} min={0} />
                                     </Form.Item>
                                 </Col>
@@ -373,7 +389,7 @@ export default function LatePunchInAutomation() {
                                                                     </Col>
                                                                     <Col span={5}>
                                                                         <Form.Item {...restField} name={[name, 'deduction']} label={index === 0 ? <span className="modal-field-label">Deduct Days</span> : ""} rules={[{ required: true }]}>
-                                                                            <InputNumber style={{ width: '100%' }} step={0.5} min={0} />
+                                                                            <InputNumber style={{ width: '100%' }} step={0.25} min={0} />
                                                                         </Form.Item>
                                                                     </Col>
                                                                     <Col span={6}>

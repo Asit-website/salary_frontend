@@ -28,6 +28,7 @@ import {
   AppstoreOutlined,
   EyeOutlined,
   BankOutlined,
+  WalletOutlined,
   FileTextOutlined,
   ApartmentOutlined,
   BorderOuterOutlined,
@@ -948,7 +949,8 @@ export default function Settings() {
         { key: 'bank-statement-name', icon: <BankOutlined />, label: 'Business Name in Bank Statement', desc: normalizeBrand(brandName), onClick: openBrandModal },
         { key: 'bank-account', icon: <BankOutlined />, label: 'Business Bank Account', desc: bankMasked ? `XXXX XXXX XXXX ${String(bankMasked).slice(-4)}` : 'Account used for settlements', onClick: openBankModal },
         { key: 'kyc', icon: <SafetyCertificateOutlined />, label: 'KYC', desc: 'Upload and verify business documents', onClick: openKybModal },
-        // { key: 'payment-methods', icon: <AppstoreOutlined />, label: 'Payment Methods', desc: 'Instant payment through virtual account' },
+        { key: 'payout-settings', icon: <BankOutlined />, label: 'Payout Bank Config', desc: 'Configure custom columns for salary bank export files', onClick: () => navigate('/settings/payout-settings') },
+        { key: 'payout-wallet', icon: <WalletOutlined />, label: 'Payroll Wallet', desc: 'Manage funds and disburse salaries instantly via Razorpay Payouts', onClick: () => navigate('/settings/payout-wallet') },
       ],
     },
     {

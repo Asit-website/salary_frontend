@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Table, Button, Modal, Form, Input, Select,
-  message, Space, Card, Tag, Layout, Typography, Menu, Popconfirm
+  message, Space, Card, Tag, Layout, Typography, Menu, Popconfirm, Row, Col
 } from 'antd';
 import {
   UserOutlined,
@@ -32,6 +32,7 @@ const SuperadminStaff = () => {
   const [addMode, setAddMode] = useState('existing'); // 'new' or 'existing'
   const [loadingClientStaff, setLoadingClientStaff] = useState(false);
   const [form] = Form.useForm();
+  const [searchText, setSearchText] = useState('');
 
   useEffect(() => {
     fetchStaff();
@@ -152,7 +153,25 @@ const SuperadminStaff = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      render: (name, record) => name || <span style={{ color: '#999', fontSize: '12px' }}>Not Set</span>
+      render: (name, record) => (
+        <Space>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            background: '#e6f7ff',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#1890ff',
+            fontWeight: 'bold',
+            fontSize: '14px'
+          }}>
+            {name ? name.charAt(0).toUpperCase() : <UserOutlined />}
+          </div>
+          <span style={{ fontWeight: 500 }}>{name || 'Not Set'}</span>
+        </Space>
+      )
     },
     {
       title: 'Phone',
@@ -163,38 +182,41 @@ const SuperadminStaff = () => {
       title: 'Role',
       dataIndex: 'role',
       key: 'role',
-      render: (role) => <Tag color="blue">{role}</Tag>
+      render: (role) => <Tag color="blue" style={{ textTransform: 'capitalize', borderRadius: '4px', fontWeight: 500 }}>{role}</Tag>
     },
     {
       title: 'Permissions',
       key: 'permissions',
       render: (_, record) => {
         const p = record.permissions || {};
+        const getPermColor = (val) => {
+          if (val === 'manage_all') return 'green';
+          if (val === 'manage_own') return 'orange';
+          if (val === 'manage_selected') return 'cyan';
+          return 'default';
+        };
+        const getPermLabel = (key, val) => {
+          const label = val === 'manage_all' ? 'All' : (val === 'manage_own' ? 'Own' : (val === 'manage_selected' ? 'Selected' : 'No Access'));
+          return `${key}: ${label}`;
+        };
         return (
-          <Space direction="vertical" size={4}>
-            <Tag color={p.leads === 'manage_all' ? 'green' : (p.leads === 'manage_own' ? 'orange' : 'default')}>
-              Leads: {p.leads === 'manage_all' ? 'All' : (p.leads === 'manage_own' ? 'Own' : 'No Access')}
-            </Tag>
-            <Tag color={p.partners === 'manage_all' ? 'green' : (p.partners === 'manage_own' ? 'orange' : 'default')}>
-              Partners: {p.partners === 'manage_all' ? 'All' : (p.partners === 'manage_own' ? 'Own' : 'No Access')}
-            </Tag>
-            <Tag color={p.clients === 'manage_all' ? 'green' : (p.clients === 'manage_own' ? 'orange' : (p.clients === 'manage_selected' ? 'cyan' : 'default'))}>
-              Clients: {p.clients === 'manage_all' ? 'All' : (p.clients === 'manage_own' ? 'Own' : (p.clients === 'manage_selected' ? 
-                (() => {
+          <Row gutter={[8, 8]} style={{ maxWidth: '280px' }}>
+            <Col span={12}><Tag color={getPermColor(p.leads)} style={{ width: '100%', textAlign: 'center', borderRadius: '4px' }}>{getPermLabel('Leads', p.leads)}</Tag></Col>
+            <Col span={12}><Tag color={getPermColor(p.partners)} style={{ width: '100%', textAlign: 'center', borderRadius: '4px' }}>{getPermLabel('Partners', p.partners)}</Tag></Col>
+            <Col span={12}>
+              <Tag 
+                color={getPermColor(p.clients)} 
+                style={{ width: '100%', textAlign: 'center', borderRadius: '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
+                title={p.clients === 'manage_selected' ? 'Selected Clients' : ''}
+              >
+                {p.clients === 'manage_selected' ? (() => {
                   const ids = Array.isArray(p.selectedClients) ? p.selectedClients : [];
-                  const names = ids.map(id => {
-                    const c = clients.find(cl => Number(cl.id) === Number(id));
-                    return c ? c.name : id;
-                  }).filter(Boolean);
-                  if (names.length === 0) return 'Selected (None)';
-                  if (names.length <= 2) return `Selected (${names.join(', ')})`;
-                  return `Selected (${names.slice(0, 2).join(', ')} +${names.length - 2} more)`;
-                })() : 'No Access'))}
-            </Tag>
-            <Tag color={p.mailing === 'manage_all' ? 'green' : (p.mailing === 'manage_own' ? 'orange' : 'default')}>
-              Mailing: {p.mailing === 'manage_all' ? 'All' : (p.mailing === 'manage_own' ? 'Own' : 'No Access')}
-            </Tag>
-          </Space>
+                  return `Clients: ${ids.length}`;
+                })() : getPermLabel('Clients', p.clients)}
+              </Tag>
+            </Col>
+            <Col span={12}><Tag color={getPermColor(p.mailing)} style={{ width: '100%', textAlign: 'center', borderRadius: '4px' }}>{getPermLabel('Mailing', p.mailing)}</Tag></Col>
+          </Row>
         );
       }
     },
@@ -235,13 +257,24 @@ const SuperadminStaff = () => {
         </Header>
 
         <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', minHeight: 280, overflow: 'auto' }}>
-          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>Add Staff User</Button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16 }}>
+            <Space>
+              <Input.Search
+                placeholder="Search by name or phone"
+                allowClear
+                onChange={e => setSearchText(e.target.value)}
+                style={{ width: 280 }}
+              />
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>Add Staff User</Button>
+            </Space>
           </div>
 
           <Table
             columns={columns}
-            dataSource={staff}
+            dataSource={staff.filter(s => 
+              (s.name || '').toLowerCase().includes(searchText.toLowerCase()) ||
+              (s.phone || '').includes(searchText)
+            )}
             rowKey="id"
             loading={loading}
           />

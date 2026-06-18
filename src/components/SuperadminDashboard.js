@@ -1,6 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { Layout, Typography, Row, Col, Card, Statistic, Table, Tag, message, Skeleton, Menu, Button } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, HomeOutlined } from '@ant-design/icons';
+import { 
+  MenuFoldOutlined, 
+  MenuUnfoldOutlined, 
+  LogoutOutlined, 
+  HomeOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  StopOutlined,
+  GlobalOutlined,
+  UserOutlined,
+  SolutionOutlined,
+  ProjectOutlined,
+  EnvironmentOutlined
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import api from '../api';
@@ -149,7 +162,8 @@ export default function SuperadminDashboard() {
     );
   }
 
-  const counts = data?.counts || { active: 0, disabled: 0, suspended: 0, expired: 0 };
+  const counts = data?.counts || { active: 0, disabled: 0, suspended: 0, expired: 0, channelPartners: 0 };
+  const userMetrics = data?.userMetrics || { totalUsers: 0, attendancePayrollUsers: 0, taskUsers: 0, geoSalesUsers: 0 };
   const revenue = data?.revenue || { month: 0, year: 0 };
   const growth = Array.isArray(data?.growth) ? data.growth : [];
 
@@ -198,33 +212,508 @@ export default function SuperadminDashboard() {
         </Header>
 
         <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
-          <Row gutter={[16, 16]}>
-            <Col xs={24} sm={12} md={8}>
-              <Card bordered={false} className="stat-card">
-                <Statistic title="Active Clients" value={counts.active} valueStyle={{ color: '#52c41a' }} />
+          <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
+            {/* Active Clients */}
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px',
+                  height: '100%'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Clients</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '24px', fontWeight: '700', lineHeight: 1 }}>{counts.active}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#f6ffed',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(82, 196, 26, 0.1)'
+                  }}>
+                    <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '20px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#52c41a', fontSize: '11px', fontWeight: '600' }}>Active organizations</div>
+                  <div style={{
+                    width: '50px',
+                    height: '4px',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#52c41a',
+                      borderRadius: '4px'
+                    }}></div>
+                  </div>
+                </div>
               </Card>
             </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Card bordered={false} className="stat-card">
-                <Statistic title="Disabled Clients" value={counts.disabled} valueStyle={{ color: '#f5222d' }} />
+
+            {/* Disabled Clients */}
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px',
+                  height: '100%'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Disabled Clients</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '24px', fontWeight: '700', lineHeight: 1 }}>{counts.disabled}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#fff1f0',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(255, 77, 79, 0.1)'
+                  }}>
+                    <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: '20px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#ff4d4f', fontSize: '11px', fontWeight: '600' }}>Inactive accounts</div>
+                  <div style={{
+                    width: '50px',
+                    height: '4px',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#ff4d4f',
+                      borderRadius: '4px'
+                    }}></div>
+                  </div>
+                </div>
               </Card>
             </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Card bordered={false} className="stat-card">
-                <Statistic title="Suspended Clients" value={counts.suspended} valueStyle={{ color: '#faad14' }} />
+
+            {/* Suspended Clients */}
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px',
+                  height: '100%'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Suspended Clients</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '24px', fontWeight: '700', lineHeight: 1 }}>{counts.suspended}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#fffbe6',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(250, 173, 20, 0.1)'
+                  }}>
+                    <StopOutlined style={{ color: '#faad14', fontSize: '20px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#faad14', fontSize: '11px', fontWeight: '600' }}>Suspended accounts</div>
+                  <div style={{
+                    width: '50px',
+                    height: '4px',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#faad14',
+                      borderRadius: '4px'
+                    }}></div>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+
+            {/* Total Channel Partners */}
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px',
+                  height: '100%'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Channel Partners</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '24px', fontWeight: '700', lineHeight: 1 }}>{counts.channelPartners || 0}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#e6f7ff',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(24, 144, 255, 0.1)'
+                  }}>
+                    <GlobalOutlined style={{ color: '#1890ff', fontSize: '20px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#1890ff', fontSize: '11px', fontWeight: '600' }}>Channel partners</div>
+                  <div style={{
+                    width: '50px',
+                    height: '4px',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#1890ff',
+                      borderRadius: '4px'
+                    }}></div>
+                  </div>
+                </div>
               </Card>
             </Col>
           </Row>
 
-          <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-            <Col xs={24} md={12}>
-              <Card bordered={false} className="stat-card">
-                <Statistic title="Revenue (This Month)" value={revenue.month} precision={2} prefix="₹" />
+          <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
+            {/* Total Users */}
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px',
+                  height: '100%'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Users</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '24px', fontWeight: '700', lineHeight: 1 }}>{userMetrics.totalUsers}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#eff6ff',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(37, 99, 235, 0.1)'
+                  }}>
+                    <UserOutlined style={{ color: '#2563eb', fontSize: '20px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#2563eb', fontSize: '11px', fontWeight: '600' }}>Total active staff</div>
+                  <div style={{
+                    width: '50px',
+                    height: '4px',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#2563eb',
+                      borderRadius: '4px'
+                    }}></div>
+                  </div>
+                </div>
               </Card>
             </Col>
+
+            {/* Attendance + Payroll Users */}
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px',
+                  height: '100%'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Attendance + Payroll Users</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '24px', fontWeight: '700', lineHeight: 1 }}>{userMetrics.attendancePayrollUsers}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#f5f3ff',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(124, 58, 237, 0.1)'
+                  }}>
+                    <SolutionOutlined style={{ color: '#7c3aed', fontSize: '20px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#7c3aed', fontSize: '11px', fontWeight: '600' }}>Payroll subscribers</div>
+                  <div style={{
+                    width: '50px',
+                    height: '4px',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#7c3aed',
+                      borderRadius: '4px'
+                    }}></div>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+
+            {/* Task Users */}
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px',
+                  height: '100%'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Task Users</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '24px', fontWeight: '700', lineHeight: 1 }}>{userMetrics.taskUsers}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#fdf2f8',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(219, 39, 119, 0.1)'
+                  }}>
+                    <ProjectOutlined style={{ color: '#db2777', fontSize: '20px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#db2777', fontSize: '11px', fontWeight: '600' }}>Task management</div>
+                  <div style={{
+                    width: '50px',
+                    height: '4px',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#db2777',
+                      borderRadius: '4px'
+                    }}></div>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+
+            {/* Geo Sales Users */}
+            <Col xs={24} sm={12} md={6}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px',
+                  height: '100%'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Geo Sales Users</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '24px', fontWeight: '700', lineHeight: 1 }}>{userMetrics.geoSalesUsers}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#ecfdf5',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(5, 150, 105, 0.1)'
+                  }}>
+                    <EnvironmentOutlined style={{ color: '#059669', fontSize: '20px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#059669', fontSize: '11px', fontWeight: '600' }}>Geolocation enabled</div>
+                  <div style={{
+                    width: '50px',
+                    height: '4px',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#059669',
+                      borderRadius: '4px'
+                    }}></div>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+          </Row>
+
+          <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
+            {/* Revenue (This Month) */}
             <Col xs={24} md={12}>
-              <Card bordered={false} className="stat-card">
-                <Statistic title="Revenue (This Year)" value={revenue.year} precision={2} prefix="₹" />
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px',
+                  height: '100%'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Revenue (This Month)</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '24px', fontWeight: '700', lineHeight: 1 }}>₹{revenue.month.toFixed(2)}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#e6f7ff',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(24, 144, 255, 0.1)'
+                  }}>
+                    <span style={{ color: '#1677ff', fontSize: '20px', fontWeight: '700' }}>₹</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#1677ff', fontSize: '11px', fontWeight: '600' }}>Current month sales</div>
+                  <div style={{
+                    width: '50px',
+                    height: '4px',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#1677ff',
+                      borderRadius: '4px'
+                    }}></div>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+
+            {/* Revenue (This Year) */}
+            <Col xs={24} md={12}>
+              <Card
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #f0f2f5',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  borderRadius: '16px',
+                  height: '100%'
+                }}
+                bodyStyle={{ padding: '20px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Revenue (This Year)</div>
+                    <div style={{ color: '#1f1f1f', fontSize: '24px', fontWeight: '700', lineHeight: 1 }}>₹{revenue.year.toFixed(2)}</div>
+                  </div>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    background: '#f6ffed',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 10px rgba(82, 196, 26, 0.1)'
+                  }}>
+                    <span style={{ color: '#52c41a', fontSize: '20px', fontWeight: '700' }}>₹</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ color: '#52c41a', fontSize: '11px', fontWeight: '600' }}>Year-to-date sales</div>
+                  <div style={{
+                    width: '50px',
+                    height: '4px',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      background: '#52c41a',
+                      borderRadius: '4px'
+                    }}></div>
+                  </div>
+                </div>
               </Card>
             </Col>
           </Row>

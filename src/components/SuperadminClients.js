@@ -1,6 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, InputNumber, Select, message, Space, DatePicker, Tag, Checkbox, Row, Col } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
+import { 
+  MenuFoldOutlined, 
+  MenuUnfoldOutlined, 
+  LogoutOutlined,
+  PlusOutlined,
+  EditOutlined,
+  EyeOutlined,
+  SafetyCertificateOutlined,
+  ArrowUpOutlined,
+  PoweroffOutlined,
+  CheckCircleOutlined
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import api from '../api';
@@ -663,12 +674,13 @@ export default function SuperadminClients() {
 
         return (
           <Space direction="vertical" size="small">
-            <Space>
-              <Button size="small" onClick={() => onEdit(rec)}>Edit</Button>
-              <Button size="small" onClick={() => openPlanDetails(rec)}>View Plan</Button>
-              <Button size="small" type="primary" onClick={() => openAssign(rec)}>Assign/Renew</Button>
+            <Space size="small">
+              <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(rec)}>Edit</Button>
+              <Button size="small" icon={<EyeOutlined />} onClick={() => openPlanDetails(rec)}>View Plan</Button>
+              <Button size="small" type="primary" icon={<SafetyCertificateOutlined />} onClick={() => openAssign(rec)}>Assign/Renew</Button>
               <Button
                 size="small"
+                icon={<ArrowUpOutlined />}
                 style={{ backgroundColor: '#722ed1', color: 'white', borderColor: '#722ed1' }}
                 onClick={() => openUpgrade(rec)}
               >
@@ -677,6 +689,7 @@ export default function SuperadminClients() {
               <Button
                 size="small"
                 danger={rec.status !== 'SUSPENDED'}
+                icon={rec.status === 'SUSPENDED' ? <CheckCircleOutlined /> : <PoweroffOutlined />}
                 style={rec.status === 'SUSPENDED' ? { backgroundColor: '#52c41a', color: 'white', borderColor: '#52c41a' } : {}}
                 onClick={() => handleToggleStatus(rec)}
               >
@@ -756,16 +769,15 @@ export default function SuperadminClients() {
           <Menu theme="light" mode="horizontal" items={[{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout }]} />
         </Header>
 
-        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ margin: 0 }}>Clients</h2>
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', minHeight: 280, overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16 }}>
             <Space>
               <Select
                 value={statusFilter}
                 onChange={value => setStatusFilter(value)}
                 style={{ width: 150 }}
                 options={[
-                  { value: 'ALL', label: 'All' },
+                  { value: 'ALL', label: 'All Status' },
                   { value: 'ACTIVE', label: 'Active' },
                   { value: 'DISABLED', label: 'Disabled' },
                   { value: 'SUSPENDED', label: 'Suspended' }
@@ -778,7 +790,7 @@ export default function SuperadminClients() {
                 onChange={e => setSearchText(e.target.value)}
                 style={{ width: 300 }}
               />
-              <Button type="primary" onClick={onCreate}>New Client</Button>
+              <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>New Client</Button>
             </Space>
           </div>
           <Table

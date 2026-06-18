@@ -382,8 +382,8 @@ const SuperadminLeads = () => {
           <Menu theme="light" mode="horizontal" items={[{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout }]} />
         </Header>
 
-        <Content style={{ margin: '24px 16px', padding: 24, background: '#f5f5f5', height: 'calc(100vh - 64px - 48px)', overflow: 'auto' }}>
-          <Card style={{ marginBottom: '16px' }} bodyStyle={{ padding: '16px' }}>
+        <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', minHeight: 280, overflow: 'auto' }}>
+          <div style={{ marginBottom: '24px' }}>
             <Row gutter={[16, 16]}>
               <Col xs={24} md={6}>
                 <Input
@@ -489,7 +489,7 @@ const SuperadminLeads = () => {
                 <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>Add Lead</Button>
               </Space>
             </div>
-          </Card>
+          </div>
 
           <Table
             columns={columns}
