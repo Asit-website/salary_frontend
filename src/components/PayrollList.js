@@ -24,10 +24,11 @@ import {
   Checkbox,
   Tabs,
   Alert,
+  Radio,
   Spin,
   Statistic
 } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, PlusOutlined, MinusCircleOutlined, InfoCircleOutlined, SearchOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, PlusOutlined, MinusCircleOutlined, InfoCircleOutlined, SearchOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import moment from 'moment';
 import Sidebar from './Sidebar';
 import MainHeader from './MainHeader';
@@ -145,7 +146,150 @@ const PayrollList = () => {
   const [walletInfo, setWalletInfo] = useState({ balance: 0, used: 0 });
   const [cashfreeProcessing, setCashfreeProcessing] = useState(false);
   const [disburseSummary, setDisburseSummary] = useState(null);
+  const [disburseMode, setDisburseMode] = useState('ALL');
 
+  // Tally Integration State
+  const [tallyModalVisible, setTallyModalVisible] = useState(false);
+  const [tallyConfig, setTallyConfig] = useState(null);
+  const [tallyPreview, setTallyPreview] = useState(null);
+  const [tallyLoading, setTallyLoading] = useState(false);
+  const [tallyPushing, setTallyPushing] = useState(false);
+  const [tallyBridgeStatus, setTallyBridgeStatus] = useState('checking');
+  const [tallyPrimeStatus, setTallyPrimeStatus] = useState('checking');
+
+  const openTallyPushModal = async () => {
+    if (!cycle) return;
+    setTallyModalVisible(true);
+    setTallyLoading(true);
+    setTallyBridgeStatus('checking');
+    setTallyPrimeStatus('checking');
+    
+    try {
+      const [configResp, previewResp] = await Promise.all([
+        api.get('/admin/tally/config'),
+        api.get(`/admin/tally/preview/${cycle.id}`)
+      ]);
+
+      if (configResp.data?.success) {
+        setTallyConfig(configResp.data.config);
+        const config = configResp.data.config;
+        
+        const bridge = config.bridgeUrl || 'http://localhost:7000';
+        const tally = config.tallyUrl || 'http://localhost:9000';
+        
+        try {
+          const bResp = await fetch(`${bridge}/ping`, { mode: 'cors' });
+          const bData = await bResp.json();
+          if (bData.success) {
+            setTallyBridgeStatus('connected');
+            try {
+              const tResp = await fetch(`${bridge}/tally/status?url=${encodeURIComponent(tally)}`, { mode: 'cors' });
+              const tData = await tResp.json();
+              if (tData.success) {
+                setTallyPrimeStatus('connected');
+              } else {
+                setTallyPrimeStatus('offline');
+              }
+            } catch (_) {
+              setTallyPrimeStatus('offline');
+            }
+          } else {
+            throw new Error('Bridge offline');
+          }
+        } catch (_) {
+          // Bridge is offline, check if Tally Prime is running directly (no-cors)
+          try {
+            await fetch(tally, { method: 'POST', mode: 'no-cors', body: '' });
+            setTallyBridgeStatus('direct');
+            setTallyPrimeStatus('connected');
+          } catch (err) {
+            setTallyBridgeStatus('offline');
+            setTallyPrimeStatus('offline');
+          }
+        }
+      }
+
+      if (previewResp.data?.success) {
+        setTallyPreview(previewResp.data.preview);
+      }
+    } catch (e) {
+      message.error(e.response?.data?.message || 'Failed to initialize Tally integration');
+      setTallyModalVisible(false);
+    } finally {
+      setTallyLoading(false);
+    }
+  };
+
+  const handlePushToTally = async () => {
+    if (!tallyConfig || !cycle) return;
+    setTallyPushing(true);
+    try {
+      const xmlResp = await api.get(`/admin/tally/xml/${cycle.id}`);
+      const xml = xmlResp.data;
+
+      const bridge = tallyConfig.bridgeUrl || 'http://localhost:7000';
+      const tally = tallyConfig.tallyUrl || 'http://localhost:9000';
+
+      if (tallyBridgeStatus === 'connected') {
+        const pushResp = await fetch(`${bridge}/tally/push`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'cors',
+          body: JSON.stringify({ xml, tallyUrl: tally })
+        });
+
+        const pushResult = await pushResp.json();
+        if (pushResult.success) {
+          message.success('Salary voucher successfully pushed to Tally Prime!');
+          setTallyModalVisible(false);
+        } else {
+          Modal.error({
+            title: 'Tally Prime Push Failed',
+            content: (
+              <div>
+                <p>Tally rejected the import with the following error:</p>
+                <Alert message={pushResult.error || 'Unknown Tally Error'} type="error" showIcon />
+                <p style={{ marginTop: 12, fontSize: '11px', color: '#666' }}>
+                  Please verify that your company name matches exactly and that all mapped ledgers exist in Tally.
+                </p>
+              </div>
+            )
+          });
+        }
+      } else {
+        // Direct push bypassing CORS using simple request (text/plain)
+        await fetch(tally, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: xml
+        });
+        message.success('Salary voucher pushed directly to Tally Prime! Please check Tally Prime to verify.');
+        setTallyModalVisible(false);
+      }
+    } catch (e) {
+      message.error('Failed to communicate with Tally Prime: ' + e.message);
+    } finally {
+      setTallyPushing(false);
+    }
+  };
+
+  const handleDownloadTallyXML = async () => {
+    if (!cycle) return;
+    try {
+      const xmlResp = await api.get(`/admin/tally/xml/${cycle.id}`);
+      const blob = new Blob([xmlResp.data], { type: 'text/xml' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `payroll_tally_${cycle.monthKey}.xml`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      message.success('Tally XML downloaded successfully!');
+    } catch (e) {
+      message.error('Failed to download Tally XML: ' + e.message);
+    }
+  };
 
   const openPayoutModal = async () => {
     if (!cycle) return;
@@ -161,6 +305,11 @@ const PayrollList = () => {
       setLoading(true);
       setDisburseActiveTab('bank-file');
       setDisburseSummary(null);
+      if (selectedRowKeys.length > 0) {
+        setDisburseMode('SELECTED');
+      } else {
+        setDisburseMode('ALL');
+      }
 
       const resp = await api.get('/admin/settings/payout-bank-config');
       if (resp?.data?.success) {
@@ -249,10 +398,12 @@ const PayrollList = () => {
     const alreadyPaidStaff = payoutSummaryStats.alreadyPaidCount > 0;
     const alreadyPaidNames = payoutSummaryStats.alreadyPaidNames.slice(0, 6);
 
+    const isSelMode = disburseMode === 'SELECTED' && selectedRowKeys.length > 0;
+
     const confirmDisburse = () => {
       Modal.confirm({
         title: 'Confirm Instant Salary Payouts',
-        content: `Are you sure you want to disburse instant salary payouts via Razorpay to all ${payoutSummaryStats.eligibleCount} included staff? This will deduct ₹${payoutSummaryStats.totalNeeded.toLocaleString('en-IN')} from your payroll wallet.`,
+        content: `Are you sure you want to disburse instant salary payouts via Razorpay to ${isSelMode ? 'selected' : 'all'} ${payoutSummaryStats.eligibleCount} included staff? This will deduct ₹${payoutSummaryStats.totalNeeded.toLocaleString('en-IN')} from your payroll wallet.`,
         okText: 'Yes, Disburse',
         cancelText: 'Cancel',
         okButtonProps: { style: { background: '#10b981', borderColor: '#10b981' } },
@@ -260,7 +411,11 @@ const PayrollList = () => {
           try {
             setCashfreeProcessing(true);
             setDisburseSummary(null);
-            const resp = await api.post(`/admin/payroll/${cycle.id}/disburse-cashfree`);
+            const payload = {};
+            if (isSelMode) {
+              payload.selectedLineIds = selectedRowKeys;
+            }
+            const resp = await api.post(`/admin/payroll/${cycle.id}/disburse-cashfree`, payload);
             if (resp?.data?.success) {
               setDisburseSummary(resp.data);
               message.success('Instant payouts processing completed');
@@ -946,31 +1101,55 @@ const PayrollList = () => {
   }, [cycle, lines, staffMap, selectedStaffId]);
 
   const payoutSummaryStats = useMemo(() => {
-    let totalNeeded = 0;
-    let eligibleCount = 0;
-    let alreadyPaidCount = 0;
-    const alreadyPaidNames = [];
+    let totalNeededAll = 0;
+    let eligibleCountAll = 0;
+    let alreadyPaidCountAll = 0;
+    const alreadyPaidNamesAll = [];
+
+    let totalNeededSel = 0;
+    let eligibleCountSel = 0;
+    let alreadyPaidCountSel = 0;
+    const alreadyPaidNamesSel = [];
 
     combinedData.forEach(row => {
       const net = Number(row.totals?.netSalary || 0);
       const isAlreadyPaid = row.status === 'INCLUDED' && (row.paidAt || row.paidMode);
+      
       if (isAlreadyPaid) {
-        alreadyPaidCount++;
-        alreadyPaidNames.push(row.name || row.profile?.name || row.userName || row.user_id || row.userId || 'Staff');
+        alreadyPaidCountAll++;
+        alreadyPaidNamesAll.push(row.name || row.profile?.name || row.userName || row.user_id || row.userId || 'Staff');
       }
       if (net > 0 && row.status === 'INCLUDED' && !isAlreadyPaid) {
-        totalNeeded += net;
-        eligibleCount++;
+        totalNeededAll += net;
+        eligibleCountAll++;
+      }
+
+      const isSelected = selectedRowKeys.includes(row.id || `${row.cycleId}-${row.userId}`);
+      if (isSelected) {
+        if (isAlreadyPaid) {
+          alreadyPaidCountSel++;
+          alreadyPaidNamesSel.push(row.name || row.profile?.name || row.userName || row.user_id || row.userId || 'Staff');
+        }
+        if (net > 0 && row.status === 'INCLUDED' && !isAlreadyPaid) {
+          totalNeededSel += net;
+          eligibleCountSel++;
+        }
       }
     });
-    
+
+    const isSelMode = disburseMode === 'SELECTED' && selectedRowKeys.length > 0;
+
     return {
-      totalNeeded: Number(totalNeeded.toFixed(2)),
-      eligibleCount,
-      alreadyPaidCount,
-      alreadyPaidNames
+      totalNeeded: isSelMode ? Number(totalNeededSel.toFixed(2)) : Number(totalNeededAll.toFixed(2)),
+      eligibleCount: isSelMode ? eligibleCountSel : eligibleCountAll,
+      alreadyPaidCount: isSelMode ? alreadyPaidCountSel : alreadyPaidCountAll,
+      alreadyPaidNames: isSelMode ? alreadyPaidNamesSel : alreadyPaidNamesAll,
+      totalNeededAll: Number(totalNeededAll.toFixed(2)),
+      eligibleCountAll,
+      totalNeededSel: Number(totalNeededSel.toFixed(2)),
+      eligibleCountSel,
     };
-  }, [combinedData]);
+  }, [combinedData, selectedRowKeys, disburseMode]);
 
   const columns = [
     {
@@ -1059,7 +1238,7 @@ const PayrollList = () => {
 
         return (
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'nowrap', alignItems: 'center', whiteSpace: 'nowrap' }}>
-            <Button size="small" shape="round" onClick={() => onOpenEdit(r)}>Edit</Button>
+            <Button size="small" shape="round" disabled={!!(r.paidAt || r.paidMode)} onClick={() => onOpenEdit(r)}>Edit</Button>
             <Button size="small" shape="round" onClick={() => setViewRow(r)}>View</Button>
             {viewLink && (
               <Button size="small" shape="round" href={viewLink} target="_blank">View Payslip</Button>
@@ -1069,6 +1248,9 @@ const PayrollList = () => {
             )}
             {!viewLink && (
               <Button size="small" shape="round" type="primary" onClick={() => generatePayslipPDF(r)}>Generate Payslip</Button>
+            )}
+            {(r.paidAt || r.paidMode) && (
+              <Tag color="success" style={{ borderRadius: '20px', fontWeight: '700', fontSize: '11px', padding: '2px 10px', margin: 0 }}>Paid</Tag>
             )}
           </div>
         );
@@ -1121,6 +1303,15 @@ const PayrollList = () => {
               {/* Actions for Cycle */}
               <Space wrap size={8}>
                 <Button onClick={onExportCSV} disabled={!cycle || lines.length === 0} loading={loading} shape="round">Export Excel</Button>
+                <Button
+                  onClick={openTallyPushModal}
+                  disabled={!cycle || lines.length === 0}
+                  loading={loading || tallyLoading}
+                  shape="round"
+                  style={{ background: '#f0f9ff', color: '#0284c7', borderColor: '#bae6fd' }}
+                >
+                  Send to Tally
+                </Button>
                 <Button 
                   onClick={openPayoutModal} 
                   disabled={!cycle || lines.length === 0} 
@@ -1931,6 +2122,22 @@ const PayrollList = () => {
                 </div>
               ) : (
                 <div>
+                  {selectedRowKeys.length > 0 && (
+                    <div style={{ marginBottom: '16px', background: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Disburse To:</span>
+                      <Radio.Group 
+                        value={disburseMode} 
+                        onChange={(e) => setDisburseMode(e.target.value)}
+                        optionType="button"
+                        buttonStyle="solid"
+                        size="small"
+                      >
+                        <Radio.Button value="ALL">All ({payoutSummaryStats.eligibleCountAll} staff)</Radio.Button>
+                        <Radio.Button value="SELECTED">Selected Only ({payoutSummaryStats.eligibleCountSel} staff)</Radio.Button>
+                      </Radio.Group>
+                    </div>
+                  )}
+
                   <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
                     <Col span={12}>
                       <Card size="small" style={{ background: '#f8fafc', borderRadius: '8px' }}>
@@ -1942,7 +2149,7 @@ const PayrollList = () => {
                           valueStyle={{ fontSize: '20px', fontWeight: '700', color: '#1e293b' }}
                         />
                         <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                          For {payoutSummaryStats.eligibleCount} included employees
+                          For {payoutSummaryStats.eligibleCount} {disburseMode === 'SELECTED' && selectedRowKeys.length > 0 ? 'selected' : 'included'} employees
                         </div>
                       </Card>
                     </Col>
@@ -1988,7 +2195,7 @@ const PayrollList = () => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       <Alert
                         message="Sufficient Wallet Funds Available"
-                        description="Funds will be instantly transferred from your wallet to all eligible staff bank accounts. Make sure Razorpay API setup is active."
+                        description={`Funds will be instantly transferred from your wallet to ${disburseMode === 'SELECTED' && selectedRowKeys.length > 0 ? 'selected' : 'all'} eligible staff bank accounts. Make sure Razorpay API setup is active.`}
                         type="info"
                         showIcon
                         style={{ borderRadius: '8px' }}
@@ -2011,6 +2218,197 @@ const PayrollList = () => {
             </div>
           </Tabs.TabPane>
         </Tabs>
+      </Modal>
+
+      {/* Tally Push Modal */}
+      <Modal
+        open={tallyModalVisible}
+        title={<span style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>Tally Prime Push Integration</span>}
+        onCancel={() => setTallyModalVisible(false)}
+        width={720}
+        footer={[
+          <Button key="cancel" onClick={() => setTallyModalVisible(false)}>
+            Close
+          </Button>,
+          <Button key="download" type="default" onClick={handleDownloadTallyXML} disabled={tallyLoading}>
+            Download XML
+          </Button>,
+          <Button
+            key="push"
+            type="primary"
+            loading={tallyPushing}
+            disabled={tallyLoading || (tallyBridgeStatus !== 'connected' && tallyBridgeStatus !== 'direct') || tallyPrimeStatus !== 'connected'}
+            onClick={handlePushToTally}
+          >
+            Push to Tally
+          </Button>
+        ]}
+        destroyOnClose
+      >
+        {tallyLoading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Spin tip="Preparing Tally integration data..." />
+          </div>
+        ) : (
+          <div style={{ padding: '8px 0' }}>
+            {/* Status indicators */}
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '12px', color: '#64748b' }}>Bridge Agent:</div>
+                <div style={{ marginTop: '4px' }}>
+                  {tallyBridgeStatus === 'connected' ? (
+                    <Tag color="green" icon={<CheckCircleOutlined />}>Running</Tag>
+                  ) : tallyBridgeStatus === 'direct' ? (
+                    <Tag color="blue" icon={<CheckCircleOutlined />}>Direct Connect</Tag>
+                  ) : (
+                    <Tag color="red" icon={<CloseCircleOutlined />}>Offline (Port 7000)</Tag>
+                  )}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '12px', color: '#64748b' }}>Tally ODBC Server:</div>
+                <div style={{ marginTop: '4px' }}>
+                  {tallyPrimeStatus === 'connected' ? (
+                    <Tag color="green" icon={<CheckCircleOutlined />}>Running</Tag>
+                  ) : (
+                    <Tag color="red" icon={<CloseCircleOutlined />}>Closed / Offline</Tag>
+                  )}
+                </div>
+              </div>
+              <div style={{ flex: 1.5 }}>
+                <div style={{ fontSize: '12px', color: '#64748b' }}>Tally Company Target:</div>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e293b', marginTop: '4px' }}>
+                  {tallyConfig?.companyName || 'ABC Pvt Ltd'}
+                </div>
+              </div>
+            </div>
+
+            {tallyBridgeStatus === 'direct' && tallyPrimeStatus === 'connected' && (
+              <Alert
+                message="Tally Prime Detected (Bridge Offline)"
+                description={
+                  <span style={{ fontSize: '12px', display: 'block', lineHeight: '1.6' }}>
+                    Tally Prime is running locally, but the Tally Bridge Agent is offline.
+                    We can try to push directly, but running the <b>Tally Bridge Agent</b> is highly recommended to receive and view import error details.
+                  </span>
+                }
+                type="warning"
+                showIcon
+                style={{ marginBottom: '20px' }}
+              />
+            )}
+
+            {tallyBridgeStatus !== 'connected' && tallyBridgeStatus !== 'direct' && tallyPrimeStatus !== 'connected' && (
+              <Alert
+                message="Tally Prime & Bridge Agent Offline"
+                description={
+                  <span style={{ fontSize: '12px', display: 'block', lineHeight: '1.6' }}>
+                    Pushing vouchers to Tally Prime requires both the local Tally Bridge Agent and Tally Prime to be running.
+                    <br />
+                    💡 <b>How to start the Bridge Agent:</b> Open the <code>tally_bridge_agent</code> folder inside your backend directory, and run <b><code>start_tally_bridge.bat</code></b> or execute the compiled binary.
+                    <br />
+                    <i>Alternatively, you can click <b>Download XML</b> below and import it manually into Tally Prime via <b>Import Data &gt; Vouchers</b>.</i>
+                  </span>
+                }
+                type="info"
+                showIcon
+                style={{ marginBottom: '20px' }}
+              />
+            )}
+
+            {tallyBridgeStatus !== 'connected' && tallyBridgeStatus !== 'direct' && tallyPrimeStatus === 'connected' && (
+              <Alert
+                message="Bridge Agent Offline"
+                description={
+                  <span style={{ fontSize: '12px', display: 'block', lineHeight: '1.6' }}>
+                    Tally Prime is running, but the Tally Bridge Agent is offline. 
+                    Please start the <b>Tally Bridge Agent</b> to ensure a reliable connection and view import logs.
+                  </span>
+                }
+                type="warning"
+                showIcon
+                style={{ marginBottom: '20px' }}
+              />
+            )}
+
+            {/* Voucher preview */}
+            <div style={{ marginBottom: '12px' }}>
+              <Text strong style={{ fontSize: '14px', color: '#1e293b' }}>
+                Voucher Accounting Entries Preview ({tallyPreview?.entryMode === 'PER_EMPLOYEE' ? 'Per-Employee Mode' : 'Consolidated Mode'}):
+              </Text>
+            </div>
+
+            {tallyPreview?.entryMode === 'PER_EMPLOYEE' ? (
+              <div style={{ maxHeight: '320px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px' }}>
+                {(tallyPreview.vouchers || []).map(v => (
+                  <Card key={v.id} size="small" style={{ marginBottom: '12px', borderLeft: '3px solid #1677ff' }} bodyStyle={{ padding: '8px' }}>
+                    <div style={{ fontWeight: '600', fontSize: '12px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{v.narration}</span>
+                      <span style={{ color: '#0284c7' }}>₹{v.total.toLocaleString('en-IN')}</span>
+                    </div>
+                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+                      <tbody>
+                        {(v.entries || []).map((entry, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ width: '10%', fontWeight: 'bold', color: entry.type === 'DR' ? '#1677ff' : '#52c41a', padding: '3px 0' }}>{entry.type}</td>
+                            <td style={{ width: '65%', color: '#334155', padding: '3px 0' }}>{entry.ledger}</td>
+                            <td style={{ width: '25%', textAlign: 'right', color: '#0f172a', padding: '3px 0' }}>₹{entry.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              // Consolidated Preview
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ background: '#f8fafc', padding: '8px 12px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', fontWeight: '500' }}>
+                  Narration: {tallyPreview?.narration}
+                </div>
+                <Table
+                  dataSource={tallyPreview?.entries || []}
+                  rowKey="ledger"
+                  pagination={false}
+                  size="small"
+                  columns={[
+                    {
+                      title: 'Type',
+                      dataIndex: 'type',
+                      key: 'type',
+                      width: '15%',
+                      render: (t) => <Text strong style={{ color: t === 'DR' ? '#1677ff' : '#52c41a' }}>{t}</Text>
+                    },
+                    {
+                      title: 'Ledger Account',
+                      dataIndex: 'ledger',
+                      key: 'ledger',
+                      width: '60%'
+                    },
+                    {
+                      title: 'Amount',
+                      dataIndex: 'amount',
+                      key: 'amount',
+                      align: 'right',
+                      width: '25%',
+                      render: (amt) => <Text>₹{amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+                    }
+                  ]}
+                  summary={() => (
+                    <Table.Summary.Row style={{ background: '#f8fafc' }}>
+                      <Table.Summary.Cell index={0} colSpan={2}>
+                        <Text strong>Total Balanced Amount</Text>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={1} align="right">
+                        <Text strong style={{ color: '#0f172a' }}>₹{tallyPreview?.totalDr?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+                      </Table.Summary.Cell>
+                    </Table.Summary.Row>
+                  )}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </Layout>
   );

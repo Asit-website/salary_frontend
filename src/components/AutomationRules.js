@@ -23,6 +23,11 @@ export default function AutomationRules() {
         // companyId: ''
     });
 
+    const [esslConfig, setEsslConfig] = useState({
+        active: false,
+        serialNumber: ''
+    });
+
     useEffect(() => {
         fetchRules();
     }, []);
@@ -46,6 +51,18 @@ export default function AutomationRules() {
                         username: config.username || 'admin',
                         password: config.password || '',
                         // companyId: config.companyId || ''
+                    });
+                }
+
+                const esslRule = rules.find(r => r.key === 'essl_integration');
+                if (esslRule) {
+                    let config = esslRule.config;
+                    if (typeof config === 'string') {
+                        try { config = JSON.parse(config); } catch (e) { config = {}; }
+                    }
+                    setEsslConfig({
+                        active: esslRule.active,
+                        serialNumber: config.serialNumber || ''
                     });
                 }
             }
@@ -319,6 +336,97 @@ export default function AutomationRules() {
                                                 style={{ boxShadow: '0 2px 6px rgba(22, 119, 255, 0.15)' }}
                                             >
                                                 Save ZKTeco Settings
+                                            </Button>
+                                        </div>
+                                    </Space>
+                                </Card>
+
+                                <Card
+                                    style={{
+                                        borderRadius: 12,
+                                        border: '1px solid #e2e8f0',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                                    }}
+                                >
+                                    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                                                <div style={{
+                                                    width: 38,
+                                                    height: 38,
+                                                    borderRadius: 12,
+                                                    background: '#1677ff14',
+                                                    color: '#1677ff',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: 18
+                                                }}>
+                                                    <ApiOutlined />
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>eSSL Biometric Webhook Integration</div>
+                                                    <Text style={{ color: '#64748b', fontSize: 12 }}>
+                                                        Receive real-time attendance transactions pushed from your eSSL Bio Server.
+                                                    </Text>
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={esslConfig.active}
+                                                onChange={(checked) => setEsslConfig({ ...esslConfig, active: checked })}
+                                                checkedChildren="Active"
+                                                unCheckedChildren="Off"
+                                            />
+                                        </div>
+
+                                        <Row gutter={[16, 16]}>
+                                            <Col xs={24}>
+                                                <Text style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Webhook Post URL (Configure in eSSL Bio Server)</Text>
+                                                <Input
+                                                    readOnly
+                                                    value={`${window.location.protocol}//${window.location.host}/api/webhook/essl`}
+                                                    style={{ marginTop: 6, borderRadius: 8, background: '#f8fafc', color: '#64748b' }}
+                                                    addonAfter={
+                                                        <Button 
+                                                            type="text" 
+                                                            size="small" 
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(`${window.location.protocol}//${window.location.host}/api/webhook/essl`);
+                                                                message.success('URL copied to clipboard!');
+                                                            }}
+                                                            style={{ height: 'auto', padding: 0 }}
+                                                        >
+                                                            Copy
+                                                        </Button>
+                                                    }
+                                                />
+                                            </Col>
+                                            <Col xs={24}>
+                                                <Text style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Device Serial Number (Optional)</Text>
+                                                <Input
+                                                    placeholder="e.g. AEXY182960104"
+                                                    value={esslConfig.serialNumber}
+                                                    onChange={(e) => setEsslConfig({ ...esslConfig, serialNumber: e.target.value })}
+                                                    style={{ marginTop: 6, borderRadius: 8 }}
+                                                />
+                                                <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                                                    Only required if multiple organizations share duplicate employee/staff IDs on the same central server.
+                                                </Text>
+                                            </Col>
+                                        </Row>
+
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+                                            <Button
+                                                type="primary"
+                                                shape="round"
+                                                icon={<ApiOutlined />}
+                                                onClick={() => saveRule('essl_integration', esslConfig.active, {
+                                                    serialNumber: esslConfig.serialNumber || ''
+                                                })}
+                                                loading={saving}
+                                                style={{ boxShadow: '0 2px 6px rgba(22, 119, 255, 0.15)' }}
+                                            >
+                                                Save eSSL Settings
                                             </Button>
                                         </div>
                                     </Space>

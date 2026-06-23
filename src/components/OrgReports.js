@@ -89,6 +89,7 @@ const OrgReports = () => {
       { value: 'activities', label: 'Activities Report' },
       { value: 'tickets', label: 'Tickets Report' },
       { value: 'meetings', label: 'Meetings Report' },
+      { value: 'staff-login-logout', label: 'Staff Login/Logout Report' },
     ];
 
     if (salaryRegisterEnabled) {
@@ -201,15 +202,23 @@ const OrgReports = () => {
         endpoint = '/admin/reports/ot-impact';
       } else if (mainType === 'late-penalty') {
         endpoint = '/admin/reports/late-penalty-analysis';
+      } else if (mainType === 'staff-login-logout') {
+        endpoint = '/admin/reports/staff-login-logout';
       }
 
-      const params = {
-        month: moment(month).month() + 1,
-        year: moment(month).year()
-      };
-
-      if (reportScope === 'selected' && selectedEmployees.length > 0) {
-        params.employeeIds = selectedEmployees.join(',');
+      const params = {};
+      if (mainType === 'staff-login-logout') {
+        params.fromDate = moment(month).startOf('month').format('YYYY-MM-DD');
+        params.toDate = moment(month).endOf('month').format('YYYY-MM-DD');
+        if (reportScope === 'selected' && selectedEmployees.length > 0) {
+          params.staffId = selectedEmployees[0];
+        }
+      } else {
+        params.month = moment(month).month() + 1;
+        params.year = moment(month).year();
+        if (reportScope === 'selected' && selectedEmployees.length > 0) {
+          params.employeeIds = selectedEmployees.join(',');
+        }
       }
 
       const response = await api.get(endpoint, { params });
@@ -263,6 +272,13 @@ const OrgReports = () => {
             sn: idx + 1
           }));
           setData(formatted);
+        } else if (mainType === 'staff-login-logout') {
+          const formatted = response.data.data.map((item, idx) => ({
+            ...item,
+            sn: idx + 1,
+            key: item.userId
+          }));
+          setData(formatted);
         } else {
           setData(response.data.data);
         }
@@ -284,10 +300,44 @@ const OrgReports = () => {
   };
 
   const downloadExcel = async () => {
+    const mainType = reportType[0];
+    if (mainType === 'staff-login-logout') {
+      setDownloading(true);
+      try {
+        let csvContent = "\uFEFF"; // UTF-8 BOM
+        csvContent += "Staff Name,Phone,Event Type,Timestamp,Platform,IP Address,Latitude,Longitude,Address\r\n";
+        
+        data.forEach(staff => {
+          (staff.events || []).forEach(evt => {
+            const timeStr = moment(evt.timestamp).format('YYYY-MM-DD HH:mm:ss');
+            const platformStr = evt.platform || 'N/A';
+            const addressEscaped = evt.address ? `"${evt.address.replace(/"/g, '""')}"` : 'N/A';
+            csvContent += `"${staff.staffName}","${staff.phone}","${evt.type}","${timeStr}","${platformStr}","${evt.ipAddress || 'N/A'}",${evt.latitude || 'N/A'},${evt.longitude || 'N/A'},${addressEscaped}\r\n`;
+          });
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `staff_login_logout_report_${month}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        message.success('Report downloaded successfully');
+      } catch (error) {
+        console.error('Error downloading CSV:', error);
+        message.error('Error downloading CSV');
+      } finally {
+        setDownloading(false);
+      }
+      return;
+    }
+
     setDownloading(true);
     try {
       let endpoint;
-      const mainType = reportType[0];
       const subType = reportType[1];
 
       if (mainType === 'attendance') {
@@ -918,6 +968,88 @@ const OrgReports = () => {
     { title: 'OT % of Base', dataIndex: 'otPercentage', key: 'otPercentage', width: 120, render: (v) => <span style={{ fontWeight: '600', color: '#fa8c16' }}>{v}%</span> },
   ];
 
+  const getStaffLoginLogoutColumns = () => [
+    { title: 'S.N.', dataIndex: 'sn', key: 'sn', width: 60 },
+    { title: 'Staff Name', dataIndex: 'staffName', key: 'staffName', render: (v) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{v}</span> },
+    { title: 'Phone', dataIndex: 'phone', key: 'phone' },
+    { title: 'Total Logins', dataIndex: 'totalLogins', key: 'totalLogins', render: (v) => <Tag color="green" style={{ fontWeight: '600' }}>{v}</Tag> },
+    { title: 'Total Logouts', dataIndex: 'totalLogouts', key: 'totalLogouts', render: (v) => <Tag color="orange" style={{ fontWeight: '600' }}>{v}</Tag> },
+  ];
+
+  const renderLoginLogoutDetail = (record) => {
+    const columns = [
+      {
+        title: 'Event Type',
+        dataIndex: 'type',
+        key: 'type',
+        render: (type) => (
+          <Tag color={type === 'Login' ? 'green' : 'orange'} style={{ fontWeight: '500' }}>
+            {type}
+          </Tag>
+        ),
+      },
+      {
+        title: 'Time',
+        dataIndex: 'timestamp',
+        key: 'timestamp',
+        render: (t) => moment(t).format('DD MMM YYYY, hh:mm A'),
+      },
+      {
+        title: 'Platform',
+        dataIndex: 'platform',
+        key: 'platform',
+        render: (p) => (
+          <Tag color={p?.includes('apk') ? 'blue' : 'purple'}>
+            {p === 'mobile-apk' ? 'Mobile App' : p === 'admin-apk' ? 'Admin App' : (p || 'Web')}
+          </Tag>
+        ),
+      },
+      {
+        title: 'IP Address',
+        dataIndex: 'ipAddress',
+        key: 'ipAddress',
+        render: (ip) => ip || 'N/A',
+      },
+      {
+        title: 'Location (Lat, Lng)',
+        key: 'coords',
+        render: (_, item) => {
+          if (item.latitude && item.longitude) {
+            return (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${item.latitude},${item.longitude}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontWeight: '500' }}
+              >
+                {Number(item.latitude).toFixed(6)}, {Number(item.longitude).toFixed(6)}
+              </a>
+            );
+          }
+          return 'N/A';
+        },
+      },
+      {
+        title: 'Address',
+        dataIndex: 'address',
+        key: 'address',
+        render: (address) => address || 'N/A',
+      },
+
+    ];
+
+    return (
+      <Table
+        columns={columns}
+        dataSource={record.events}
+        pagination={false}
+        rowKey="id"
+        size="small"
+        style={{ margin: '10px 0' }}
+      />
+    );
+  };
+
   const renderTable = () => (
     <Table
       columns={
@@ -935,12 +1067,13 @@ const OrgReports = () => {
                               reportType[0] === 'comparison' ? getComparisonColumns() :
                                 reportType[0] === 'ot-impact' ? getOTImpactColumns() :
                                   reportType[0] === 'late-penalty' ? getLatePenaltyColumns() :
-                                    reportType[0] === 'salary-register' ? [] :
-                               reportType[0] === 'monthly-summary' ? [] :
-                                 getSalesColumns()
+                                    reportType[0] === 'staff-login-logout' ? getStaffLoginLogoutColumns() :
+                                      reportType[0] === 'salary-register' ? [] :
+                                        reportType[0] === 'monthly-summary' ? [] :
+                                          getSalesColumns()
       }
       dataSource={data}
-      rowKey={(record, index) => record.id || index}
+      rowKey={(record, index) => record.userId || record.id || index}
       className="sales-table"
       pagination={{
         pageSize: 50,
@@ -953,6 +1086,14 @@ const OrgReports = () => {
           : 'No data available'
       }}
       scroll={{ x: reportType[0] === 'attendance' || reportType[0] === 'punch-report' ? 'max-content' : 1200 }}
+      expandable={
+        reportType[0] === 'staff-login-logout'
+          ? {
+              expandedRowRender: renderLoginLogoutDetail,
+              rowExpandable: (record) => record.events && record.events.length > 0,
+            }
+          : undefined
+      }
     />
   );
 
@@ -1066,9 +1207,10 @@ const OrgReports = () => {
                                       reportType[0] === 'salary-register' ? 'Salary Register (Excel Only)' :
                                         reportType[0] === 'monthly-summary' ? `Monthly Summary (${(reportType[1] || 'designation').toUpperCase()} WISE)` :
                                           reportType[0] === 'per-day-salary' ? 'Per Day Salary Average Report' :
-                                            reportType[0] === 'comparison' ? 'Month-over-Month Comparison Report' :
-                                              reportType[0] === 'ot-impact' ? 'Overtime Impact Analysis' :
-                                                reportType[0] === 'late-penalty' ? 'Late Penalty Analysis Report' :
+                                            reportType[0] === 'staff-login-logout' ? 'Staff Login/Logout Report' :
+                                              reportType[0] === 'comparison' ? 'Month-over-Month Comparison Report' :
+                                                reportType[0] === 'ot-impact' ? 'Overtime Impact Analysis' :
+                                                  reportType[0] === 'late-penalty' ? 'Late Penalty Analysis Report' :
                                                   'Visit Report'} - {moment(month).format('MMMM YYYY')}
                 </Title>
               </div>

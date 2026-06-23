@@ -224,6 +224,10 @@ const Sidebar = ({ collapsed }) => {
             key: '/payroll/fnf',
             label: 'Full & Final (FnF)',
           },
+          {
+            key: '/payroll/payouts-history',
+            label: 'Payouts History',
+          },
         ]
       },
       {
@@ -585,8 +589,9 @@ const Sidebar = ({ collapsed }) => {
     // Handle asset management sub-routes
     if (pathname.startsWith('/assets-management')) return '/assets-management';
 
-    // Handle payroll sub-routes — FnF must be checked before /payroll
+    // Handle payroll sub-routes — specific sub-routes must be checked before generic /payroll
     if (pathname.startsWith('/payroll/fnf')) return '/payroll/fnf';
+    if (pathname.startsWith('/payroll/payouts-history')) return '/payroll/payouts-history';
     if (pathname.startsWith('/payroll')) return '/payroll';
     if (pathname.startsWith('/employee-salary')) return '/employee-salary';
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Card, Button, message, Space, Table, Input, Typography, Modal, Row, Col, Statistic, Tag, Radio } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined, KeyOutlined, WalletOutlined, CheckCircleOutlined, CloseCircleOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { Layout, Card, Button, message, Space, Table, Input, Typography, Modal, Row, Col, Statistic, Tag, Radio, DatePicker } from 'antd';
+import { ArrowLeftOutlined, PlusOutlined, KeyOutlined, WalletOutlined, CheckCircleOutlined, CloseCircleOutlined, InfoCircleOutlined, FileExcelOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MainHeader from './MainHeader';
@@ -14,21 +14,65 @@ export default function PayoutWalletSettings() {
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [wallet, setWallet] = useState({ balance: 0, used: 0, transactions: [] });
-  const [keys, setKeys] = useState({ clientId: '', clientSecret: '' });
+  const [keys, setKeys] = useState({ keyId: '', hasKeySecret: false, accountNumber: '' });
+  const [keyIdInput, setKeyIdInput] = useState('');
+  const [keySecretInput, setKeySecretInput] = useState('');
+  const [accountNumberInput, setAccountNumberInput] = useState('');
+  const [isSavingKeys, setIsSavingKeys] = useState(false);
   const [razorpayBalance, setRazorpayBalance] = useState({ balance: 0, availableBalance: 0 });
   const [cfError, setCfError] = useState(null);
-  const [disbursementStatusFilter, setDisbursementStatusFilter] = useState('SUCCESS');
   // Modals state
   const [isTopupModalOpen, setIsTopupModalOpen] = useState(false);
   const [topupAmount, setTopupAmount] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null); // { paymentId, amount }
+  const [activeTab, setActiveTab] = useState('DEPOSIT'); // 'DEPOSIT' or 'DISBURSEMENT'
+  const [dateRange, setDateRange] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  
+  const handleExportExcel = async () => {
+    try {
+      message.loading('Generating Excel report...', 1.5);
+      const startStr = dateRange && dateRange[0] ? dateRange[0].format('YYYY-MM-DD') : '';
+      const endStr = dateRange && dateRange[1] ? dateRange[1].format('YYYY-MM-DD') : '';
+      const response = await api.get('/admin/settings/payout-wallet/export-excel', {
+        params: {
+          type: activeTab,
+          startDate: startStr,
+          endDate: endStr,
+          status: statusFilter
+        },
+        responseType: 'blob'
+      });
+
+      // Create file link
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = `wallet_${activeTab.toLowerCase()}_report_${new Date().toISOString().slice(0,10)}.xlsx`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      message.success('Excel report downloaded successfully!');
+    } catch (e) {
+      console.error(e);
+      message.error('Failed to export Excel report: ' + (e.response?.data?.message || e.message || ''));
+    }
+  };
+  
   const fetchWalletDetails = async () => {
     try {
       setLoading(true);
       const resp = await api.get('/admin/settings/payout-wallet');
       if (resp?.data?.success) {
         setWallet(resp.data.wallet || { balance: 0, used: 0, transactions: [] });
-        setKeys(resp.data.keys || { clientId: '', clientSecret: '' });
+        const returnedKeys = resp.data.keys || { keyId: '', hasKeySecret: false, accountNumber: '' };
+        setKeys(returnedKeys);
+        setKeyIdInput(returnedKeys.keyId || '');
+        setKeySecretInput(returnedKeys.hasKeySecret ? '••••••••••••' : '');
+        setAccountNumberInput(returnedKeys.accountNumber || '');
         setRazorpayBalance(resp.data.cashfreeBalance || { balance: 0, availableBalance: 0 });
         setCfError(resp.data.cfError || null);
       }
@@ -36,6 +80,37 @@ export default function PayoutWalletSettings() {
       message.error('Failed to load wallet information');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveKeys = async () => {
+    if (!keyIdInput.trim()) {
+      message.warning('Please enter Razorpay Key ID');
+      return;
+    }
+    if (!keySecretInput.trim()) {
+      message.warning('Please enter Razorpay Key Secret');
+      return;
+    }
+
+    try {
+      setIsSavingKeys(true);
+      const resp = await api.post('/admin/settings/payout-wallet/credentials', {
+        keyId: keyIdInput,
+        keySecret: keySecretInput,
+        accountNumber: accountNumberInput
+      });
+
+      if (resp?.data?.success) {
+        message.success('Razorpay credentials saved successfully!');
+        fetchWalletDetails();
+      } else {
+        throw new Error(resp?.data?.message || 'Failed to save credentials');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || e.message || 'Failed to save credentials');
+    } finally {
+      setIsSavingKeys(false);
     }
   };
 
@@ -113,103 +188,137 @@ export default function PayoutWalletSettings() {
 
 
 
-  const ledgerColumns = [
+  const depositColumns = [
     {
-      title: 'Transaction ID',
-      dataIndex: 'id',
-      key: 'id',
-      render: (id) => <Text style={{ fontFamily: 'monospace', fontSize: '12px' }}>{id}</Text>
+      title: 'Payment ID',
+      dataIndex: 'rzpPaymentId',
+      key: 'rzpPaymentId',
+      render: (rzpPaymentId, record) => <Text style={{ fontFamily: 'monospace', fontSize: '12px' }}>{rzpPaymentId || record.id}</Text>
     },
     {
-      title: 'Staff Name',
+      title: 'Amount',
+      dataIndex: 'amount',
+      key: 'amount',
+      render: (amount) => (
+        <Text strong style={{ color: '#0f172a' }}>
+          ₹{Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
+      )
+    },
+    {
+      title: 'Date',
+      dataIndex: 'date',
+      key: 'date',
+      render: (date) => <Text>{new Date(date).toLocaleString('en-IN')}</Text>
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status) => (
+        <Tag color={status === 'SUCCESS' ? 'success' : status === 'PENDING' ? 'warning' : 'error'} style={{ borderRadius: '6px' }}>
+          {status}
+        </Tag>
+      )
+    },
+    {
+      title: 'Remarks/Details',
+      dataIndex: 'remarks',
+      key: 'remarks',
+      render: (remarks) => <Text type="secondary" style={{ fontSize: '13px' }}>{remarks}</Text>
+    }
+  ];
+
+  const payoutColumns = [
+    {
+      title: 'Payout ID',
+      dataIndex: 'payoutId',
+      key: 'payoutId',
+      render: (payoutId, record) => <Text style={{ fontFamily: 'monospace', fontSize: '12px' }}>{payoutId || record.id}</Text>
+    },
+    {
+      title: 'Employee',
       dataIndex: 'staffName',
       key: 'staffName',
-      render: (name, record) => {
-        const staffName = name || (record.remarks?.match(/Salary to\s+(.+?)\s+via/) || [])[1] || '—';
-        return <Text strong style={{ color: '#1e293b' }}>{staffName}</Text>;
+      render: (name, record) => (
+        <div>
+          <Text strong style={{ fontSize: '13px' }}>{name || 'Unknown'}</Text>
+          {record.staffId && <div style={{ fontSize: '11px', color: '#64748b' }}>ID: {record.staffId}</div>}
+        </div>
+      )
+    },
+    {
+      title: 'Bank Details',
+      key: 'bankDetails',
+      render: (_, record) => (
+        <div>
+          {record.bankAccount ? (
+            <>
+              <div style={{ fontSize: '12px', fontWeight: '500' }}>A/c: {record.bankAccount}</div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>IFSC: {record.bankIfsc}</div>
+            </>
+          ) : (
+            <Text type="secondary">-</Text>
+          )}
+        </div>
+      )
+    },
+    {
+      title: 'Amount',
+      dataIndex: 'amount',
+      key: 'amount',
+      render: (amount) => (
+        <Text strong style={{ color: '#0f172a' }}>
+          ₹{Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
+      )
+    },
+    {
+      title: 'Date',
+      dataIndex: 'date',
+      key: 'date',
+      render: (date) => <Text>{new Date(date).toLocaleString('en-IN')}</Text>
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status) => {
+        let color = 'default';
+        if (status === 'SUCCESS' || status === 'PROCESSED') color = 'success';
+        else if (status === 'PENDING' || status === 'PROCESSING' || status === 'QUEUED') color = 'warning';
+        else if (status === 'FAILED' || status === 'REJECTED') color = 'error';
+        return (
+          <Tag color={color} style={{ borderRadius: '6px' }}>
+            {status}
+          </Tag>
+        );
       }
     },
     {
-      title: 'Amount',
-      dataIndex: 'amount',
-      key: 'amount',
-      render: (amount) => (
-        <Text strong style={{ color: '#0f172a' }}>
-          ₹{Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </Text>
-      )
-    },
-    {
-      title: 'Date',
-      dataIndex: 'date',
-      key: 'date',
-      render: (date) => <Text>{new Date(date).toLocaleString('en-IN')}</Text>
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status) => (
-        <Tag color={status === 'SUCCESS' ? 'success' : status === 'PENDING' ? 'warning' : 'error'} style={{ borderRadius: '6px' }}>
-          {status}
-        </Tag>
-      )
-    },
-    {
-      title: 'Remarks/Details',
+      title: 'Remarks / Failure Reason',
       dataIndex: 'remarks',
       key: 'remarks',
       render: (remarks) => <Text type="secondary" style={{ fontSize: '13px' }}>{remarks}</Text>
     }
   ];
 
-  const depositColumns = [
-    {
-      title: 'Transaction ID',
-      dataIndex: 'id',
-      key: 'id',
-      render: (id) => <Text style={{ fontFamily: 'monospace', fontSize: '12px' }}>{id}</Text>
-    },
-    {
-      title: 'Amount',
-      dataIndex: 'amount',
-      key: 'amount',
-      render: (amount) => (
-        <Text strong style={{ color: '#0f172a' }}>
-          ₹{Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </Text>
-      )
-    },
-    {
-      title: 'Date',
-      dataIndex: 'date',
-      key: 'date',
-      render: (date) => <Text>{new Date(date).toLocaleString('en-IN')}</Text>
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status) => (
-        <Tag color={status === 'SUCCESS' ? 'success' : status === 'PENDING' ? 'warning' : 'error'} style={{ borderRadius: '6px' }}>
-          {status}
-        </Tag>
-      )
-    },
-    {
-      title: 'Remarks/Details',
-      dataIndex: 'remarks',
-      key: 'remarks',
-      render: (remarks) => <Text type="secondary" style={{ fontSize: '13px' }}>{remarks}</Text>
+  const filteredTransactions = (wallet.transactions || []).filter(tx => {
+    if (tx.type !== activeTab) return false;
+    if (dateRange && dateRange[0] && dateRange[1]) {
+      const txDate = new Date(tx.date);
+      const start = dateRange[0].toDate ? dateRange[0].toDate() : new Date(dateRange[0]);
+      const end = dateRange[1].toDate ? dateRange[1].toDate() : new Date(dateRange[1]);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      if (txDate < start || txDate > end) return false;
     }
-  ];
-
-  const depositTransactions = (wallet.transactions || []).filter(tx => tx.type === 'DEPOSIT');
-  const disbursementTransactions = (wallet.transactions || []).filter(tx => tx.type === 'DISBURSEMENT');
-  const filteredDisbursementTransactions = disbursementTransactions.filter(tx => {
-    if (disbursementStatusFilter === 'ALL') return true;
-    return tx.status === disbursementStatusFilter;
+    if (statusFilter && statusFilter !== 'ALL') {
+      if (String(tx.status).toUpperCase() !== String(statusFilter).toUpperCase()) return false;
+    }
+    return true;
   });
+
 
   // ── Payment Success Screen ──────────────────────────────────────────────────
   if (paymentSuccess) {
@@ -257,14 +366,7 @@ export default function PayoutWalletSettings() {
                       {paymentSuccess.paymentId || paymentSuccess.paymentLinkId}
                     </Text>
                   </div>
-                  {paymentSuccess.paymentId && paymentSuccess.paymentLinkId && paymentSuccess.paymentId !== paymentSuccess.paymentLinkId && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: '10px', marginTop: '12px' }}>
-                      <Text style={{ color: '#64748b', fontWeight: '600', fontSize: '13px' }}>Payment Link ID</Text>
-                      <Text style={{ fontFamily: 'monospace', fontSize: '12px', color: '#1e293b', fontWeight: '700', maxWidth: '220px', wordBreak: 'break-all', textAlign: 'right' }}>
-                        {paymentSuccess.paymentLinkId}
-                      </Text>
-                    </div>
-                  )}
+
 
                   {/* Amount */}
                   {paymentSuccess.amount && (
@@ -371,6 +473,70 @@ export default function PayoutWalletSettings() {
             </Col>
           </Row>
 
+          {/* Razorpay Credentials Card */}
+          <Card 
+            title={
+              <Space>
+                <KeyOutlined style={{ color: '#3b82f6' }} />
+                <span style={{ fontWeight: '700', color: '#1e293b' }}>Razorpay API Credentials</span>
+              </Space>
+            }
+            style={{ borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '24px' }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '8px' }}>
+                {keys.keyId ? (
+                  <Tag color="success" icon={<CheckCircleOutlined />} style={{ borderRadius: '6px', fontSize: '13px', padding: '4px 10px' }}>
+                    Connected
+                  </Tag>
+                ) : (
+                  <Tag color="warning" icon={<InfoCircleOutlined />} style={{ borderRadius: '6px', fontSize: '13px', padding: '4px 10px' }}>
+                    Not Configured (Payouts & deposits will not work)
+                  </Tag>
+                )}
+              </div>
+              <Row gutter={[16, 16]}>
+                <Col xs={24} md={8}>
+                  <div style={{ marginBottom: '4px' }}><Text strong>Razorpay Key ID</Text></div>
+                  <Input 
+                    placeholder="rzp_live_..." 
+                    value={keyIdInput} 
+                    onChange={(e) => setKeyIdInput(e.target.value)} 
+                    style={{ borderRadius: '6px' }}
+                  />
+                </Col>
+                <Col xs={24} md={8}>
+                  <div style={{ marginBottom: '4px' }}><Text strong>Razorpay Key Secret</Text></div>
+                  <Input.Password 
+                    placeholder="Enter Secret Key" 
+                    value={keySecretInput} 
+                    onChange={(e) => setKeySecretInput(e.target.value)} 
+                    style={{ borderRadius: '6px' }}
+                  />
+                </Col>
+                <Col xs={24} md={8}>
+                  <div style={{ marginBottom: '4px' }}><Text strong>RazorpayX Account Number (Virtual Account)</Text></div>
+                  <Input 
+                    placeholder="e.g. 2323230077283719" 
+                    value={accountNumberInput} 
+                    onChange={(e) => setAccountNumberInput(e.target.value)} 
+                    style={{ borderRadius: '6px' }}
+                  />
+                </Col>
+              </Row>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <Button 
+                  type="primary" 
+                  onClick={handleSaveKeys} 
+                  loading={isSavingKeys}
+                  style={{ borderRadius: '8px', background: '#3b82f6', borderColor: '#3b82f6' }}
+                >
+                  Save Credentials
+                </Button>
+              </div>
+            </div>
+          </Card>
+
           {/* CF Info Banner */}
           {cfError && (
             <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '12px', padding: '16px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -382,49 +548,71 @@ export default function PayoutWalletSettings() {
             </div>
           )}
 
-          {/* Added Funds Ledger Card */}
+          {/* Wallet Transaction Ledger Card */}
           <Card 
-            title={<span style={{ fontWeight: '700', color: '#10b981' }}>Added Funds (Deposits) History</span>}
+            title={
+              <span style={{ fontWeight: '700', color: '#10b981' }}>Wallet Deposits Ledger</span>
+            }
             style={{ borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '24px' }}
           >
+            {/* Filter controls row */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <Space wrap>
+                <div>
+                  <span style={{ marginRight: '8px', fontWeight: '500', color: '#64748b' }}>Date Range:</span>
+                  <DatePicker.RangePicker 
+                    value={dateRange} 
+                    onChange={(values) => setDateRange(values)} 
+                    size="small"
+                    style={{ width: '250px', borderRadius: '6px' }}
+                    placeholder={['Start Date', 'End Date']}
+                  />
+                </div>
+                <div>
+                  <span style={{ marginRight: '8px', fontWeight: '500', color: '#64748b' }}>Status:</span>
+                  <Radio.Group
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    size="small"
+                    style={{ borderRadius: '6px' }}
+                  >
+                    <Radio.Button value="ALL">All</Radio.Button>
+                    <Radio.Button value="SUCCESS">Success</Radio.Button>
+                    <Radio.Button value="PENDING">Pending</Radio.Button>
+                    <Radio.Button value="FAILED">Failed</Radio.Button>
+                  </Radio.Group>
+                </div>
+              </Space>
+
+              <Button
+                type="primary"
+                onClick={handleExportExcel}
+                icon={<FileExcelOutlined />}
+                style={{ 
+                  borderRadius: '8px', 
+                  background: '#16a34a', 
+                  borderColor: '#16a34a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  fontWeight: '600'
+                }}
+              >
+                Export to Excel
+              </Button>
+            </div>
+
             <Table 
-              dataSource={depositTransactions}
+              dataSource={filteredTransactions}
               columns={depositColumns}
               rowKey="id"
-              pagination={{ pageSize: 5 }}
-              size="small"
+              pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: ['5', '10', '25', '50'] }}
+              size="middle"
               loading={loading}
               bordered
             />
           </Card>
 
-          {/* Disbursement Ledger Card */}
-          <Card 
-            title={<span style={{ fontWeight: '700', color: '#3b82f6' }}>Salary Disbursement (Payouts) History</span>}
-            style={{ borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
-            extra={
-              <Radio.Group 
-                value={disbursementStatusFilter} 
-                onChange={(e) => setDisbursementStatusFilter(e.target.value)} 
-                size="small"
-                buttonStyle="solid"
-              >
-                <Radio.Button value="SUCCESS">Success</Radio.Button>
-                <Radio.Button value="FAILED">Failed</Radio.Button>
-                <Radio.Button value="ALL">All</Radio.Button>
-              </Radio.Group>
-            }
-          >
-            <Table 
-              dataSource={filteredDisbursementTransactions}
-              columns={ledgerColumns}
-              rowKey="id"
-              pagination={{ pageSize: 5 }}
-              size="small"
-              loading={loading}
-              bordered
-            />
-          </Card>
+
 
         </Content>
       </Layout>

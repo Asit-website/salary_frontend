@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Table, Tag, Space, Button, Typography, Row, Col, Statistic, Input, Breadcrumb } from 'antd';
-import { ArrowLeftOutlined, MailOutlined, CheckCircleOutlined, CloseCircleOutlined, EyeOutlined, SearchOutlined, FileExcelOutlined } from '@ant-design/icons';
+import { Layout, Card, Table, Tag, Space, Button, Typography, Row, Col, Statistic, Input, Breadcrumb, message } from 'antd';
+import { ArrowLeftOutlined, MailOutlined, CheckCircleOutlined, CloseCircleOutlined, EyeOutlined, SearchOutlined, FileExcelOutlined, PauseOutlined } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
@@ -16,6 +16,7 @@ const SuperadminMailReport = () => {
     const [data, setData] = useState(null);
     const [searchText, setSearchText] = useState('');
     const [filterStatus, setFilterStatus] = useState(null);
+    const [selectedRowKeys, setSelectedRowKeys] = useState([]);
 
     const loadData = async () => {
         setLoading(true);
@@ -28,6 +29,71 @@ const SuperadminMailReport = () => {
             console.error('Failed to load report data:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const onSelectChange = (newSelectedRowKeys) => {
+        setSelectedRowKeys(newSelectedRowKeys);
+    };
+
+    const rowSelection = {
+        selectedRowKeys,
+        onChange: onSelectChange,
+        getCheckboxProps: (record) => ({
+            disabled: record.status === 'SENT' || (record.status === 'FAILED' && record.error !== 'PAUSED'),
+            name: record.recipientEmail,
+        }),
+    };
+
+    const handlePauseSingle = async (queueId) => {
+        try {
+            const resp = await api.post(`/superadmin/mail/queue/${queueId}/pause`);
+            if (resp.data.success) {
+                message.success('Recipient paused successfully');
+                loadData();
+            }
+        } catch (err) {
+            message.error(err.response?.data?.message || 'Failed to pause recipient');
+        }
+    };
+
+    const handleResumeSingle = async (queueId) => {
+        try {
+            const resp = await api.post(`/superadmin/mail/queue/${queueId}/resume`);
+            if (resp.data.success) {
+                message.success('Recipient resumed successfully');
+                loadData();
+            }
+        } catch (err) {
+            message.error(err.response?.data?.message || 'Failed to resume recipient');
+        }
+    };
+
+    const handleBatchPause = async () => {
+        if (selectedRowKeys.length === 0) return;
+        try {
+            const resp = await api.post('/superadmin/mail/queue/batch-pause', { ids: selectedRowKeys });
+            if (resp.data.success) {
+                message.success(resp.data.message || 'Selected recipients paused successfully');
+                setSelectedRowKeys([]);
+                loadData();
+            }
+        } catch (err) {
+            message.error(err.response?.data?.message || 'Failed to pause selected recipients');
+        }
+    };
+
+    const handleBatchResume = async () => {
+        if (selectedRowKeys.length === 0) return;
+        try {
+            const resp = await api.post('/superadmin/mail/queue/batch-resume', { ids: selectedRowKeys });
+            if (resp.data.success) {
+                message.success(resp.data.message || 'Selected recipients resumed successfully');
+                setSelectedRowKeys([]);
+                loadData();
+            }
+        } catch (err) {
+            message.error(err.response?.data?.message || 'Failed to resume selected recipients');
         }
     };
 
@@ -54,7 +120,12 @@ const SuperadminMailReport = () => {
             render: (status, record) => {
                 if (record.isOpened) return <Tag color="cyan" icon={<EyeOutlined />}>OPENED</Tag>;
                 if (status === 'SENT') return <Tag color="green" icon={<CheckCircleOutlined />}>SENT</Tag>;
-                if (status === 'FAILED') return <Tag color="red" icon={<CloseCircleOutlined />}>FAILED</Tag>;
+                if (status === 'FAILED') {
+                    if (record.error === 'PAUSED') {
+                        return <Tag color="orange" icon={<PauseOutlined />}>PAUSED</Tag>;
+                    }
+                    return <Tag color="red" icon={<CloseCircleOutlined />}>FAILED</Tag>;
+                }
                 return <Tag color="orange">{status}</Tag>;
             }
         },
@@ -69,6 +140,37 @@ const SuperadminMailReport = () => {
             dataIndex: 'openedAt',
             key: 'openedAt',
             render: d => d ? new Date(d).toLocaleString() : '-'
+        },
+        {
+            title: 'Action',
+            key: 'action',
+            render: (_, record) => {
+                if (record.status === 'PENDING') {
+                    return (
+                        <Button 
+                            type="link" 
+                            size="small" 
+                            style={{ color: '#faad14', padding: 0 }}
+                            onClick={() => handlePauseSingle(record.id)}
+                        >
+                            Pause
+                        </Button>
+                    );
+                }
+                if (record.status === 'FAILED' && record.error === 'PAUSED') {
+                    return (
+                        <Button 
+                            type="link" 
+                            size="small" 
+                            style={{ color: '#52c41a', padding: 0 }}
+                            onClick={() => handleResumeSingle(record.id)}
+                        >
+                            Resume
+                        </Button>
+                    );
+                }
+                return '-';
+            }
         }
     ];
 
@@ -161,15 +263,37 @@ const SuperadminMailReport = () => {
                             </Row>
 
                             <Card title="Recipients Checklist" extra={
-                                <Input 
-                                    placeholder="Search by name or email" 
-                                    prefix={<SearchOutlined />} 
-                                    style={{ width: 300 }}
-                                    onChange={e => setSearchText(e.target.value)}
-                                    allowClear
-                                />
+                                <Space size="middle">
+                                    {selectedRowKeys.length > 0 && (
+                                        <Space>
+                                            <Button 
+                                                size="small" 
+                                                danger 
+                                                onClick={handleBatchPause}
+                                            >
+                                                Pause Selected ({selectedRowKeys.length})
+                                            </Button>
+                                            <Button 
+                                                size="small" 
+                                                type="primary"
+                                                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                                                onClick={handleBatchResume}
+                                            >
+                                                Resume Selected ({selectedRowKeys.length})
+                                            </Button>
+                                        </Space>
+                                    )}
+                                    <Input 
+                                        placeholder="Search by name or email" 
+                                        prefix={<SearchOutlined />} 
+                                        style={{ width: 300 }}
+                                        onChange={e => setSearchText(e.target.value)}
+                                        allowClear
+                                    />
+                                </Space>
                             }>
                                 <Table 
+                                    rowSelection={rowSelection}
                                     columns={columns} 
                                     dataSource={filteredRecipients} 
                                     rowKey="id"

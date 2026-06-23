@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Card, Input, Button, Radio, Table, Tag, Space, message, Typography, Divider, Modal, Upload, Select, Tooltip } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, MailOutlined, SendOutlined, HistoryOutlined, FileExcelOutlined, EyeOutlined, UploadOutlined, ReloadOutlined, CodeOutlined, EditOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, MailOutlined, SendOutlined, HistoryOutlined, FileExcelOutlined, EyeOutlined, UploadOutlined, ReloadOutlined, CodeOutlined, EditOutlined, PauseOutlined, PlayCircleOutlined, FullscreenOutlined } from '@ant-design/icons';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import api from '../api';
@@ -28,6 +28,7 @@ const SuperadminMailing = () => {
     const [clients, setClients] = useState([]);
     const [selectedClients, setSelectedClients] = useState(['ALL_CLIENTS']);
     const [htmlMode, setHtmlMode] = useState(false);
+    const [isPreviewModalVisible, setIsPreviewModalVisible] = useState(false);
 
     const insertPlaceholder = (placeholder) => {
         if (!quillRef.current) return;
@@ -188,6 +189,36 @@ const SuperadminMailing = () => {
         });
     };
 
+    const handlePause = async (id) => {
+        setLoading(true);
+        try {
+            const resp = await api.post(`/superadmin/mail/campaign/${id}/pause`);
+            if (resp.data.success) {
+                message.success('Campaign paused successfully');
+                loadData();
+            }
+        } catch (err) {
+            message.error(err.response?.data?.message || 'Failed to pause campaign');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResume = async (id) => {
+        setLoading(true);
+        try {
+            const resp = await api.post(`/superadmin/mail/campaign/${id}/resume`);
+            if (resp.data.success) {
+                message.success('Campaign resumed successfully');
+                loadData();
+            }
+        } catch (err) {
+            message.error(err.response?.data?.message || 'Failed to resume campaign');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const columns = [
         { title: 'Date', dataIndex: 'createdAt', key: 'date', render: d => new Date(d).toLocaleString(), width: 160 },
         { title: 'Subject', dataIndex: 'subject', key: 'subject' },
@@ -209,7 +240,15 @@ const SuperadminMailing = () => {
                                 <span>Failed:</span> <Tag color="volcano">{s.failed}</Tag>
                             </div>
                         )}
-                        <Tag color={record.status === 'COMPLETED' ? "green" : "processing"} style={{ marginTop: '4px', width: '100%', textAlign: 'center' }}>
+                        <Tag 
+                            color={
+                                record.status === 'COMPLETED' ? "green" : 
+                                record.status === 'PAUSED' ? "orange" : 
+                                record.status === 'SENDING' ? "blue" : 
+                                "default"
+                            } 
+                            style={{ marginTop: '4px', width: '100%', textAlign: 'center' }}
+                        >
                             {record.status}
                         </Tag>
                         <Space style={{ marginTop: '4px' }}>
@@ -231,6 +270,28 @@ const SuperadminMailing = () => {
                             >
                                 Resend
                             </Button>
+                            {(record.status === 'PENDING' || record.status === 'SENDING') && (
+                                <Button
+                                    type="link"
+                                    size="small"
+                                    icon={<PauseOutlined />}
+                                    style={{ padding: 0, fontSize: '11px', color: '#faad14' }}
+                                    onClick={() => handlePause(record.id)}
+                                >
+                                    Pause
+                                </Button>
+                            )}
+                            {record.status === 'PAUSED' && (
+                                <Button
+                                    type="link"
+                                    size="small"
+                                    icon={<PlayCircleOutlined />}
+                                    style={{ padding: 0, fontSize: '11px', color: '#52c41a' }}
+                                    onClick={() => handleResume(record.id)}
+                                >
+                                    Resume
+                                </Button>
+                            )}
                         </Space>
                     </Space>
                 );
@@ -423,30 +484,82 @@ const SuperadminMailing = () => {
 
                                     {htmlMode ? (
                                         <div style={{ marginBottom: '8px' }}>
-                                            <textarea
-                                                value={body}
-                                                onChange={e => setBody(e.target.value)}
-                                                placeholder="Paste or type your HTML code here..."
-                                                style={{
-                                                    width: '100%',
-                                                    height: '350px',
-                                                    fontFamily: 'monospace',
-                                                    fontSize: '13px',
-                                                    padding: '12px',
-                                                    border: '1px solid #d9d9d9',
-                                                    borderRadius: '6px',
-                                                    resize: 'vertical',
-                                                    outline: 'none',
-                                                    background: '#1e1e2e',
-                                                    color: '#cdd6f4',
-                                                    lineHeight: '1.6',
-                                                    boxSizing: 'border-box'
-                                                }}
-                                                spellCheck={false}
-                                            />
+                                            <div style={{ display: 'flex', gap: '16px', height: '450px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                                {/* Code Editor */}
+                                                <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
+                                                    <textarea
+                                                        value={body}
+                                                        onChange={e => setBody(e.target.value)}
+                                                        placeholder="Paste or type your HTML code here..."
+                                                        style={{
+                                                            width: '100%',
+                                                            height: '100%',
+                                                            fontFamily: 'monospace',
+                                                            fontSize: '13px',
+                                                            padding: '12px',
+                                                            border: '1px solid #d9d9d9',
+                                                            borderRadius: '6px',
+                                                            resize: 'none',
+                                                            outline: 'none',
+                                                            background: '#1e1e2e',
+                                                            color: '#cdd6f4',
+                                                            lineHeight: '1.6',
+                                                            boxSizing: 'border-box'
+                                                        }}
+                                                        spellCheck={false}
+                                                    />
+                                                </div>
+                                                {/* Live Preview */}
+                                                <div style={{ flex: '1 1 300px', border: '1px solid #d9d9d9', borderRadius: '6px', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+                                                    <div style={{ padding: '6px 12px', background: '#f5f5f5', borderBottom: '1px solid #d9d9d9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <Text strong style={{ fontSize: '12px' }}>Live Preview</Text>
+                                                        <Button
+                                                            size="small"
+                                                            type="text"
+                                                            icon={<FullscreenOutlined />}
+                                                            onClick={() => setIsPreviewModalVisible(true)}
+                                                            title="Fullscreen Preview"
+                                                        />
+                                                    </div>
+                                                    <iframe
+                                                        title="HTML Preview"
+                                                        srcDoc={body}
+                                                        style={{
+                                                            width: '100%',
+                                                            height: '100%',
+                                                            border: 'none',
+                                                            background: '#fff'
+                                                        }}
+                                                        sandbox="allow-scripts"
+                                                    />
+                                                </div>
+                                            </div>
                                             <Text type="secondary" style={{ fontSize: '11px' }}>
-                                                💡 Tip: Write raw HTML here. It will be sent as-is in the email body.
+                                                💡 Tip: Write raw HTML, CSS, and JS here. The preview supports CSS styling and JavaScript execution.
                                             </Text>
+
+                                            <Modal
+                                                title="HTML Live Preview (Fullscreen)"
+                                                open={isPreviewModalVisible}
+                                                onCancel={() => setIsPreviewModalVisible(false)}
+                                                footer={null}
+                                                width="90%"
+                                                style={{ top: 20 }}
+                                                bodyStyle={{ height: 'calc(100vh - 150px)', padding: 0 }}
+                                                destroyOnClose
+                                            >
+                                                <iframe
+                                                    title="Fullscreen Preview"
+                                                    srcDoc={body}
+                                                    style={{
+                                                        width: '100%',
+                                                        height: '100%',
+                                                        border: 'none',
+                                                        background: '#fff'
+                                                    }}
+                                                    sandbox="allow-scripts"
+                                                />
+                                            </Modal>
                                         </div>
                                     ) : (
                                         <div style={{ height: '350px', marginBottom: '40px' }}>

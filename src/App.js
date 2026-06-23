@@ -84,6 +84,8 @@ import InactivityHandler from './components/InactivityHandler';
 import SessionSettings from './components/SessionSettings';
 import PayoutSettings from './components/PayoutSettings';
 import PayoutWalletSettings from './components/PayoutWalletSettings';
+import PayoutsHistory from './components/PayoutsHistory';
+import TallySettings from './components/TallySettings';
 
 
 const { Content } = Layout;
@@ -134,6 +136,7 @@ function App() {
       <Route path="/settings/qr-attendance" element={<PrivateRoute><QrAttendanceSettings /></PrivateRoute>} />
       <Route path="/settings/payout-settings" element={<PrivateRoute><PayoutSettings /></PrivateRoute>} />
       <Route path="/settings/payout-wallet" element={<PrivateRoute><PayoutWalletSettings /></PrivateRoute>} />
+      <Route path="/settings/tally-integration" element={<PrivateRoute><TallySettings /></PrivateRoute>} />
       <Route path="/sales" element={<PrivateRoute><Sales /></PrivateRoute>} />
       <Route path="/org-reports" element={<PrivateRoute><OrgReports /></PrivateRoute>} />
       <Route path="/assets-management" element={<PrivateRoute><AssetsManagement /></PrivateRoute>} />
@@ -146,6 +149,7 @@ function App() {
       <Route path="/payroll/:cycleId" element={<PrivateRoute><PayrollCycle /></PrivateRoute>} />
       <Route path="/payroll/fnf" element={<PrivateRoute><FnFSettlementList /></PrivateRoute>} />
       <Route path="/payroll/fnf/process" element={<PrivateRoute><FnFSettlementProcess /></PrivateRoute>} />
+      <Route path="/payroll/payouts-history" element={<PrivateRoute><PayoutsHistory /></PrivateRoute>} />
       <Route path="/superadmin/plans" element={<PrivateRoute allowedRoles={['superadmin']}><SuperadminPlans /></PrivateRoute>} />
       <Route path="/superadmin/dashboard" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminDashboard /></PrivateRoute>} />
       <Route path="/superadmin/clients" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminClients /></PrivateRoute>} />

@@ -1014,6 +1014,7 @@ export default function Settings() {
       title: 'Integrations',
       items: [
         { key: 'manage-integrations', icon: <ApiOutlined />, label: 'Manage Integrations', desc: 'Connect to third-party applications and services' },
+        { key: 'tally-integration', icon: <ApiOutlined />, label: 'Tally Prime Integration', desc: 'Push salary payouts directly to Tally Prime', onClick: () => navigate('/settings/tally-integration') },
       ],
     },
   ], [brandName, bizState, bizCity, addr1, addr2, addrPin, logoUrl, accName, accPhone, accEmail, bankMasked, sidebarHeaderType, subscriptionInfo]);
