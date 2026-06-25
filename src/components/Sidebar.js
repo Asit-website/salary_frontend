@@ -18,7 +18,8 @@ import {
   MailOutlined,
   TeamOutlined,
   ShareAltOutlined,
-  ShopOutlined
+  ShopOutlined,
+  GiftOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { API_BASE_URL } from '../api';
@@ -332,10 +333,16 @@ const Sidebar = ({ collapsed }) => {
         label: 'Recruitment (ATS)',
         module: 'recruitment'
       },
-      {
+      /* {
         key: '/community-feed',
         icon: <ShareAltOutlined />,
         label: 'Community Feed',
+        module: 'social',
+      }, */
+      {
+        key: '/wishes',
+        icon: <GiftOutlined />,
+        label: 'Wishes',
         module: 'social',
       },
       {

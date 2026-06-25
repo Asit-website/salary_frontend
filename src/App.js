@@ -86,6 +86,7 @@ import PayoutSettings from './components/PayoutSettings';
 import PayoutWalletSettings from './components/PayoutWalletSettings';
 import PayoutsHistory from './components/PayoutsHistory';
 import TallySettings from './components/TallySettings';
+import Wishes from './components/Wishes';
 
 
 const { Content } = Layout;
@@ -182,6 +183,7 @@ function App() {
       <Route path="/task-management" element={<PrivateRoute><TaskManagement /></PrivateRoute>} />
       <Route path="/recruitment" element={<PrivateRoute><Recruitment /></PrivateRoute>} />
       <Route path="/community-feed" element={<PrivateRoute><CommunityFeed /></PrivateRoute>} />
+      <Route path="/wishes" element={<PrivateRoute><Wishes /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" />} />
     </Routes>
     </InactivityHandler>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Card, Button, Input, Switch, Select, Table, Typography, Space, Tag, Alert, message, Form, Row, Col, Spin, Divider, Collapse } from 'antd';
-import { ArrowLeftOutlined, SaveOutlined, ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, LinkOutlined } from '@ant-design/icons';
+import { Layout, Card, Button, Input, Switch, Select, Table, Typography, Space, Tag, Alert, message, Form, Row, Col, Spin, Divider, Collapse, Modal, Tabs } from 'antd';
+import { ArrowLeftOutlined, SaveOutlined, ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, LinkOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MainHeader from './MainHeader';
@@ -17,9 +17,34 @@ export default function TallySettings() {
   const [bridgeStatus, setBridgeStatus] = useState('checking'); // checking, connected, offline
   const [tallyStatus, setTallyStatus] = useState('checking'); // checking, connected, offline
 
+  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+
   const [form] = Form.useForm();
   const [includeEmployer, setIncludeEmployer] = useState(false);
   const [detectedHeads, setDetectedHeads] = useState([]);
+
+  const handleDownloadExe = () => {
+    setDownloadLoading(true);
+    api.get('/admin/tally/download-bridge', { responseType: 'blob' })
+      .then((response) => {
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'vetansutra-tally-bridge.exe');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        message.success('Tally Bridge Agent download started successfully!');
+      })
+      .catch((error) => {
+        console.error(error);
+        message.error('Failed to download bridge agent. Please make sure the backend server is running and files exist.');
+      })
+      .finally(() => {
+        setDownloadLoading(false);
+      });
+  };
 
   // Fetch Tally configuration and detected template heads
   const loadConfigAndHeads = async () => {
@@ -245,6 +270,108 @@ export default function TallySettings() {
     }
   ];
 
+  const downloadTabItems = [
+    {
+      key: '1',
+      label: <span style={{ fontSize: '14px', fontWeight: 600 }}>1. Download Bridge</span>,
+      children: (
+        <div style={{ padding: '16px 24px', minHeight: '300px' }}>
+          <Title level={4} style={{ color: '#1e293b', marginBottom: 10, fontSize: '18px' }}>Install Tally Bridge Agent</Title>
+          <Paragraph type="secondary" style={{ fontSize: '14px', marginBottom: 20 }}>
+            Download and run the Vetansutra Tally Bridge Agent to enable secure direct push functionality from this web browser to your local Tally Prime software.
+          </Paragraph>
+          
+          <div style={{ textAlign: 'center', margin: '24px 0' }}>
+            <Button 
+              type="primary" 
+              size="large" 
+              icon={<DownloadOutlined />} 
+              loading={downloadLoading}
+              onClick={handleDownloadExe}
+              style={{ 
+                height: '44px', 
+                padding: '0 28px', 
+                fontSize: '15px', 
+                borderRadius: '6px',
+                background: '#1677ff',
+                boxShadow: '0 4px 10px rgba(22,119,255,0.2)'
+              }}
+            >
+              Download Now (.exe)
+            </Button>
+            <div style={{ marginTop: 8 }}>
+              <Text type="secondary" style={{ fontSize: '11px' }}>
+                Compatible with Windows 10/11 (64-bit / 32-bit)
+              </Text>
+            </div>
+          </div>
+
+          <Divider style={{ margin: '16px 0' }} />
+          
+          <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+            <Text strong style={{ fontSize: '13px', color: '#334155', display: 'block', marginBottom: 8 }}>
+              Quick Installation Steps:
+            </Text>
+            <ol style={{ fontSize: '13px', color: '#475569', paddingLeft: '16px', margin: 0, lineHeight: '1.7' }}>
+              <li>Click the <b>Download Now</b> button above to save the <code>vetansutra-tally-bridge.exe</code> file.</li>
+              <li>Once downloaded, run the file to start the Tally Bridge Server.</li>
+              <li>Keep the command window open while transferring your payroll data.</li>
+            </ol>
+          </div>
+        </div>
+      )
+    },
+    {
+      key: '2',
+      label: <span style={{ fontSize: '14px', fontWeight: 600 }}>2. Tally Configuration</span>,
+      children: (
+        <div style={{ padding: '16px 24px', minHeight: '300px' }}>
+          <Title level={4} style={{ color: '#1e293b', marginBottom: 10, fontSize: '18px' }}>Configure Tally Prime Connectivity</Title>
+          <Paragraph type="secondary" style={{ fontSize: '14px', marginBottom: 20 }}>
+            Ensure Tally Prime is configured to accept external API/ODBC data connections.
+          </Paragraph>
+
+          <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+            <Text strong style={{ fontSize: '13px', color: '#334155', display: 'block', marginBottom: 10 }}>
+              Follow these connectivity settings in Tally Prime:
+            </Text>
+            <ul style={{ fontSize: '13px', color: '#475569', paddingLeft: '16px', margin: 0, lineHeight: '1.9' }}>
+              <li>Press <b>F1</b> (Help) &gt; <b>Settings</b> &gt; <b>Connectivity</b>.</li>
+              <li>Set <b>TallyPrime acts as</b> to <b>Both</b> or <b>Server</b>.</li>
+              <li>Set <b>Enable ODBC</b> to <b>Yes</b>.</li>
+              <li>Configure the port to <b>9000</b> (should match <b>Local Tally URL</b> in Settings).</li>
+              <li>Press <b>Ctrl+A</b> to save and restart Tally Prime.</li>
+            </ul>
+          </div>
+        </div>
+      )
+    },
+    {
+      key: '3',
+      label: <span style={{ fontSize: '14px', fontWeight: 600 }}>3. Sync Payroll Data</span>,
+      children: (
+        <div style={{ padding: '16px 24px', minHeight: '300px' }}>
+          <Title level={4} style={{ color: '#1e293b', marginBottom: 10, fontSize: '18px' }}>Sync Vouchers to Tally</Title>
+          <Paragraph type="secondary" style={{ fontSize: '14px', marginBottom: 20 }}>
+            Once the bridge is active, you are ready to export your vouchers with a single click.
+          </Paragraph>
+
+          <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+            <Text strong style={{ fontSize: '13px', color: '#334155', display: 'block', marginBottom: 10 }}>
+              Final steps to sync data:
+            </Text>
+            <ol style={{ fontSize: '13px', color: '#475569', paddingLeft: '16px', margin: 0, lineHeight: '1.9' }}>
+              <li>Open the target company in Tally Prime.</li>
+              <li>Ensure the company name matches exactly in the <b>Tally Company Name</b> settings field.</li>
+              <li>Ensure all ledger names are mapped properly on the right panel.</li>
+              <li>Go to the **Payroll** cycle page and click **Push to Tally** to instantly sync all salary journals.</li>
+            </ol>
+          </div>
+        </div>
+      )
+    }
+  ];
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} onCollapse={setCollapsed} />
@@ -321,17 +448,20 @@ export default function TallySettings() {
                       <Input placeholder="Salary for {month} {year}" />
                     </Form.Item>
 
-                    <Collapse ghost style={{ marginTop: 16 }}>
+                    <Collapse ghost style={{ marginTop: 16 }} defaultActiveKey="bridge">
                       <Collapse.Panel header="Advanced / Local Bridge Agent Settings" key="bridge">
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, alignItems: 'center' }}>
                           <Text>Bridge Agent Status:</Text>
-                          {bridgeStatus === 'connected' ? (
-                            <Tag color="green" icon={<CheckCircleOutlined />}>Connected (Port 7000)</Tag>
-                          ) : bridgeStatus === 'checking' ? (
-                            <Tag color="blue">Checking...</Tag>
-                          ) : (
-                            <Tag color="red" icon={<CloseCircleOutlined />}>Offline</Tag>
-                          )}
+                          <Space>
+                            {bridgeStatus === 'connected' ? (
+                              <Tag color="green" icon={<CheckCircleOutlined />}>Connected (Port 7000)</Tag>
+                            ) : bridgeStatus === 'checking' ? (
+                              <Tag color="blue">Checking...</Tag>
+                            ) : (
+                              <Tag color="red" icon={<CloseCircleOutlined />}>Offline</Tag>
+                            )}
+                            <Button size="small" type="link" onClick={() => setDownloadModalVisible(true)}>Setup & Download</Button>
+                          </Space>
                         </div>
 
                         <Form.Item
@@ -347,7 +477,11 @@ export default function TallySettings() {
                             <div style={{ fontSize: '11px' }}>
                               Running the <b>Tally Bridge Agent</b> locally on your computer ensures a reliable connection to Tally Prime and lets you see full error messages if a voucher import fails.
                               <br />
-                              💡 To start it easily, open the <code>tally_bridge_agent</code> folder inside your backend directory and run <b><code>start_tally_bridge.bat</code></b> or execute the compiled binary.
+                              <div style={{ marginTop: 8 }}>
+                                <Button type="primary" size="small" icon={<DownloadOutlined />} onClick={() => setDownloadModalVisible(true)}>
+                                  Setup & Download Bridge Agent
+                                </Button>
+                              </div>
                             </div>
                           }
                           type="info"
@@ -417,6 +551,33 @@ export default function TallySettings() {
               </Row>
             </Form>
           )}
+          {/* Download and Setup Tally Bridge Modal */}
+          <Modal
+            title={
+              <div style={{ padding: '12px 0', borderBottom: '1px solid #f0f2f5', textAlign: 'center' }}>
+                <Title level={4} style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>
+                  Follow these three steps to setup Tally integration with Vetansutra
+                </Title>
+              </div>
+            }
+            open={downloadModalVisible}
+            onCancel={() => setDownloadModalVisible(false)}
+            footer={null}
+            width={900}
+            bodyStyle={{ padding: 0 }}
+            style={{ top: 80 }}
+            destroyOnClose
+          >
+            <div style={{ display: 'flex', minHeight: '380px' }}>
+              <Tabs
+                tabPosition="left"
+                defaultActiveKey="1"
+                items={downloadTabItems}
+                style={{ width: '100%' }}
+                className="tally-download-tabs"
+              />
+            </div>
+          </Modal>
 
         </Content>
       </Layout>
