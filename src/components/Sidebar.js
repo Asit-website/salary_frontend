@@ -143,6 +143,7 @@ const Sidebar = ({ collapsed }) => {
       dashboard: 'dashboard_tab',
       staff: 'staff_management_tab',
       attendance: 'attendance_tab',
+      leave: 'leave_tab',
       payroll: 'payroll_tab',
       loans: 'loans_tab',
       sales: 'sales_tab',
@@ -373,6 +374,11 @@ const Sidebar = ({ collapsed }) => {
       key: '/superadmin/dashboard',
       icon: <DashboardOutlined />,
       label: 'Dashboard',
+    },
+    {
+      key: '/superadmin/holidays',
+      icon: <CalendarOutlined />,
+      label: 'Master Holidays',
     },
     {
       key: '/superadmin/channel-partners',

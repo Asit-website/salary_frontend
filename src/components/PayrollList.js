@@ -1670,17 +1670,41 @@ const PayrollList = () => {
                     const extra = (normalizedAtt.multiplierBreakdown || [])
                       .filter(b => b.type === 'Weekly Off')
                       .reduce((sum, b) => sum + Number(b.addedUnits || 0), 0);
-                    if (extra > 0) {
-                      return (
-                        <Space size={4}>
-                          <Text>{val}</Text>
+                    const excludedDates = normalizedAtt.excludedWeeklyOffDates || [];
+                    return (
+                      <Space size={4}>
+                        <Text>{val}</Text>
+                        {extra > 0 && (
                           <Tooltip title={`${(val - extra).toFixed(2)} Base + ${extra.toFixed(2)} Extra Credit`}>
                             <InfoCircleOutlined style={{ color: '#1677ff', cursor: 'help' }} />
                           </Tooltip>
-                        </Space>
-                      );
-                    }
-                    return val;
+                        )}
+                        {excludedDates.length > 0 && (
+                          <Popover
+                            title={<span style={{ color: '#cf1322', fontWeight: 'bold' }}>Excluded Weekly Off Details</span>}
+                            content={
+                              <div style={{ maxWidth: 280 }}>
+                                <p style={{ margin: '0 0 8px 0', fontSize: '13px' }}>
+                                  Weekly off excluded because the weekly absence limit was exceeded:
+                                </p>
+                                <div>
+                                  {excludedDates.map(date => (
+                                    <Tag key={date} color="error" style={{ marginBottom: 4 }}>
+                                      {moment(date).format('DD MMM YYYY')}
+                                    </Tag>
+                                  ))}
+                                </div>
+                              </div>
+                            }
+                            trigger="click"
+                          >
+                            <Text type="danger" style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', marginLeft: 4 }}>
+                              (-{excludedDates.length} Excluded)
+                            </Text>
+                          </Popover>
+                        )}
+                      </Space>
+                    );
                   })()}
                 </Descriptions.Item>
                 <Descriptions.Item label="Holiday">

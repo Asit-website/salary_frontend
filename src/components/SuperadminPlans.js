@@ -63,6 +63,7 @@ export default function SuperadminPlans() {
       esiAsTaEnabled: rec.features?.esiAsTaEnabled !== undefined ? !!rec.features.esiAsTaEnabled : false,
       rmoEnabled: rec.features?.rmoEnabled !== undefined ? !!rec.features.rmoEnabled : false,
       pfSettingsEnabled: rec.features?.pfSettingsEnabled !== undefined ? !!rec.features.pfSettingsEnabled : false,
+      weeklyOffDeductionEnabled: rec.features?.weeklyOffDeductionEnabled !== undefined ? !!rec.features.weeklyOffDeductionEnabled : false,
       attendanceLocationEnabled: rec.attendanceLocationEnabled !== undefined ? !!rec.attendanceLocationEnabled : false,
       active: rec.active,
     });
@@ -231,6 +232,11 @@ export default function SuperadminPlans() {
             </Col>
             <Col span={8}>
               <Form.Item label="Enable ESI as TA Mapping" name="esiAsTaEnabled" valuePropName="checked" initialValue={false}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Enable Weekly Off Deduction Rule" name="weeklyOffDeductionEnabled" valuePropName="checked" initialValue={false}>
                 <Switch />
               </Form.Item>
             </Col>

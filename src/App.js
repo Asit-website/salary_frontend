@@ -27,6 +27,7 @@ import EsiAsTaSettings from './components/EsiAsTaSettings';
 import ProvidentFundSettings from './components/ProvidentFundSettings';
 import NoAbsentPaySettings from './components/NoAbsentPaySettings';
 import WoHolidayAsOtSettings from './components/WoHolidayAsOtSettings';
+import WeeklyOffDeduction from './components/WeeklyOffDeduction';
 import GeofenceSettings from './components/GeofenceSettings';
 import RmoSettings from './components/RmoSettings';
 import Sales from './components/Sales';
@@ -79,6 +80,7 @@ import Recruitment from './components/Recruitment';
 import CommunityFeed from './components/CommunityFeed';
 import SuperadminLeads from './components/SuperadminLeads';
 import SuperadminStaff from './components/SuperadminStaff';
+import SuperadminHolidays from './components/SuperadminHolidays';
 import QrAttendanceSettings from './components/QrAttendanceSettings';
 import InactivityHandler from './components/InactivityHandler';
 import SessionSettings from './components/SessionSettings';
@@ -132,6 +134,7 @@ function App() {
       <Route path="/settings/provident-fund" element={<PrivateRoute><ProvidentFundSettings /></PrivateRoute>} />
       <Route path="/settings/no-absent-pay" element={<PrivateRoute><NoAbsentPaySettings /></PrivateRoute>} />
       <Route path="/settings/wo-holiday-as-ot" element={<PrivateRoute><WoHolidayAsOtSettings /></PrivateRoute>} />
+      <Route path="/settings/weekly-off-deduction" element={<PrivateRoute><WeeklyOffDeduction /></PrivateRoute>} />
       <Route path="/settings/rmo" element={<PrivateRoute><RmoSettings /></PrivateRoute>} />
       <Route path="/settings/geofence" element={<PrivateRoute><GeofenceSettings /></PrivateRoute>} />
       <Route path="/settings/qr-attendance" element={<PrivateRoute><QrAttendanceSettings /></PrivateRoute>} />
@@ -159,6 +162,7 @@ function App() {
       <Route path="/superadmin/mailing/report/:id" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminMailReport /></PrivateRoute>} />
       <Route path="/superadmin/leads" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminLeads /></PrivateRoute>} />
       <Route path="/superadmin/staff" element={<PrivateRoute allowedRoles={['superadmin']}><SuperadminStaff /></PrivateRoute>} />
+      <Route path="/superadmin/holidays" element={<PrivateRoute allowedRoles={['superadmin', 'superadmin_staff']}><SuperadminHolidays /></PrivateRoute>} />
 
       <Route path="/partner/clients" element={<PrivateRoute><ChannelPartnerClients /></PrivateRoute>} />
       <Route path="/roles-permissions" element={<PrivateRoute><RolesPermissions /></PrivateRoute>} />

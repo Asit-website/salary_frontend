@@ -159,6 +159,18 @@ export default function SuperadminClients() {
       }
       return !!planFeatures?.esiAsTaEnabled;
     })();
+    const weeklyOffDeductionEnabled = (() => {
+      let meta = {};
+      if (sub.meta) {
+        try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+        if (meta?.weeklyOffDeductionEnabled !== undefined) return !!meta.weeklyOffDeductionEnabled;
+      }
+      let planFeatures = {};
+      if (plan?.features) {
+        try { planFeatures = typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features; } catch(e) {}
+      }
+      return !!planFeatures?.weeklyOffDeductionEnabled;
+    })();
     const rmoEnabled = (() => {
       let meta = {};
       if (sub.meta) {
@@ -205,6 +217,7 @@ export default function SuperadminClients() {
       otImpactEnabled,
       latePenaltyEnabled,
       esiAsTaEnabled,
+      weeklyOffDeductionEnabled,
       rmoEnabled,
       pfSettingsEnabled,
       attendanceLocationEnabled: sub.attendanceLocationEnabled !== null ? sub.attendanceLocationEnabled : (plan.attendanceLocationEnabled || false),
@@ -252,6 +265,7 @@ export default function SuperadminClients() {
         otImpactEnabled: !!values.otImpactEnabled,
         latePenaltyEnabled: !!values.latePenaltyEnabled,
         esiAsTaEnabled: !!values.esiAsTaEnabled,
+        weeklyOffDeductionEnabled: !!values.weeklyOffDeductionEnabled,
         rmoEnabled: !!values.rmoEnabled,
         pfSettingsEnabled: !!values.pfSettingsEnabled,
         attendanceLocationEnabled: !!values.attendanceLocationEnabled,
@@ -412,6 +426,18 @@ export default function SuperadminClients() {
         }
         return !!planFeatures?.esiAsTaEnabled;
       })(),
+      weeklyOffDeductionEnabled: (() => {
+        let meta = {};
+        if (sub.meta) {
+          try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+          if (meta?.weeklyOffDeductionEnabled !== undefined) return !!meta.weeklyOffDeductionEnabled;
+        }
+        let planFeatures = {};
+        if (resolvedPlan?.features) {
+          try { planFeatures = typeof resolvedPlan.features === 'string' ? JSON.parse(resolvedPlan.features) : resolvedPlan.features; } catch(e) {}
+        }
+        return !!planFeatures?.weeklyOffDeductionEnabled;
+      })(),
       rmoEnabled: (() => {
         let meta = {};
         if (sub.meta) {
@@ -491,6 +517,18 @@ export default function SuperadminClients() {
         }
         return !!planFeatures?.esiAsTaEnabled;
       })(),
+      weeklyOffDeductionEnabled: (() => {
+        let meta = {};
+        if (sub.meta) {
+          try { meta = typeof sub.meta === 'string' ? JSON.parse(sub.meta) : sub.meta; } catch(e) {}
+          if (meta?.weeklyOffDeductionEnabled !== undefined) return !!meta.weeklyOffDeductionEnabled;
+        }
+        let planFeatures = {};
+        if (plan?.features) {
+          try { planFeatures = typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features; } catch(e) {}
+        }
+        return !!planFeatures?.weeklyOffDeductionEnabled;
+      })(),
       rmoEnabled: (() => {
         let meta = {};
         if (sub.meta) {
@@ -552,6 +590,7 @@ export default function SuperadminClients() {
         latePenaltyEnabled: plan.latePenaltyEnabled !== undefined ? !!plan.latePenaltyEnabled : true,
         attendanceLocationEnabled: plan.attendanceLocationEnabled !== undefined ? !!plan.attendanceLocationEnabled : false,
         esiAsTaEnabled: !!planFeatures.esiAsTaEnabled,
+        weeklyOffDeductionEnabled: !!planFeatures.weeklyOffDeductionEnabled,
         rmoEnabled: !!planFeatures.rmoEnabled,
         pfSettingsEnabled: !!planFeatures.pfSettingsEnabled,
       });
@@ -594,6 +633,7 @@ export default function SuperadminClients() {
         otImpactEnabled: !!values.otImpactEnabled,
         latePenaltyEnabled: !!values.latePenaltyEnabled,
         esiAsTaEnabled: !!values.esiAsTaEnabled,
+        weeklyOffDeductionEnabled: !!values.weeklyOffDeductionEnabled,
         rmoEnabled: !!values.rmoEnabled,
         pfSettingsEnabled: !!values.pfSettingsEnabled,
         attendanceLocationEnabled: !!values.attendanceLocationEnabled,
@@ -981,6 +1021,11 @@ export default function SuperadminClients() {
                   </Form.Item>
                 </Col>
                 <Col span={8}>
+                  <Form.Item name="weeklyOffDeductionEnabled" valuePropName="checked">
+                    <Checkbox>Enable Weekly Off Deduction Rule</Checkbox>
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
                   <Form.Item name="rmoEnabled" valuePropName="checked">
                     <Checkbox>Enable RMO Configuration</Checkbox>
                   </Form.Item>
@@ -1213,6 +1258,11 @@ export default function SuperadminClients() {
             <Col span={8}>
               <Form.Item name="esiAsTaEnabled" valuePropName="checked">
                 <Checkbox>Enable ESI as TA Mapping</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="weeklyOffDeductionEnabled" valuePropName="checked">
+                <Checkbox>Enable Weekly Off Deduction Rule</Checkbox>
               </Form.Item>
             </Col>
             <Col span={8}>

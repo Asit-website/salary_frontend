@@ -45,7 +45,8 @@ import {
   KeyOutlined,
   SearchOutlined,
   SwapOutlined,
-  CheckCircleOutlined
+  CheckCircleOutlined,
+  StopOutlined
 } from '@ant-design/icons';
 import Sidebar from './Sidebar';
 import MainHeader from './MainHeader';
@@ -926,6 +927,9 @@ export default function Settings() {
         ] : []),
         { key: 'no-absent-pay', icon: <CheckCircleOutlined />, label: 'No Absent Pay Settings', desc: 'Configure perfect attendance pay for staff', onClick: () => navigate('/settings/no-absent-pay') },
         { key: 'wo-holiday-as-ot', icon: <ThunderboltOutlined />, label: 'Weekly Off & Holiday Work as OT', desc: 'Pay weekly off/holiday work hours as Overtime', onClick: () => navigate('/settings/wo-holiday-as-ot') },
+        ...(subscriptionInfo?.weeklyOffDeductionEnabled ? [
+          { key: 'weekly-off-deduction', icon: <StopOutlined />, label: 'Weekly Off Deduction Rules', desc: 'Configure weekly off deductions based on absents', onClick: () => navigate('/settings/weekly-off-deduction') }
+        ] : []),
         ...(subscriptionInfo?.rmoEnabled ? [
           { key: 'rmo-settings', icon: <SwapOutlined />, label: 'RMO Configuration', desc: 'Configure RMO staff mapping and monthly target hours', onClick: () => navigate('/settings/rmo') }
         ] : []),

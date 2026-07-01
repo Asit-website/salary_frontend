@@ -35,7 +35,7 @@ const TemplateCard = ({ tpl, onEdit, onAssign }) => {
           <div>
             <div style={{ fontWeight: '700', fontSize: '15px', color: '#1e293b', textTransform: 'capitalize' }}>{tpl.name}</div>
             <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px', fontWeight: '500' }}>
-              Active Period: {MONTHS[tpl.startMonth - 1] || 'Jan'} - {MONTHS[tpl.endMonth - 1] || 'Dec'}
+              Active Period: {MONTHS[tpl.startMonth - 1] || 'Jan'} - {MONTHS[tpl.endMonth - 1] || 'Dec'} {tpl.financialYear ? `(${tpl.financialYear})` : ''}
             </div>
           </div>
           <Space size={6}>
@@ -118,6 +118,11 @@ export default function HolidayTemplates(){
   const [effectiveFrom, setEffectiveFrom] = useState(null);
   const [effectiveTo, setEffectiveTo] = useState(null);
 
+  const [masterHolidays, setMasterHolidays] = useState([]);
+  const [masterModalOpen, setMasterModalOpen] = useState(false);
+  const [selectedMasterHolidays, setSelectedMasterHolidays] = useState([]);
+  const [loadingMaster, setLoadingMaster] = useState(false);
+
   const [assignedListOpen, setAssignedListOpen] = useState(false);
   const [assignedListTpl, setAssignedListTpl] = useState(null);
   const [assignedListRows, setAssignedListRows] = useState([]);
@@ -135,6 +140,61 @@ export default function HolidayTemplates(){
     } finally { setLoading(false); }
   };
 
+  const handleFinancialYearChange = async (date) => {
+    if (!date) {
+      setMasterHolidays([]);
+      return;
+    }
+    const year = date.year();
+    const nextYearShort = (year + 1) % 100;
+    const nextYearStr = nextYearShort < 10 ? `0${nextYearShort}` : `${nextYearShort}`;
+    const fy = `${year}-${nextYearStr}`;
+
+    form.setFieldsValue({ startMonth: 4, endMonth: 3 });
+    fetchMasterHolidays(fy);
+  };
+
+  const fetchMasterHolidays = async (fy) => {
+    setLoadingMaster(true);
+    try {
+      const res = await api.get('/admin/holidays/master', { params: { financialYear: fy } });
+      if (res.data.success) {
+        setMasterHolidays(res.data.holidays || []);
+        setSelectedMasterHolidays(res.data.holidays || []);
+      } else {
+        setMasterHolidays([]);
+      }
+    } catch (e) {
+      message.error('Failed to load master holidays');
+      setMasterHolidays([]);
+    } finally {
+      setLoadingMaster(false);
+    }
+  };
+
+  const importMasterHolidays = () => {
+    const currentHols = form.getFieldValue('holidays') || [];
+    const imported = selectedMasterHolidays.map(h => ({
+      name: h.name,
+      date: dayjs(h.date),
+      active: true
+    }));
+
+    const merged = [...currentHols];
+    imported.forEach(imp => {
+      const exists = merged.some(existing => 
+        existing && existing.date && existing.date.format('YYYY-MM-DD') === imp.date.format('YYYY-MM-DD')
+      );
+      if (!exists) {
+        merged.push(imp);
+      }
+    });
+
+    form.setFieldsValue({ holidays: merged });
+    setMasterModalOpen(false);
+    message.success(`${imported.length} holidays imported`);
+  };
+
   useEffect(() => { load(); }, []);
 
   const filteredList = useMemo(() => {
@@ -148,32 +208,58 @@ export default function HolidayTemplates(){
     form.resetFields();
     form.setFieldsValue({
       name: '',
+      financialYear: null,
       startMonth: null,
       endMonth: null,
       active: true,
       holidays: [],
     });
+    setMasterHolidays([]);
     setOpen(true);
   };
 
   const openEdit = (tpl) => {
     setEditing(tpl);
     form.resetFields();
+    let fyDayjs = null;
+    if (tpl.financialYear) {
+      const parts = tpl.financialYear.split('-');
+      const startYear = parseInt(parts[0], 10);
+      if (!isNaN(startYear)) {
+        fyDayjs = dayjs().year(startYear);
+      }
+    }
+
     form.setFieldsValue({
       name: tpl.name,
+      financialYear: fyDayjs,
       startMonth: tpl.startMonth || null,
       endMonth: tpl.endMonth || null,
       active: tpl.active !== false,
       holidays: (tpl.holidays || []).map(h => ({ name: h.name, date: dayjs(h.date), active: h.active !== false })),
     });
+    if (tpl.financialYear) {
+      fetchMasterHolidays(tpl.financialYear);
+    } else {
+      setMasterHolidays([]);
+    }
     setOpen(true);
   };
 
   const save = async () => {
     try {
       const v = await form.validateFields();
+      let fyStr = null;
+      if (v.financialYear) {
+        const year = v.financialYear.year();
+        const nextYearShort = (year + 1) % 100;
+        const nextYearStr = nextYearShort < 10 ? `0${nextYearShort}` : `${nextYearShort}`;
+        fyStr = `${year}-${nextYearStr}`;
+      }
+
       const payload = {
         name: v.name,
+        financialYear: fyStr,
         startMonth: v.startMonth || null,
         endMonth: v.endMonth || null,
         active: v.active !== false,
@@ -331,6 +417,21 @@ export default function HolidayTemplates(){
               <Form.Item name="name" label={<span style={{ fontWeight: '600', color: '#475569' }}>Template Name</span>} rules={[{ required: true, message: 'Template name is required' }]}> 
                 <Input placeholder="Template Name" style={{ borderRadius: '8px' }} />
               </Form.Item>
+              <Form.Item name="financialYear" label={<span style={{ fontWeight: '600', color: '#475569' }}>Financial Year</span>}>
+                <DatePicker 
+                  picker="year" 
+                  placeholder="Select Financial Year" 
+                  style={{ width: '100%', borderRadius: '8px' }} 
+                  format={(value) => {
+                    if (!value) return '';
+                    const year = value.year();
+                    const nextYearShort = (year + 1) % 100;
+                    const nextYearStr = nextYearShort < 10 ? `0${nextYearShort}` : `${nextYearShort}`;
+                    return `${year}-${nextYearStr}`;
+                  }}
+                  onChange={handleFinancialYearChange}
+                />
+              </Form.Item>
               <Row gutter={12}>
                 <Col span={12}>
                   <Form.Item name="startMonth" label={<span style={{ fontWeight: '600', color: '#475569' }}>Start Month</span>}>
@@ -347,7 +448,26 @@ export default function HolidayTemplates(){
                 <Select options={[{ value:true, label:'Active' }, { value:false, label:'Inactive' }]} style={{ borderRadius: '8px' }} />
               </Form.Item>
 
-              <Divider orientation="left" plain><span style={{ fontWeight: '600', color: '#475569' }}>Holidays List</span></Divider>
+              <Form.Item shouldUpdate={(prevValues, currentValues) => prevValues.financialYear !== currentValues.financialYear} style={{ marginBottom: 12 }}>
+                {() => {
+                  const fy = form.getFieldValue('financialYear');
+                  return (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                      <span style={{ fontWeight: '700', color: '#475569' }}>Holidays List</span>
+                      {fy && masterHolidays.length > 0 && (
+                        <Button 
+                          type="primary" 
+                          size="small" 
+                          onClick={() => setMasterModalOpen(true)}
+                          shape="round"
+                        >
+                          Import Master Holidays ({masterHolidays.length})
+                        </Button>
+                      )}
+                    </div>
+                  );
+                }}
+              </Form.Item>
               <Form.Item shouldUpdate style={{ marginBottom: 0 }}>
                 <Form.List name="holidays">
                   {(fields, { add, remove }) => (
@@ -360,8 +480,26 @@ export default function HolidayTemplates(){
                             </Form.Item>
                           </Col>
                           <Col span={11}>
-                            <Form.Item {...rest} name={[name, 'date']} rules={[{ required: true, message: 'Date required' }]} style={{ marginBottom: 0 }}>
-                              <DatePicker style={{ width:'100%', borderRadius: '8px' }} />
+                            <Form.Item shouldUpdate={(prev, curr) => prev.financialYear !== curr.financialYear} style={{ marginBottom: 0 }}>
+                              {() => {
+                                const fyValue = form.getFieldValue('financialYear');
+                                const defaultVal = fyValue ? dayjs().year(fyValue.year()).month(3).date(1) : undefined;
+                                return (
+                                  <Form.Item {...rest} name={[name, 'date']} rules={[{ required: true, message: 'Date required' }]} style={{ marginBottom: 0 }}>
+                                    <DatePicker 
+                                      style={{ width: '100%', borderRadius: '8px' }} 
+                                      defaultPickerValue={defaultVal}
+                                      disabledDate={(current) => {
+                                        if (!current || !fyValue) return false;
+                                        const year = fyValue.year();
+                                        const startDate = dayjs().year(year).month(3).date(1).startOf('day');
+                                        const endDate = dayjs().year(year + 1).month(2).date(31).endOf('day');
+                                        return current.isBefore(startDate) || current.isAfter(endDate);
+                                      }}
+                                    />
+                                  </Form.Item>
+                                );
+                              }}
                             </Form.Item>
                           </Col>
                           <Col span={2} style={{ display: 'flex', justifyContent: 'flex-end', height: '32px', alignItems: 'center' }}>
@@ -530,6 +668,84 @@ export default function HolidayTemplates(){
                 },
               ]}
             />
+          </div>
+        </Modal>
+
+        {/* Master Holidays Select Sub-Modal */}
+        <Modal
+          title={<span style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>Select Master Holidays to Import</span>}
+          open={masterModalOpen}
+          onCancel={() => setMasterModalOpen(false)}
+          onOk={importMasterHolidays}
+          okText="Import Selected"
+          cancelButtonProps={{ shape: 'round' }}
+          okButtonProps={{ shape: 'round' }}
+          width={500}
+        >
+          <div style={{ paddingTop: '12px', maxHeight: '400px', overflowY: 'auto' }}>
+            {loadingMaster ? (
+              <div style={{ textAlign: 'center', padding: '24px' }}>
+                <Typography.Text>Loading master holidays...</Typography.Text>
+              </div>
+            ) : masterHolidays.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px' }}>
+                <Typography.Text type="secondary">No master holidays found for this financial year.</Typography.Text>
+              </div>
+            ) : (
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                  <Button 
+                    type="link" 
+                    size="small" 
+                    onClick={() => {
+                      if (selectedMasterHolidays.length === masterHolidays.length) {
+                        setSelectedMasterHolidays([]);
+                      } else {
+                        setSelectedMasterHolidays([...masterHolidays]);
+                      }
+                    }}
+                    style={{ fontWeight: '600' }}
+                  >
+                    {selectedMasterHolidays.length === masterHolidays.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                </div>
+                {masterHolidays.map((h, idx) => {
+                  const isChecked = selectedMasterHolidays.some(sh => sh.name === h.name && sh.date === h.date);
+                  return (
+                    <div 
+                      key={idx} 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between', 
+                        padding: '8px 12px', 
+                        background: '#f8fafc', 
+                        borderRadius: '8px', 
+                        border: '1px solid #e2e8f0',
+                        marginBottom: 6
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: '600', color: '#334155' }}>{h.name}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>{dayjs(h.date).format('DD MMMM YYYY')}</div>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked}
+                        style={{ width: 18, height: 18, cursor: 'pointer' }}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedMasterHolidays([...selectedMasterHolidays, h]);
+                          } else {
+                            setSelectedMasterHolidays(selectedMasterHolidays.filter(sh => !(sh.name === h.name && sh.date === h.date)));
+                          }
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </Space>
+            )}
           </div>
         </Modal>
       </Layout>
