@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Form, Input, Select, Button, message, Space, Typography, Row, Col, Switch, Steps, DatePicker, InputNumber, Upload } from 'antd';
+import { Layout, Card, Form, Input, Select, Button, message, Space, Typography, Row, Col, Switch, Steps, DatePicker, InputNumber, Upload, Checkbox } from 'antd';
 import dayjs from 'dayjs';
 import {
   UserOutlined,
@@ -773,7 +773,8 @@ const AddRegularStaff = () => {
         salaryValues,
         photoUrl,
         education: allValues.education || [],
-        experience: allValues.experience || []
+        experience: allValues.experience || [],
+        sendOfferLetter: !!allValues.sendOfferLetter
       };
 
       const response = isEditing
@@ -964,7 +965,7 @@ const AddRegularStaff = () => {
                         <Input placeholder="Enter staff ID" style={{ height: '40px' }} />
                       </Form.Item>
                     </Col>
-                    <Col span={12}>
+                    {/* <Col span={12}>
                       <Form.Item
                         name="attendanceSettingTemplate"
                         label="Attendance Setting Template"
@@ -977,7 +978,7 @@ const AddRegularStaff = () => {
                           ))}
                         </Select>
                       </Form.Item>
-                    </Col>
+                    </Col> */}
                     <Col span={12}>
                       <Form.Item
                         name="department"
@@ -1069,7 +1070,7 @@ const AddRegularStaff = () => {
                         </Select>
                       </Form.Item>
                     </Col>
-                    <Col span={12}>
+                    {/* <Col span={12}>
                       <Form.Item
                         label="Opening Balance"
                       >
@@ -1110,7 +1111,7 @@ const AddRegularStaff = () => {
                       >
                         <Switch checkedChildren="Yes" unCheckedChildren="No" />
                       </Form.Item>
-                    </Col>
+                    </Col> */}
                   </Row>
                 </Card>
               </Col>
@@ -1569,6 +1570,28 @@ const AddRegularStaff = () => {
                 )}
               </Form.List>
             </Card>
+            {!isEditing && (
+              <Form.Item name="sendOfferLetter" valuePropName="checked" style={{ marginTop: 24 }}>
+                <Checkbox onChange={async (e) => {
+                  if (e.target.checked) {
+                    try {
+                      const resp = await api.get('/admin/letters/templates');
+                      const templates = resp.data?.templates || [];
+                      const offerTemplate = templates.find(t => (t.title || '').toLowerCase().includes('offer'));
+                      if (!offerTemplate) {
+                        message.error('No offer letter created. Please create offer letter first.');
+                        form.setFieldsValue({ sendOfferLetter: false });
+                      }
+                    } catch (err) {
+                      message.error('Failed to verify offer letter templates');
+                      form.setFieldsValue({ sendOfferLetter: false });
+                    }
+                  }
+                }}>
+                  Send Offer Letter to Employee on creation
+                </Checkbox>
+              </Form.Item>
+            )}
           </>
         );
       default:

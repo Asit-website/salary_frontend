@@ -179,6 +179,7 @@ export default function LeaveTemplates(){
         carryLimitDays: c.carryLimitDays == null ? null : Number(c.carryLimitDays),
         encashLimitDays: c.encashLimitDays == null ? null : Number(c.encashLimitDays),
         carryForward: c.carryForward === true || c.carryForward === 1 || c.carry_forward === true || c.carry_forward === 1,
+        maxLeavePerMonth: c.maxLeavePerMonth == null ? null : Number(c.maxLeavePerMonth),
       })),
     });
     setOpen(true);
@@ -201,6 +202,7 @@ export default function LeaveTemplates(){
           carryLimitDays: c.carryLimitDays == null ? null : Number(c.carryLimitDays),
           encashLimitDays: c.encashLimitDays == null ? null : Number(c.encashLimitDays),
           carryForward: !!c.carryForward,
+          maxLeavePerMonth: c.maxLeavePerMonth == null || c.maxLeavePerMonth === "" ? null : Number(c.maxLeavePerMonth),
         })),
         cycleStartDate: v.cycleStartDate ? v.cycleStartDate.format('YYYY-MM-DD') : null,
         cycleStartDay: v.cycleStartDay,
@@ -404,30 +406,40 @@ export default function LeaveTemplates(){
               <Divider orientation="left" plain><span style={{ fontWeight: '600', color: '#475569' }}>Leave Categories</span></Divider>
               <Form.Item shouldUpdate style={{ marginBottom: 0 }}>
                 <Form.List name="categories">
-                  {(fields, { add, remove }) => (
-                    <>
-                      {fields.map(({ key, name, ...rest }) => (
-                        <Card key={key} size="small" style={{ marginBottom: 12, borderRadius: '10px', border: '1px solid #e2e8f0', background: '#f8fafc' }} bodyStyle={{ padding: '16px' }}>
-                          <Row gutter={12} style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                            <Col span={8}>
-                              <Form.Item {...rest} name={[name, 'name']} label={<span style={{ fontSize: '11px', color: '#64748b' }}>Name</span>} rules={[{ required: true, message: 'Name is required' }]} style={{ marginBottom: 0 }}>
-                                <Input placeholder="Casual Leave" style={{ borderRadius: '8px' }} />
-                              </Form.Item>
-                            </Col>
-                            <Col span={6}>
-                              <Form.Item {...rest} name={[name, 'key']} label={<span style={{ fontSize: '11px', color: '#64748b' }}>Key</span>} style={{ marginBottom: 0 }}> 
-                                <Input placeholder="CL" style={{ borderRadius: '8px' }} />
-                              </Form.Item>
-                            </Col>
-                            <Col span={6}>
-                              <Form.Item {...rest} name={[name, 'leaveCount']} label={<span style={{ fontSize: '11px', color: '#64748b' }}>Leave Count</span>} rules={[{ required: true, message: 'Required' }]} style={{ marginBottom: 0 }}> 
-                                <InputNumber min={0} step={0.5} style={{ width:'100%', borderRadius: '8px' }} />
-                              </Form.Item>
-                            </Col>
-                            <Col span={2} style={{ display:'flex', justifyContent: 'flex-end', height: '32px', alignItems: 'center', marginTop: '16px' }}>
-                              <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
-                            </Col>
-                          </Row>
+                  {(fields, { add, remove }) => {
+                    const cycle = form.getFieldValue('cycle');
+                    const showMaxLeavePerMonth = cycle === 'yearly' || cycle === 'quarterly';
+                    return (
+                      <>
+                        {fields.map(({ key, name, ...rest }) => (
+                          <Card key={key} size="small" style={{ marginBottom: 12, borderRadius: '10px', border: '1px solid #e2e8f0', background: '#f8fafc' }} bodyStyle={{ padding: '16px' }}>
+                            <Row gutter={12} style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                              <Col span={showMaxLeavePerMonth ? 6 : 8}>
+                                <Form.Item {...rest} name={[name, 'name']} label={<span style={{ fontSize: '11px', color: '#64748b' }}>Name</span>} rules={[{ required: true, message: 'Name is required' }]} style={{ marginBottom: 0 }}>
+                                  <Input placeholder="Casual Leave" style={{ borderRadius: '8px' }} />
+                                </Form.Item>
+                              </Col>
+                              <Col span={showMaxLeavePerMonth ? 4 : 7}>
+                                <Form.Item {...rest} name={[name, 'key']} label={<span style={{ fontSize: '11px', color: '#64748b' }}>Key</span>} style={{ marginBottom: 0 }}> 
+                                  <Input placeholder="CL" style={{ borderRadius: '8px' }} />
+                                </Form.Item>
+                              </Col>
+                              <Col span={showMaxLeavePerMonth ? 6 : 7}>
+                                <Form.Item {...rest} name={[name, 'leaveCount']} label={<span style={{ fontSize: '11px', color: '#64748b' }}>Leave Count</span>} rules={[{ required: true, message: 'Required' }]} style={{ marginBottom: 0 }}> 
+                                  <InputNumber min={0} step={0.5} style={{ width:'100%', borderRadius: '8px' }} />
+                                </Form.Item>
+                              </Col>
+                              {showMaxLeavePerMonth && (
+                                <Col span={6}>
+                                  <Form.Item {...rest} name={[name, 'maxLeavePerMonth']} label={<span style={{ fontSize: '11px', color: '#64748b' }}>Max Leave/Month</span>} style={{ marginBottom: 0 }}>
+                                    <InputNumber min={0.5} step={0.5} style={{ width:'100%', borderRadius: '8px' }} placeholder="No Limit" />
+                                  </Form.Item>
+                                </Col>
+                              )}
+                              <Col span={2} style={{ display:'flex', justifyContent: 'flex-end', height: '32px', alignItems: 'center', marginTop: '16px' }}>
+                                <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                              </Col>
+                            </Row>
                           <Row gutter={12} style={{ marginTop: '12px' }}>
                             <Col span={12} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>Carry Forward:</span>
@@ -448,7 +460,8 @@ export default function LeaveTemplates(){
                         Add Leave Category
                       </Button>
                     </>
-                  )}
+                  );
+                }}
                 </Form.List>
               </Form.Item>
             </Form>

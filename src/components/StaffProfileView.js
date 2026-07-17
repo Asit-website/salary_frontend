@@ -8,7 +8,7 @@ import {
   ArrowLeftOutlined, MoreOutlined, UserOutlined, FileTextOutlined, CalendarOutlined,
   FileProtectOutlined, InboxOutlined, DownloadOutlined, PlusOutlined, MinusCircleOutlined, EditOutlined,
   SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ExclamationCircleOutlined,
-  CoffeeOutlined, ScheduleOutlined, ShopOutlined
+  CoffeeOutlined, ScheduleOutlined, ShopOutlined, UploadOutlined
 } from '@ant-design/icons';
 import jsPDF from 'jspdf';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -77,6 +77,16 @@ export default function StaffProfileView() {
   const [claimForm] = Form.useForm();
   const [claimFile, setClaimFile] = useState(null);
   const [editingClaim, setEditingClaim] = useState(null);
+  const [expenseTypes, setExpenseTypes] = useState([
+    { value: 'Travel', label: 'Travel Expense' },
+    { value: 'Food', label: 'Food' },
+    { value: 'Office', label: 'Office Supplies' },
+    { value: 'Fuel', label: 'Fuel' },
+    { value: 'Accommodation', label: 'Accommodation' },
+    { value: 'Communication', label: 'Communication' },
+    { value: 'Other', label: 'Other' }
+  ]);
+  const [newTypeName, setNewTypeName] = useState('');
   const [documents, setDocuments] = useState([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [docOpen, setDocOpen] = useState(false);
@@ -89,6 +99,7 @@ export default function StaffProfileView() {
   const [backgroundEditOpen, setBackgroundEditOpen] = useState(false);
   const [backgroundForm] = Form.useForm();
   const [salaryTemplates, setSalaryTemplates] = useState([]);
+  const [shiftTemplates, setShiftTemplates] = useState([]);
   const [manualSalaryOpen, setManualSalaryOpen] = useState(false);
   const [manualSalaryForm] = Form.useForm();
   const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
@@ -546,6 +557,10 @@ export default function StaffProfileView() {
         const res = await api.get('/admin/salary-templates');
         if (res.data?.success) setSalaryTemplates(res.data.data || []);
       } catch (_) { /* ignore */ }
+      try {
+        const res = await api.get('/admin/shifts/templates');
+        if (res.data?.success) setShiftTemplates(res.data.templates || res.data.data || []);
+      } catch (_) { /* ignore */ }
     };
     loadTpls();
   }, []);
@@ -939,7 +954,7 @@ export default function StaffProfileView() {
       staffType: p.staffType,
       dateOfJoining: p.dateOfJoining ? dayjs(p.dateOfJoining) : null,
       salaryCycleDate: p.salaryCycleDate ? dayjs(p.salaryCycleDate) : null,
-      shiftSelection: p.shiftSelection,
+      shiftSelection: p.shiftSelection ? Number(p.shiftSelection) : undefined,
       salaryDetailAccess: !!p.salaryDetailAccess,
       allowCurrentCycleSalaryAccess: !!p.allowCurrentCycleSalaryAccess,
       dob: p.dob ? dayjs(p.dob) : null,
@@ -1101,10 +1116,11 @@ export default function StaffProfileView() {
                         ? `${staff.shiftTemplate.name} (${staff.shiftTemplate.startTime} - ${staff.shiftTemplate.endTime})`
                         : staff?.shiftTemplate?.name || staff?.profile?.shiftSelection || '-'
                       }</div></Col>
-                    <Col span={12}><Text type="secondary">Salary Access</Text><div>{staff?.profile?.allowCurrentCycleSalaryAccess ? 'Allow current cycle' : 'Restricted'}</div></Col>
-                    <Col span={12}><Text type="secondary">Attendance Setting Template</Text><div>{staff?.attendanceTemplate?.name || staff?.profile?.attendanceSettingTemplate || '-'}</div></Col>
-                    <Col span={12}><Text type="secondary">Effective Template</Text><div>{effectiveTemplate?.name || '-'}</div></Col>
-                    <Col span={12}><Text type="secondary">Attendance Mode</Text><div>{(effectiveTemplate?.attendanceMode || '').replace(/_/g, ' ') || '-'}</div></Col>
+                    {/* <Col span={12}><Text type="secondary">Salary Access</Text><div>{staff?.profile?.allowCurrentCycleSalaryAccess ? 'Allow current cycle' : 'Restricted'}</div></Col>
+                    <Col span={12}><Text type="secondary">Attendance Setting Template</Text><div>{staff?.attendanceTemplate?.name || staff?.profile?.attendanceSettingTemplate || '-'}</div></Col> */}
+                    {/* <Col span={12}><Text type="secondary">Effective Template</Text><div>{effectiveTemplate?.name || '-'}</div></Col>
+                    <Col span={12}><Text type="secondary">Attendance Mode</Text><div>{(effectiveTemplate?.attendanceMode || '').replace(/_/g, ' ') || '-'}</div></Col> */}
+                    <Col span={12}><Text type="secondary">Salary Template</Text><div>{salaryTemplates.find(t => t.id === staff?.salaryTemplateId)?.name || 'No Template'}</div></Col>
                   </Row>
                 </Card>
               </Col>
@@ -1176,10 +1192,20 @@ export default function StaffProfileView() {
                 <Col span={12}><Form.Item name="email" label="Email"><Input type="email" /></Form.Item></Col>
                 <Col span={12}><Form.Item name="dateOfJoining" label="Date of Joining"><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
                 <Col span={12}><Form.Item name="salaryCycleDate" label="Salary Cycle Date"><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
-                <Col span={12}><Form.Item name="shiftSelection" label="Shift"><Input /></Form.Item></Col>
-                <Col span={12}><Form.Item name="attendanceSettingTemplate" label="Attendance Setting Template"><Input /></Form.Item></Col>
+                <Col span={12}>
+                  <Form.Item name="shiftSelection" label="Shift">
+                    <Select placeholder="Select shift" allowClear>
+                      {shiftTemplates.map(st => (
+                        <Select.Option key={st.id} value={st.id}>
+                          {st.name} {st.shiftType === 'open' ? `(Open • ${st.workMinutes || 0}m)` : st.startTime && st.endTime ? `(${st.startTime}-${st.endTime})` : ''}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                {/* <Col span={12}><Form.Item name="attendanceSettingTemplate" label="Attendance Setting Template"><Input /></Form.Item></Col>
                 <Col span={12}><Form.Item name="salaryDetailAccess" label="Salary Detail Access" valuePropName="checked"><Switch /></Form.Item></Col>
-                <Col span={12}><Form.Item name="allowCurrentCycleSalaryAccess" label="Allow Current Cycle Salary Access" valuePropName="checked"><Switch /></Form.Item></Col>
+                <Col span={12}><Form.Item name="allowCurrentCycleSalaryAccess" label="Allow Current Cycle Salary Access" valuePropName="checked"><Switch /></Form.Item></Col> */}
                 <Col span={8}><Form.Item name="dob" label="Date of Birth"><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
                 <Col span={8}><Form.Item name="gender" label="Gender"><Select allowClear options={[{ value: 'MALE', label: 'Male' }, { value: 'FEMALE', label: 'Female' }, { value: 'OTHER', label: 'Other' }]} /></Form.Item></Col>
                 <Col span={8}><Form.Item name="maritalStatus" label="Marital Status"><Select allowClear options={[{ value: 'SINGLE', label: 'Single' }, { value: 'MARRIED', label: 'Married' }, { value: 'OTHER', label: 'Other' }]} /></Form.Item></Col>
@@ -1219,6 +1245,38 @@ export default function StaffProfileView() {
         { title: 'Approved at', dataIndex: 'approvedAt', key: 'approvedAt', render: (d) => d ? dayjs(d).format('DD MMM YYYY') : '-' },
         { title: 'Approved Amount', dataIndex: 'approvedAmount', key: 'approvedAmount', align: 'right', render: (v) => v ? currency(v) : '-' },
         {
+          title: 'Remaining',
+          key: 'remainingAmount',
+          align: 'right',
+          render: (_, r) => {
+            const total = Number(r.approvedAmount !== null && r.approvedAmount !== undefined ? r.approvedAmount : r.amount);
+            const paid = Number(r.paidAmount || 0);
+            const remaining = r.status === 'settled' ? 0 : Math.max(0, total - paid);
+            const payrollAmt = r.status === 'settled' ? Math.max(0, total - paid) : 0;
+
+            if (paid > 0 || payrollAmt > 0) {
+              return (
+                <div style={{ fontSize: '12px', textAlign: 'right' }}>
+                  <span style={{ fontWeight: '600', color: remaining > 0 ? '#fa8c16' : '#8c8c8c' }}>
+                    {currency(remaining)}
+                  </span>
+                  {paid > 0 && (
+                    <div style={{ fontSize: '10px', color: '#8c8c8c' }}>
+                      (Paid: {currency(paid)})
+                    </div>
+                  )}
+                  {payrollAmt > 0 && (
+                    <div style={{ fontSize: '10px', color: '#52c41a' }}>
+                      (Payroll: {currency(payrollAmt)})
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            return <span style={{ color: '#bfbfbf' }}>-</span>;
+          }
+        },
+        {
           title: 'Actions', key: 'actions', render: (_, r) => (
             <Space>
               <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>Edit</Button>
@@ -1242,21 +1300,45 @@ export default function StaffProfileView() {
       const openAdd = () => {
         setEditingClaim(null);
         claimForm.resetFields();
-        claimForm.setFieldsValue({ expenseType: 'Travel', expenseDate: dayjs(), amount: null, billNumber: '', description: '', attachmentUrl: '', status: 'pending' });
+        claimForm.setFieldsValue({
+          expenseDate: dayjs(),
+          expenses: [{}]
+        });
         setClaimFile(null);
         setClaimOpen(true);
       };
       const openEdit = (claim) => {
         setEditingClaim(claim);
         claimForm.resetFields();
+        let itemsList = [];
+        if (claim.items) {
+          if (typeof claim.items === 'string') {
+            try {
+              itemsList = JSON.parse(claim.items);
+            } catch (e) {
+              itemsList = [];
+            }
+          } else if (Array.isArray(claim.items)) {
+            itemsList = claim.items;
+          }
+        }
+        if (itemsList.length === 0) {
+          itemsList = [{
+            expenseType: claim.expenseType || 'Other',
+            amount: Number(claim.amount || 0),
+            billNumber: claim.billNumber || '',
+            travelFrom: claim.travelFrom || '',
+            travelTo: claim.travelTo || '',
+            mode: claim.mode || undefined,
+            attachmentUrl: claim.attachmentUrl,
+          }];
+        }
         claimForm.setFieldsValue({
-          expenseType: claim.expenseType || 'Travel',
           expenseDate: claim.expenseDate ? dayjs(claim.expenseDate) : dayjs(),
-          amount: Number(claim.amount || 0),
-          approvedAmount: claim.approvedAmount !== null && claim.approvedAmount !== undefined ? Number(claim.approvedAmount) : undefined,
-          status: claim.status || 'pending',
-          billNumber: claim.billNumber || '',
           description: claim.description || '',
+          status: claim.status || 'pending',
+          approvedAmount: claim.approvedAmount !== null && claim.approvedAmount !== undefined ? Number(claim.approvedAmount) : undefined,
+          expenses: itemsList,
         });
         setClaimFile(null);
         setClaimOpen(true);
@@ -1264,15 +1346,42 @@ export default function StaffProfileView() {
       const saveClaim = async () => {
         try {
           const v = await claimForm.validateFields();
+          setClaimsLoading(true);
+          const expensesList = v.expenses || [{}];
           const fd = new FormData();
-          fd.append('expenseType', v.expenseType);
           fd.append('expenseDate', v.expenseDate?.format('YYYY-MM-DD'));
-          if (v.billNumber) fd.append('billNumber', v.billNumber);
-          fd.append('amount', String(Number(v.amount)));
-          if (v.status) fd.append('status', v.status);
-          if (v.approvedAmount !== undefined && v.approvedAmount !== null) fd.append('approvedAmount', v.approvedAmount);
           if (v.description) fd.append('description', v.description);
-          if (claimFile) fd.append('attachment', claimFile);
+
+          if (editingClaim?.id) {
+            if (v.status) fd.append('status', v.status);
+            if (v.approvedAmount !== undefined && v.approvedAmount !== null) {
+              fd.append('approvedAmount', v.approvedAmount);
+            }
+          }
+
+          const serializedItems = expensesList.map((exp, index) => {
+            const item = {
+              expenseType: exp.expenseType || 'Other',
+              amount: Number(exp.amount || 0),
+              billNumber: exp.billNumber || null,
+              description: exp.description || null,
+            };
+            if (exp.expenseType === 'Travel') {
+              item.travelFrom = exp.travelFrom || null;
+              item.travelTo = exp.travelTo || null;
+              item.mode = exp.mode || null;
+            }
+            if (exp.attachment?.fileList?.[0]?.originFileObj) {
+              fd.append(`attachment_${index}`, exp.attachment.fileList[0].originFileObj);
+            } else if (exp.attachmentUrl) {
+              item.attachmentUrl = exp.attachmentUrl;
+            }
+            return item;
+          });
+
+          fd.append('expenseType', serializedItems[0]?.expenseType || 'Other');
+          fd.append('items', JSON.stringify(serializedItems));
+
           if (editingClaim?.id) {
             await api.put(`/admin/expenses/${editingClaim.id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
             message.success('Claim updated');
@@ -1288,6 +1397,8 @@ export default function StaffProfileView() {
         } catch (e) {
           if (e?.errorFields) return;
           message.error(e?.response?.data?.message || 'Failed to submit claim');
+        } finally {
+          setClaimsLoading(false);
         }
       };
 
@@ -1311,53 +1422,226 @@ export default function StaffProfileView() {
             onCancel={() => { setClaimOpen(false); setEditingClaim(null); setClaimFile(null); }}
             onOk={saveClaim}
             okText={editingClaim ? 'Update' : 'Submit'}
+            width={750}
           >
             <Form form={claimForm} layout="vertical">
               <Row gutter={12}>
-                <Col span={12}><Form.Item name="expenseType" label="Expense Type" rules={[{ required: true }]}>
-                  <Select options={[{ value: 'Travel', label: 'Travel Expense' }, { value: 'Food', label: 'Food' }, { value: 'Office', label: 'Office Supplies' }, { value: 'Other', label: 'Other' }]} />
-                </Form.Item></Col>
-                <Col span={12}><Form.Item name="expenseDate" label="Expense Date" rules={[{ required: true }]}>
-                  <DatePicker style={{ width: '100%' }} />
-                </Form.Item></Col>
-              </Row>
-              <Row gutter={12}>
-                <Col span={12}><Form.Item name="billNumber" label="Bill Number">
-                  <Input placeholder="Enter bill number" />
-                </Form.Item></Col>
-                <Col span={12}><Form.Item name="amount" label="Amount" rules={[{ required: true }]}>
-                  <InputNumber min={1} step={50} style={{ width: '100%' }} prefix="₹" />
-                </Form.Item></Col>
+                <Col span={24}>
+                  <Form.Item name="expenseDate" label="Expense Date" rules={[{ required: true }]}>
+                    <DatePicker style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
               </Row>
               {editingClaim && (
                 <Row gutter={12}>
-                  <Col span={12}><Form.Item name="status" label="Status" rules={[{ required: true }]}>
-                    <Select options={[
-                      { value: 'pending', label: 'Pending' },
-                      { value: 'approved', label: 'Approved' },
-                      { value: 'rejected', label: 'Rejected' },
-                      { value: 'settled', label: 'Settled' },
-                    ]} />
-                  </Form.Item></Col>
-                  <Col span={12}><Form.Item name="approvedAmount" label="Approved Amount">
-                    <InputNumber min={0} step={50} style={{ width: '100%' }} prefix="₹" />
-                  </Form.Item></Col>
+                  <Col span={12}>
+                    <Form.Item name="status" label="Status" rules={[{ required: true }]}>
+                      <Select options={[
+                        { value: 'pending', label: 'Pending' },
+                        { value: 'approved', label: 'Approved' },
+                        { value: 'rejected', label: 'Rejected' },
+                        { value: 'settled', label: 'Settled' },
+                      ]} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item name="approvedAmount" label="Approved Amount">
+                      <InputNumber min={0} step={50} style={{ width: '100%' }} prefix="₹" />
+                    </Form.Item>
+                  </Col>
                 </Row>
               )}
-              <Form.Item name="description" label="Description">
-                <Input.TextArea rows={3} placeholder="Enter description" />
-              </Form.Item>
-              <Form.Item label="Attachment">
-                <Upload.Dragger multiple={false} maxCount={1}
-                  beforeUpload={(file) => { setClaimFile(file); return false; }}
-                  onRemove={() => { setClaimFile(null); }}
-                  accept="image/*,.pdf"
-                >
-                  <p className="ant-upload-drag-icon">📎</p>
-                  <p className="ant-upload-text">Click or drag file to upload</p>
-                  <p className="ant-upload-hint">Images or PDFs. Max 1 file.</p>
-                </Upload.Dragger>
-              </Form.Item>
+              <Row gutter={12}>
+                <Col span={24}>
+                  <Form.Item name="description" label="Description">
+                    <Input.TextArea rows={2} placeholder="Describe the expense..." />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.List name="expenses">
+                {(fields, { add, remove }) => (
+                  <>
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Card
+                        key={key}
+                        size="small"
+                        style={{ marginBottom: 16, background: '#f8fafc', borderColor: '#e2e8f0' }}
+                        title={<span style={{ fontWeight: 600, color: '#475569' }}>Expense Item #{name + 1}</span>}
+                        extra={fields.length > 1 ? (
+                          <Button type="link" danger onClick={() => remove(name)} style={{ padding: 0 }}>Remove</Button>
+                        ) : null}
+                      >
+                        <Row gutter={12}>
+                          <Col span={12}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'expenseType']}
+                              label="Expense Type"
+                              rules={[{ required: true, message: 'Select type' }]}
+                              initialValue="Travel"
+                            >
+                              <Select
+                                placeholder="Select type"
+                                dropdownRender={(menu) => (
+                                  <>
+                                    {menu}
+                                    <div style={{ display: 'flex', flexWrap: 'nowrap', padding: 8, borderTop: '1px solid #e8e8e8' }}>
+                                      <Input
+                                        style={{ flex: 'auto' }}
+                                        value={newTypeName}
+                                        onChange={(e) => setNewTypeName(e.target.value)}
+                                        placeholder="Add custom type..."
+                                        onKeyDown={(e) => e.stopPropagation()}
+                                      />
+                                      <Button
+                                        type="text"
+                                        icon={<PlusOutlined />}
+                                        onClick={() => {
+                                          if (newTypeName && !expenseTypes.some(t => t.value === newTypeName)) {
+                                            setExpenseTypes([...expenseTypes, { value: newTypeName, label: newTypeName }]);
+                                            setNewTypeName('');
+                                          }
+                                        }}
+                                        style={{ flex: 'none', padding: '4px 8px', marginLeft: 4 }}
+                                      >
+                                        Add
+                                      </Button>
+                                    </div>
+                                  </>
+                                )}
+                              >
+                                {expenseTypes.map((t) => (
+                                  <Select.Option key={t.value} value={t.value}>{t.label}</Select.Option>
+                                ))}
+                              </Select>
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'amount']}
+                              label="Amount (₹)"
+                              rules={[{ required: true, message: 'Enter amount' }]}
+                            >
+                              <InputNumber min={1} style={{ width: '100%' }} placeholder="Amount" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Form.Item noStyle shouldUpdate={(prevValues, currentValues) => prevValues.expenses?.[name]?.expenseType !== currentValues.expenses?.[name]?.expenseType}>
+                          {({ getFieldValue }) => {
+                            const isTravel = getFieldValue(['expenses', name, 'expenseType']) === 'Travel';
+                            return isTravel ? (
+                              <Row gutter={12}>
+                                <Col span={12}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'travelFrom']}
+                                    label="From Location"
+                                    rules={[{ required: true, message: 'Enter starting point' }]}
+                                  >
+                                    <Input placeholder="From..." />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={12}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'travelTo']}
+                                    label="To Location"
+                                    rules={[{ required: true, message: 'Enter destination' }]}
+                                  >
+                                    <Input placeholder="To..." />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={12}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'mode']}
+                                    label="Mode of Transport"
+                                    rules={[{ required: true, message: 'Select mode' }]}
+                                  >
+                                    <Select placeholder="Select mode">
+                                      <Select.Option value="Car">Car</Select.Option>
+                                      <Select.Option value="Bike">Bike</Select.Option>
+                                      <Select.Option value="Train">Train</Select.Option>
+                                      <Select.Option value="Flight">Flight</Select.Option>
+                                      <Select.Option value="Bus">Bus</Select.Option>
+                                      <Select.Option value="Taxi">Taxi</Select.Option>
+                                      <Select.Option value="Auto">Auto</Select.Option>
+                                      <Select.Option value="Other">Other</Select.Option>
+                                    </Select>
+                                  </Form.Item>
+                                </Col>
+                                <Col span={12}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'billNumber']}
+                                    label="Bill Number"
+                                  >
+                                    <Input placeholder="Bill number" />
+                                  </Form.Item>
+                                </Col>
+                              </Row>
+                            ) : (
+                              <Row gutter={12}>
+                                <Col span={24}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'billNumber']}
+                                    label="Bill Number"
+                                  >
+                                    <Input placeholder="Bill number" />
+                                  </Form.Item>
+                                </Col>
+                              </Row>
+                            );
+                          }}
+                        </Form.Item>
+                        <Row gutter={12}>
+                          <Col span={24}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'attachment']}
+                              label="Attachment"
+                            >
+                              <Upload maxCount={1} beforeUpload={() => false} accept="image/*,.pdf">
+                                <Button icon={<UploadOutlined />}>Upload Bill</Button>
+                              </Upload>
+                            </Form.Item>
+                            <Form.Item
+                              noStyle
+                              shouldUpdate={(prevValues, currentValues) => prevValues.expenses?.[name]?.attachmentUrl !== currentValues.expenses?.[name]?.attachmentUrl}
+                            >
+                              {({ getFieldValue }) => {
+                                const url = getFieldValue(['expenses', name, 'attachmentUrl']);
+                                return url ? (
+                                  <div style={{ marginBottom: 12 }}>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                      Existing bill:{' '}
+                                      <a
+                                        href={url.startsWith('http') ? url : `${API_BASE_URL}${url}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        View Attachment
+                                      </a>
+                                    </Text>
+                                  </div>
+                                ) : null;
+                              }}
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      </Card>
+                    ))}
+                    <Form.Item>
+                      <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                        Add More Expense Line
+                      </Button>
+                    </Form.Item>
+                  </>
+                )}
+              </Form.List>
             </Form>
           </Modal>
         </Card>
