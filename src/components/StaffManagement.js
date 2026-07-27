@@ -52,6 +52,7 @@ const StaffManagement = () => {
   const [issuingLetter, setIssuingLetter] = useState(false);
   const [issuingForStaff, setIssuingForStaff] = useState(null);
   const [importModalVisible, setImportModalVisible] = useState(false);
+  const [selectedImportTemplate, setSelectedImportTemplate] = useState(undefined);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importResults, setImportResults] = useState(null);
@@ -1145,7 +1146,11 @@ const StaffManagement = () => {
           <Modal
             title="Import Staff from Excel"
             open={importModalVisible}
-            onCancel={() => setImportModalVisible(false)}
+            onCancel={() => {
+              setImportModalVisible(false);
+              setSelectedImportTemplate(undefined);
+              setImportResults(null);
+            }}
             footer={null}
             width={600}
             className="sales-modal"
@@ -1165,11 +1170,31 @@ const StaffManagement = () => {
                 </ul>
               </div>
 
+              <div style={{ textAlign: 'left', marginBottom: '24px' }}>
+                <Text strong style={{ fontSize: '13px', display: 'block', marginBottom: '8px', color: '#434343' }}>
+                  Select Salary Template (Optional):
+                </Text>
+                <Select
+                  placeholder="Select a Salary Template"
+                  style={{ width: '100%' }}
+                  allowClear
+                  value={selectedImportTemplate}
+                  onChange={(val) => setSelectedImportTemplate(val)}
+                >
+                  {(salaryTemplates || []).map((t) => (
+                    <Select.Option key={t.id} value={t.id}>
+                      {t.name}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </div>
+
               <Button
                 icon={<DownloadOutlined />}
                 onClick={async () => {
                   try {
-                    const response = await api.get('/admin/staff/import-template', {
+                    const urlParams = selectedImportTemplate ? `?salaryTemplateId=${selectedImportTemplate}` : '';
+                    const response = await api.get(`/admin/staff/import-template${urlParams}`, {
                       responseType: 'blob',
                     });
                     const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -1194,7 +1219,7 @@ const StaffManagement = () => {
               <Upload.Dragger
                 name="file"
                 multiple={false}
-                action={`${api.defaults.baseURL}/admin/staff/import`}
+                action={`${api.defaults.baseURL}/admin/staff/import${selectedImportTemplate ? `?salaryTemplateId=${selectedImportTemplate}` : ''}`}
                 headers={{
                   Authorization: `Bearer ${sessionStorage.getItem('impersonate_token') || localStorage.getItem('token')}`,
                   'X-Org-Id': (() => {

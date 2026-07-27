@@ -172,8 +172,15 @@ export default function TenureBonusAutomation() {
                 try { config = JSON.parse(config); } catch (e) { config = []; }
             }
             if (!Array.isArray(config) || config.length === 0) {
-                config = [{ min: 0, max: 0, percent: 0 }];
+                config = [{ min: 0, max: null, type: 'percent', value: 0 }];
             }
+
+            config = config.map(item => ({
+                min: item.min,
+                max: item.max,
+                type: item.type || 'percent',
+                value: item.value !== undefined ? item.value : (item.percent || 0)
+            }));
 
             ruleForm.setFieldsValue({
                 name: rule.name,
@@ -183,7 +190,7 @@ export default function TenureBonusAutomation() {
             });
         } else {
             ruleForm.resetFields();
-            ruleForm.setFieldsValue({ active: true, paymentMonth: dayjs(), config: [{ min: 1, max: 12, percent: 10 }] });
+            ruleForm.setFieldsValue({ active: true, paymentMonth: dayjs(), config: [{ min: 1, max: null, type: 'percent', value: 10 }] });
         }
         setRuleModalVisible(true);
     };
@@ -510,29 +517,63 @@ export default function TenureBonusAutomation() {
                                       <>
                                           {fields.map(({ key, name, ...restField }, index) => (
                                               <Row key={key} gutter={16} align="bottom" style={{ marginBottom: 12, background: '#f8fafc', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                                                  <Col span={7}>
-                                                      <Form.Item {...restField} name={[name, 'min']} label={index === 0 ? <span style={{ fontSize: '11px', color: '#64748b' }}>Min (Months)</span> : ""} rules={[{ required: true }]}>
-                                                          <InputNumber style={{ width: '100%', borderRadius: '8px' }} min={0} placeholder="0" />
-                                                      </Form.Item>
-                                                  </Col>
-                                                  <Col span={7}>
-                                                      <Form.Item {...restField} name={[name, 'max']} label={index === 0 ? <span style={{ fontSize: '11px', color: '#64748b' }}>Max (Months)</span> : ""} rules={[{ required: true }]}>
-                                                          <InputNumber style={{ width: '100%', borderRadius: '8px' }} min={0} placeholder="24" />
-                                                      </Form.Item>
-                                                  </Col>
-                                                  <Col span={7}>
-                                                      <Form.Item {...restField} name={[name, 'percent']} label={index === 0 ? <span style={{ fontSize: '11px', color: '#64748b' }}>Bonus %</span> : ""} rules={[{ required: true }]}>
-                                                          <InputNumber 
-                                                              style={{ width: '100%', borderRadius: '8px' }} 
-                                                              min={0} max={100} step={0.5} 
-                                                              formatter={value => `${value}%`} 
-                                                              parser={value => value.replace('%', '')} 
-                                                          />
-                                                      </Form.Item>
-                                                  </Col>
-                                                  <Col span={3} style={{ display: 'flex', justifyContent: 'flex-end', height: '32px', alignItems: 'center' }}>
-                                                      <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
-                                                  </Col>
+                                                  <Col span={5}>
+                                                       <Form.Item {...restField} name={[name, 'min']} label={index === 0 ? <span style={{ fontSize: '11px', color: '#64748b' }}>Min (Months)</span> : ""} rules={[{ required: true, message: 'Required' }]}>
+                                                           <InputNumber style={{ width: '100%', borderRadius: '8px' }} min={0} placeholder="0" />
+                                                       </Form.Item>
+                                                   </Col>
+                                                   <Col span={5}>
+                                                       <Form.Item {...restField} name={[name, 'max']} label={index === 0 ? <span style={{ fontSize: '11px', color: '#64748b' }}>Max (Months)</span> : ""} rules={[{ required: false }]}>
+                                                           <InputNumber style={{ width: '100%', borderRadius: '8px' }} min={0} placeholder="No Limit" />
+                                                       </Form.Item>
+                                                   </Col>
+                                                   <Col span={5}>
+                                                       <Form.Item {...restField} name={[name, 'type']} label={index === 0 ? <span style={{ fontSize: '11px', color: '#64748b' }}>Type</span> : ""} rules={[{ required: true, message: 'Required' }]}>
+                                                           <Select style={{ width: '100%', borderRadius: '8px' }} placeholder="Select">
+                                                               <Option value="percent">%</Option>
+                                                               <Option value="days">Days</Option>
+                                                           </Select>
+                                                       </Form.Item>
+                                                   </Col>
+                                                   <Col span={6}>
+                                                       <Form.Item
+                                                           noStyle
+                                                           shouldUpdate={(prevValues, currentValues) => {
+                                                               return prevValues.config?.[name]?.type !== currentValues.config?.[name]?.type;
+                                                           }}
+                                                       >
+                                                           {({ getFieldValue }) => {
+                                                               const type = getFieldValue(['config', name, 'type']) || 'percent';
+                                                               return (
+                                                                   <Form.Item
+                                                                       {...restField}
+                                                                       name={[name, 'value']}
+                                                                       label={index === 0 ? <span style={{ fontSize: '11px', color: '#64748b' }}>{type === 'days' ? 'Days' : 'Bonus %'}</span> : ""}
+                                                                       rules={[{ required: true, message: 'Required' }]}
+                                                                   >
+                                                                       {type === 'days' ? (
+                                                                           <InputNumber
+                                                                               style={{ width: '100%', borderRadius: '8px' }}
+                                                                               min={0}
+                                                                               placeholder="10"
+                                                                           />
+                                                                       ) : (
+                                                                           <InputNumber
+                                                                               style={{ width: '100%', borderRadius: '8px' }}
+                                                                               min={0} max={100} step={0.5}
+                                                                               formatter={value => `${value}%`}
+                                                                               parser={value => value.replace('%', '')}
+                                                                               placeholder="10"
+                                                                           />
+                                                                       )}
+                                                                   </Form.Item>
+                                                               );
+                                                           }}
+                                                       </Form.Item>
+                                                   </Col>
+                                                   <Col span={3} style={{ display: 'flex', justifyContent: 'flex-end', height: '32px', alignItems: 'center' }}>
+                                                       <Button danger shape="circle" size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                                                   </Col>
                                               </Row>
                                           ))}
                                           <Button 

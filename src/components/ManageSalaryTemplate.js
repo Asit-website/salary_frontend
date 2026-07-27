@@ -130,6 +130,7 @@ export default function ManageSalaryTemplate() {
       let pfEmployerAmount = 0;
       let esiEmployeeAmount = 0;
       let esiEmployerAmount = 0;
+      let esiSalaryLimit = 21000;
       let hasEsiKeys = false;
       let ptFixedAmount = 0;
       let ptSlabs = [];
@@ -155,12 +156,18 @@ export default function ManageSalaryTemplate() {
 
         if (key === 'ESI_EMPLOYEE' || key === 'ESI - EMPLOYEE') {
           esiEmployeeAmount = Number.isFinite(value) ? value : 0;
+          if (it?.meta?.salaryLimit !== undefined) {
+            esiSalaryLimit = Number(it.meta.salaryLimit);
+          }
           hasEsiKeys = true;
           esiFound = true;
           return;
         }
         if (key === 'ESI_EMPLOYER' || key === 'ESI - EMPLOYER') {
           esiEmployerAmount = Number.isFinite(value) ? value : 0;
+          if (it?.meta?.salaryLimit !== undefined) {
+            esiSalaryLimit = Number(it.meta.salaryLimit);
+          }
           hasEsiKeys = true;
           esiFound = true;
           return;
@@ -178,6 +185,9 @@ export default function ManageSalaryTemplate() {
         if (key === 'PROVIDENT FUND') { pfFound = true; return; }
         if (key === 'ESI') {
           esiFound = true;
+          if (it?.meta?.salaryLimit !== undefined) {
+            esiSalaryLimit = Number(it.meta.salaryLimit);
+          }
           if (!hasEsiKeys) {
             esiEmployeeAmount = Number.isFinite(value) ? value : 0;
             esiEmployerAmount = 0;
@@ -205,7 +215,8 @@ export default function ManageSalaryTemplate() {
         finalDeductions.push({
           name: 'ESI',
           amount: esiEmployeeAmount,
-          employerAmount: esiEmployerAmount
+          employerAmount: esiEmployerAmount,
+          esiSalaryLimit: esiSalaryLimit
         });
       }
 
@@ -265,6 +276,7 @@ export default function ManageSalaryTemplate() {
             name: String(it?.name || '').trim(),
             amount: Number(it?.amount || 0),
             employerAmount: Number(it?.employerAmount || 0),
+            esiSalaryLimit: it?.esiSalaryLimit !== undefined && it?.esiSalaryLimit !== null ? Number(it.esiSalaryLimit) : undefined,
             slabs: Array.isArray(it?.slabs) ? it.slabs : [],
           }))
           .filter((it) => it.name)
@@ -288,20 +300,21 @@ export default function ManageSalaryTemplate() {
               ];
             }
             if (isDeduction && it.name === 'ESI') {
+              const salaryLimit = Number.isFinite(it.esiSalaryLimit) ? it.esiSalaryLimit : 21000;
               return [
                 {
                   key: 'ESI_EMPLOYEE',
                   label: 'ESI - Employee',
                   type: 'percent',
                   valueNumber: Number.isFinite(it.amount) ? it.amount : 0.75,
-                  meta: { basedOn: 'TOTAL EARNINGS' },
+                  meta: { basedOn: 'TOTAL EARNINGS', salaryLimit },
                 },
                 {
                   key: 'ESI_EMPLOYER',
                   label: 'ESI - Employer',
                   type: 'percent',
                   valueNumber: Number.isFinite(it.employerAmount) ? it.employerAmount : 3.25,
-                  meta: { basedOn: 'TOTAL EARNINGS' },
+                  meta: { basedOn: 'TOTAL EARNINGS', salaryLimit },
                 }
               ];
             }
@@ -735,7 +748,7 @@ export default function ManageSalaryTemplate() {
                               </Col>
                             </Row>
                             <Row gutter={12}>
-                              <Col span={12}>
+                              <Col span={8}>
                                 <Form.Item
                                   label={<span style={{ fontWeight: '600', color: '#475569', fontSize: '12px' }}>Employee Contribution (%)</span>}
                                   {...rest}
@@ -751,7 +764,7 @@ export default function ManageSalaryTemplate() {
                                   />
                                 </Form.Item>
                               </Col>
-                              <Col span={12}>
+                              <Col span={8}>
                                 <Form.Item
                                   label={<span style={{ fontWeight: '600', color: '#475569', fontSize: '12px' }}>Employer Contribution (%)</span>}
                                   {...rest}
@@ -764,6 +777,20 @@ export default function ManageSalaryTemplate() {
                                     style={{ width: '100%', borderRadius: '8px' }}
                                     placeholder="3.25"
                                     addonAfter="%"
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col span={8}>
+                                <Form.Item
+                                  label={<span style={{ fontWeight: '600', color: '#475569', fontSize: '12px' }}>ESI Salary Limit (₹)</span>}
+                                  {...rest}
+                                  name={[name, 'esiSalaryLimit']}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <InputNumber
+                                    min={0}
+                                    style={{ width: '100%', borderRadius: '8px' }}
+                                    placeholder="21000"
                                   />
                                 </Form.Item>
                               </Col>

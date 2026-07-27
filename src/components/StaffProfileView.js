@@ -2066,25 +2066,21 @@ export default function StaffProfileView() {
           const pi = safeParse(payrollLine.incentives);
           const pd = safeParse(payrollLine.deductions);
 
-          const dbTotalEarnings = Math.round(Number(totals.totalEarnings || 0));
-          const dbTotalDeductions = Math.round(Number(totals.totalDeductions || 0));
-
-          // Distribute function to match UI logic
-          const distribute = (entries, targetTotal) => {
-            const totalWeight = entries.reduce((s, [, v]) => s + (Number(v) || 0), 0);
-            if (totalWeight === 0) return entries.map(([k]) => ({ k, v: 0 }));
-            let dist = entries.map(([k, v]) => ({ k, v: Math.round(((Number(v) || 0) / totalWeight) * targetTotal) }));
-            const curr = dist.reduce((s, i) => s + i.v, 0);
-            const diff = targetTotal - curr;
-            if (diff !== 0 && dist.length > 0) dist.reduce((p, c) => p.v > c.v ? p : c).v += diff;
-            return dist;
+          const mapExact = (entries) => {
+            return entries.map(([k, v]) => ({
+              k,
+              v: Math.round(Number(v || 0) * 100) / 100
+            }));
           };
 
           const finalEarnings = [
-            ...distribute(Object.entries(pe), dbTotalEarnings),
-            ...Object.entries(pi).map(([k, v]) => ({ k: k + ' (Incentive)', v })) // Incentives usually flat, or use distribute logic if needed
+            ...mapExact(Object.entries(pe)),
+            ...Object.entries(pi).map(([k, v]) => ({ k: k + ' (Incentive)', v: Math.round(Number(v || 0) * 100) / 100 }))
           ];
-          const finalDeductions = distribute(Object.entries(pd), dbTotalDeductions);
+          const finalDeductions = mapExact(Object.entries(pd));
+
+          const dbTotalEarnings = finalEarnings.reduce((s, i) => s + i.v, 0);
+          const dbTotalDeductions = finalDeductions.reduce((s, i) => s + i.v, 0);
 
           // Draw Table
           const col1 = margin; const col2 = margin + 80; const col3 = margin + 110; const col4 = pageWidth - margin;
@@ -2110,7 +2106,7 @@ export default function StaffProfileView() {
           yPosition += 8;
 
           pdf.setFont('helvetica', 'bold');
-          pdf.text('Total Earnings', col1, yPosition); pdf.text(String(dbTotalEarnings + (Number(totals.totalIncentives || 0))), col2, yPosition, { align: 'right' });
+          pdf.text('Total Earnings', col1, yPosition); pdf.text(String(dbTotalEarnings), col2, yPosition, { align: 'right' });
           pdf.text('Total Deductions', col3, yPosition); pdf.text(String(dbTotalDeductions), col4, yPosition, { align: 'right' });
 
           yPosition += 10;
@@ -2205,15 +2201,15 @@ export default function StaffProfileView() {
                         let distribution = filteredEntries.map(([k, v]) => ({
                           key: k,
                           label: labelize(k, allTplKeys),
-                          amount: Math.round(((Number(v) || 0) / totalWeight) * targetTotal)
+                          amount: Math.round(((Number(v) || 0) / totalWeight) * targetTotal * 100) / 100
                         }));
 
                         // Fix rounding error
                         const currentSum = distribution.reduce((s, i) => s + i.amount, 0);
-                        const diff = targetTotal - currentSum;
+                        const diff = Number((targetTotal - currentSum).toFixed(2));
                         if (diff !== 0 && distribution.length > 0) {
                           const largest = distribution.reduce((p, c) => (p.amount > c.amount ? p : c));
-                          largest.amount += diff;
+                          largest.amount = Number((largest.amount + diff).toFixed(2));
                         }
                         return distribution;
                       };
@@ -2228,35 +2224,32 @@ export default function StaffProfileView() {
                       if (m.payrollData) {
                         // Use Authoritative Data from Payroll Line
 
-                        const totals = safeParse(m.payrollData.totals);
                         const pe = safeParse(m.payrollData.earnings);
                         const pi = safeParse(m.payrollData.incentives);
                         const pd = safeParse(m.payrollData.deductions);
 
-                        // We must apply the ratio from 'totals.ratio' just like PayrollList.js
-                        const ratio = Number(totals.ratio ?? 1);
+                        const norm = (s = '') => s.toLowerCase().replace(/[_\s]/g, '');
 
-                        // Target Totals from DB
-                        const dbTotalEarnings = Math.round(Number(totals.totalEarnings || 0));
-                        const dbTotalIncentives = Math.round(Number(totals.totalIncentives || 0));
-                        const dbTotalDeductions = Math.round(Number(totals.totalDeductions || 0));
+                        const filterAndMap = (entries, tplKeys) => {
+                          return entries.filter(([k, v]) => {
+                            const nk = norm(k);
+                            const inTpl = tplKeys ? tplKeys.some(tk => norm(tk) === nk) : false;
+                            return Number(v) !== 0 || inTpl;
+                          }).map(([k, v]) => ({
+                            key: k,
+                            label: labelize(k, allTplKeys),
+                            amount: Math.round(Number(v || 0) * 100) / 100
+                          }));
+                        };
 
-                        // Distribute Earnings
-                        const earningsList = Object.entries(pe);
-                        const earningsDist = distribute(earningsList, dbTotalEarnings, tplEarnKeys);
-
-                        // Incentives
-                        const incentivesList = Object.entries(pi);
-                        const incentivesDist = distribute(incentivesList, dbTotalIncentives).map(i => ({ ...i, label: i.label + ' (Incentive)' }));
+                        const earningsDist = filterAndMap(Object.entries(pe), tplEarnKeys);
+                        const incentivesDist = filterAndMap(Object.entries(pi)).map(i => ({ ...i, label: i.label + ' (Incentive)' }));
 
                         finalEarnings = [...earningsDist, ...incentivesDist];
+                        finalDeductions = filterAndMap(Object.entries(pd), tplDedKeys);
 
-                        // Deductions
-                        const deductionsList = Object.entries(pd);
-                        finalDeductions = distribute(deductionsList, dbTotalDeductions, tplDedKeys);
-
-                        targetGross = dbTotalEarnings + dbTotalIncentives;
-                        targetDed = dbTotalDeductions;
+                        targetGross = finalEarnings.reduce((s, i) => s + i.amount, 0);
+                        targetDed = finalDeductions.reduce((s, i) => s + i.amount, 0);
 
                       } else {
                         // FALLBACK: Estimate using Ratio (if no payroll line exists yet)
@@ -2277,7 +2270,7 @@ export default function StaffProfileView() {
 
                         // Ratio based Targets
                         const ratio = m.ratio ?? 1;
-                        const estDed = Math.round(baseDed * ratio);
+                        const estDed = Math.round(baseDed * ratio * 100) / 100;
                         const estGross = (m.amount || 0) + estDed;
 
                         targetDed = estDed;

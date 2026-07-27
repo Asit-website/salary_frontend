@@ -30,6 +30,7 @@ const AddRegularStaff = () => {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [pfEmployeePercent, setPfEmployeePercent] = useState(0);
   const [esiEmployeePercent, setEsiEmployeePercent] = useState(0);
+  const [esiLimit, setEsiLimit] = useState(21000);
   const [ptSlabs, setPtSlabs] = useState([]);
   const [shiftTemplates, setShiftTemplates] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -242,7 +243,13 @@ const AddRegularStaff = () => {
       });
       setExtraEarnings(extE);
 
-      const knownD = ['provident_fund', 'esi', 'professional_tax', 'income_tax', 'loan_deduction', 'other_deductions'];
+      const knownD = [
+        'provident_fund', 'provident_fund_employee', 'provident_fund_employer',
+        'esi', 'esi_employee', 'esi_employer',
+        'professional_tax', 'professional_tax_employee', 'professional_tax_employer',
+        'income_tax', 'income_tax_employee', 'income_tax_employer',
+        'loan_deduction', 'other_deductions'
+      ];
       const knownDNorm = knownD.map(normKey);
       const ignoredD = ['totaldeductions'];
       const extD = [];
@@ -269,6 +276,16 @@ const AddRegularStaff = () => {
         return Array.isArray(val) ? val : [];
       };
 
+      const getVal = (obj, key, fallback) => {
+        if (!obj) return fallback;
+        const norm = (s) => (s || '').toLowerCase().replace(/[_\s]+/g, '');
+        const target = norm(key);
+        for (const [k, v] of Object.entries(obj)) {
+          if (norm(k) === target) return v;
+        }
+        return fallback;
+      };
+
       form.setFieldsValue({
         staffName: editingStaff.name,
         phone: editingStaff.phone,
@@ -285,20 +302,20 @@ const AddRegularStaff = () => {
         openingBalanceType: ob < 0 ? 'pending' : 'advance',
         salaryDetailAccess: !!editingStaff.salaryDetailAccess,
         allowCurrentCycleSalaryAccess: !!editingStaff.allowCurrentCycleSalaryAccess,
-        basic_salary: eb.basic_salary ?? editingStaff.basicSalary,
-        hra: eb.hra ?? editingStaff.hra,
-        da: eb.da ?? editingStaff.da,
-        special_allowance: eb.special_allowance ?? editingStaff.specialAllowance,
-        conveyance_allowance: eb.conveyance_allowance ?? editingStaff.conveyanceAllowance,
-        medical_allowance: eb.medical_allowance ?? editingStaff.medicalAllowance,
-        travel_allowance: eb.travel_allowance ?? 0,
-        other_allowances: eb.other_allowances ?? editingStaff.otherAllowances,
-        provident_fund_employee: db.provident_fund ?? editingStaff.pfDeduction,
-        esi: db.esi ?? editingStaff.esiDeduction,
-        professional_tax: db.professional_tax ?? editingStaff.professionalTax,
-        income_tax: db.income_tax ?? editingStaff.tdsDeduction,
-        loan_deduction: db.loan_deduction ?? editingStaff.otherDeductions,
-        other_deductions: db.other_deductions ?? editingStaff.otherDeductions,
+        basic_salary: getVal(eb, 'basic_salary', editingStaff.basicSalary),
+        hra: getVal(eb, 'hra', editingStaff.hra),
+        da: getVal(eb, 'da', editingStaff.da),
+        special_allowance: getVal(eb, 'special_allowance', editingStaff.specialAllowance),
+        conveyance_allowance: getVal(eb, 'conveyance_allowance', editingStaff.conveyanceAllowance),
+        medical_allowance: getVal(eb, 'medical_allowance', editingStaff.medicalAllowance),
+        travel_allowance: getVal(eb, 'travel_allowance', 0),
+        other_allowances: getVal(eb, 'other_allowances', editingStaff.otherAllowances),
+        provident_fund_employee: getVal(db, 'provident_fund_employee', getVal(db, 'provident_fund', editingStaff.pfDeduction)),
+        esi: getVal(db, 'esi_employee', getVal(db, 'esi', editingStaff.esiDeduction)),
+        professional_tax: getVal(db, 'professional_tax', editingStaff.professionalTax),
+        income_tax: getVal(db, 'income_tax', editingStaff.tdsDeduction),
+        loan_deduction: getVal(db, 'loan_deduction', editingStaff.otherDeductions),
+        other_deductions: getVal(db, 'other_deductions', editingStaff.otherDeductions),
         education: parseJSON(editingStaff.education || editingStaff.profile?.education),
         experience: parseJSON(editingStaff.experience || editingStaff.profile?.experience),
       });
@@ -430,20 +447,31 @@ const AddRegularStaff = () => {
         setPfEmployeePercent(pfPercent);
 
         let esiPercent = 0;
+        let loadedEsiLimit = 21000;
         if (Array.isArray(dedSrc)) {
           const deductionsArray = dedSrc.flatMap((x) => (Array.isArray(x) ? x : [x]));
           const esiEmployeeItem = deductionsArray.find(d => (d?.key || d?.name) === 'ESI_EMPLOYEE');
           if (esiEmployeeItem) {
             esiPercent = Number(esiEmployeeItem?.valueNumber ?? esiEmployeeItem?.value_number ?? esiEmployeeItem?.value ?? 0) || 0;
+            if (esiEmployeeItem?.meta?.salaryLimit !== undefined && esiEmployeeItem?.meta?.salaryLimit !== null) {
+              loadedEsiLimit = Number(esiEmployeeItem.meta.salaryLimit);
+            }
           } else {
             const legacyEsiItem = deductionsArray.find(d => (d?.key || d?.name) === 'ESI');
             esiPercent = Number(legacyEsiItem?.valueNumber ?? legacyEsiItem?.value_number ?? legacyEsiItem?.value ?? 0) || 0;
+            if (legacyEsiItem?.meta?.salaryLimit !== undefined && legacyEsiItem?.meta?.salaryLimit !== null) {
+              loadedEsiLimit = Number(legacyEsiItem.meta.salaryLimit);
+            }
           }
         } else if (dedSrc && typeof dedSrc === 'object') {
           const v = dedSrc.ESI_EMPLOYEE ?? dedSrc.ESI;
           esiPercent = Number(v?.valueNumber ?? v?.value_number ?? v?.value ?? v ?? 0) || 0;
+          if (v?.meta?.salaryLimit !== undefined && v?.meta?.salaryLimit !== null) {
+            loadedEsiLimit = Number(v.meta.salaryLimit);
+          }
         }
         setEsiEmployeePercent(esiPercent);
+        setEsiLimit(loadedEsiLimit);
 
         let slabs = [];
         if (Array.isArray(dedSrc)) {
@@ -457,7 +485,7 @@ const AddRegularStaff = () => {
         setPtSlabs(slabs);
 
         const pfBase = basic + da;
-        const pfEmployeeAmount = Math.round(pfBase * (pfPercent / 100));
+        const pfEmployeeAmount = Math.round(pfBase * (pfPercent / 100) * 100) / 100;
 
         const totalEarnings =
           Number(basic || 0) +
@@ -468,8 +496,8 @@ const AddRegularStaff = () => {
           Number(earnings['MEDICAL ALLOWANCE'] || 0) +
           Number(earnings['TRAVEL ALLOWANCE'] || 0) +
           Number(earnings['OTHER ALLOWANCES'] || 0);
-        const esiEmployeeAmount = Math.round(totalEarnings * (esiPercent / 100));
-        const professionalTaxAmount = pickProfessionalTax(totalEarnings, slabs);
+        const esiEmployeeAmount = totalEarnings > loadedEsiLimit ? 0 : Math.round(totalEarnings * (esiPercent / 100) * 100) / 100;
+        const professionalTaxAmount = Math.round(pickProfessionalTax(totalEarnings, slabs) * 100) / 100;
 
         if (!skipSetFields) {
           form.setFieldsValue({
@@ -502,7 +530,7 @@ const AddRegularStaff = () => {
     const da = Number(daWatch || 0);
     const base = basic + da;
     const percent = Number(pfEmployeePercent || 0);
-    const amount = Math.round(base * (percent / 100));
+    const amount = Math.round(base * (percent / 100) * 100) / 100;
     form.setFieldsValue({
       provident_fund_employee: amount,
       provident_fund_employer: 0,
@@ -513,7 +541,7 @@ const AddRegularStaff = () => {
     if (!selectedTemplate) return;
     const total = calcTotalEarnings();
     const percent = Number(esiEmployeePercent || 0);
-    const amount = Math.round(total * (percent / 100));
+    const amount = total > esiLimit ? 0 : Math.round(total * (percent / 100) * 100) / 100;
     form.setFieldsValue({ esi: amount });
   }, [
     selectedTemplate,
@@ -523,16 +551,18 @@ const AddRegularStaff = () => {
     specialAllowanceWatch,
     conveyanceAllowanceWatch,
     medicalAllowanceWatch,
+    travelAllowanceWatch,
     otherAllowancesWatch,
     extraEarnings,
     esiEmployeePercent,
+    esiLimit,
     form,
   ]);
 
   useEffect(() => {
     if (!selectedTemplate) return;
     const total = calcTotalEarnings();
-    const amount = pickProfessionalTax(total, ptSlabs);
+    const amount = Math.round(pickProfessionalTax(total, ptSlabs) * 100) / 100;
     form.setFieldsValue({ professional_tax: amount });
   }, [
     selectedTemplate,
