@@ -45,6 +45,7 @@ const RosterManagement = () => {
   const [cycleDays, setCycleDays] = useState(15);
   const [cycleStartType, setCycleStartType] = useState('FIRST_MONDAY_OF_MONTH');
   const [excludeWeeklyOff, setExcludeWeeklyOff] = useState(true);
+  const [attachShiftToWeeklyOff, setAttachShiftToWeeklyOff] = useState(false);
   const [anchorDate, setAnchorDate] = useState(null);
   const [rotationRange, setRotationRange] = useState([dayjs().startOf('month'), dayjs().endOf('month')]);
 
@@ -125,6 +126,7 @@ const RosterManagement = () => {
         setCycleDays(rA.cycleDays || 14);
         setCycleStartType(rA.cycleStartType || 'FIRST_MONDAY_OF_MONTH');
         setExcludeWeeklyOff(rA.excludeWeeklyOff !== undefined ? !!rA.excludeWeeklyOff : true);
+        setAttachShiftToWeeklyOff(rA.attachShiftToWeeklyOff !== undefined ? !!rA.attachShiftToWeeklyOff : false);
         setAnchorDate(rA.anchorDate ? dayjs(rA.anchorDate) : null);
       }
       if (rB) {
@@ -214,6 +216,7 @@ const RosterManagement = () => {
         cycleDays,
         cycleStartType,
         excludeWeeklyOff,
+        attachShiftToWeeklyOff,
         anchorDate: anchorDate ? anchorDate.format('YYYY-MM-DD') : null,
         active: true
       });
@@ -226,6 +229,7 @@ const RosterManagement = () => {
         cycleDays,
         cycleStartType,
         excludeWeeklyOff,
+        attachShiftToWeeklyOff,
         anchorDate: anchorDate ? anchorDate.format('YYYY-MM-DD') : null,
         active: true
       });
@@ -275,6 +279,7 @@ const RosterManagement = () => {
         cycleDays,
         cycleStartType,
         excludeWeeklyOff,
+        attachShiftToWeeklyOff,
         anchorDate: anchorDate ? anchorDate.format('YYYY-MM-DD') : null,
         active: true
       });
@@ -287,6 +292,7 @@ const RosterManagement = () => {
         cycleDays,
         cycleStartType,
         excludeWeeklyOff,
+        attachShiftToWeeklyOff,
         anchorDate: anchorDate ? anchorDate.format('YYYY-MM-DD') : null,
         active: true
       });
@@ -799,7 +805,7 @@ const RosterManagement = () => {
           open={isRotationModalOpen}
           onCancel={() => setIsRotationModalOpen(false)}
           footer={null}
-          width={700}
+          width={880}
           bodyStyle={{ padding: '8px 24px 24px' }}
         >
           <Tabs activeKey={rotationActiveTab} onChange={setRotationActiveTab}>
@@ -948,7 +954,7 @@ const RosterManagement = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 1fr', gap: '16px', alignItems: 'center' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: cycleStartType === 'SPECIFIC_DATE' ? '110px 1fr 1fr 1fr 1fr' : '110px 1fr 1fr 1fr', gap: '14px', alignItems: 'center' }}>
                   <div>
                     <Text strong style={{ fontSize: '13px', display: 'block' }}>Swap Cycle</Text>
                     <InputNumber
@@ -981,6 +987,17 @@ const RosterManagement = () => {
                     >
                       <Option value={true}>Exclude Weekly Off</Option>
                       <Option value={false}>Include Weekly Off</Option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Text strong style={{ fontSize: '13px', display: 'block' }}>Weekly Off Duty Shift</Text>
+                    <Select
+                      value={attachShiftToWeeklyOff}
+                      onChange={setAttachShiftToWeeklyOff}
+                      style={{ width: '100%', marginTop: '6px' }}
+                    >
+                      <Option value={false}>Do Not Attach (Default)</Option>
+                      <Option value={true}>Attach Active Cycle Shift</Option>
                     </Select>
                   </div>
                   {cycleStartType === 'SPECIFIC_DATE' && (
