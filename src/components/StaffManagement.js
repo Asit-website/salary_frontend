@@ -53,6 +53,8 @@ const StaffManagement = () => {
   const [issuingForStaff, setIssuingForStaff] = useState(null);
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [selectedImportTemplate, setSelectedImportTemplate] = useState(undefined);
+  const [shiftTemplates, setShiftTemplates] = useState([]);
+  const [selectedImportShift, setSelectedImportShift] = useState(undefined);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importResults, setImportResults] = useState(null);
@@ -65,6 +67,7 @@ const StaffManagement = () => {
     fetchSalaryTemplates();
     fetchLetterTemplates();
     fetchDepartments();
+    fetchShiftTemplates();
   }, []);
 
   const fetchLetterTemplates = async () => {
@@ -178,6 +181,17 @@ const StaffManagement = () => {
       setDepartments(items);
     } catch (_) {
       setDepartments([]);
+    }
+  };
+
+  const fetchShiftTemplates = async () => {
+    try {
+      const response = await api.get('/admin/shifts/templates');
+      if (response.data.success) {
+        setShiftTemplates(response.data.templates || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch shift templates:', error);
     }
   };
 
@@ -1165,7 +1179,7 @@ const StaffManagement = () => {
                   <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Staff ID</Text> (Unique employee ID)</li>
                   <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Phone Number</Text> (Required - used for login)</li>
                   <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Designation</Text> (Job title)</li>
-                  <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Joining Date</Text> (Format: YYYY-MM-DD)</li>
+                  <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Joining Date</Text> (Format: DD-MM-YYYY)</li>
                   <li><Text code style={{ background: '#ffffff', border: '1px solid #d9d9d9', borderRadius: '4px' }}>Email Address</Text></li>
                 </ul>
               </div>
@@ -1189,11 +1203,37 @@ const StaffManagement = () => {
                 </Select>
               </div>
 
+              <div style={{ textAlign: 'left', marginBottom: '24px' }}>
+                <Text strong style={{ fontSize: '13px', display: 'block', marginBottom: '8px', color: '#434343' }}>
+                  Select Shift Template (Optional):
+                </Text>
+                <Select
+                  placeholder="Select a Shift Template"
+                  style={{ width: '100%' }}
+                  allowClear
+                  value={selectedImportShift}
+                  onChange={(val) => setSelectedImportShift(val)}
+                >
+                  {(shiftTemplates || []).map((t) => (
+                    <Select.Option key={t.id} value={t.id}>
+                      {t.name}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </div>
+
               <Button
                 icon={<DownloadOutlined />}
                 onClick={async () => {
                   try {
-                    const urlParams = selectedImportTemplate ? `?salaryTemplateId=${selectedImportTemplate}` : '';
+                    const qParams = [];
+                    if (selectedImportTemplate) {
+                      qParams.push(`salaryTemplateId=${selectedImportTemplate}`);
+                    }
+                    if (selectedImportShift) {
+                      qParams.push(`shiftTemplateId=${selectedImportShift}`);
+                    }
+                    const urlParams = qParams.length > 0 ? `?${qParams.join('&')}` : '';
                     const response = await api.get(`/admin/staff/import-template${urlParams}`, {
                       responseType: 'blob',
                     });
@@ -1219,7 +1259,10 @@ const StaffManagement = () => {
               <Upload.Dragger
                 name="file"
                 multiple={false}
-                action={`${api.defaults.baseURL}/admin/staff/import${selectedImportTemplate ? `?salaryTemplateId=${selectedImportTemplate}` : ''}`}
+                action={`${api.defaults.baseURL}/admin/staff/import?${[
+                  selectedImportTemplate ? `salaryTemplateId=${selectedImportTemplate}` : '',
+                  selectedImportShift ? `shiftTemplateId=${selectedImportShift}` : ''
+                ].filter(Boolean).join('&')}`}
                 headers={{
                   Authorization: `Bearer ${sessionStorage.getItem('impersonate_token') || localStorage.getItem('token')}`,
                   'X-Org-Id': (() => {

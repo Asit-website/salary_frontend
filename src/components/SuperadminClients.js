@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, InputNumber, Select, message, Space, DatePicker, Tag, Checkbox, Row, Col } from 'antd';
+import { Layout, Typography, Menu, Table, Button, Modal, Form, Input, InputNumber, Select, message, Space, DatePicker, Tag, Checkbox, Row, Col, Popconfirm } from 'antd';
 import { 
   MenuFoldOutlined, 
   MenuUnfoldOutlined, 
@@ -10,7 +10,9 @@ import {
   SafetyCertificateOutlined,
   ArrowUpOutlined,
   PoweroffOutlined,
-  CheckCircleOutlined
+  CheckCircleOutlined,
+  TeamOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -47,6 +49,11 @@ export default function SuperadminClients() {
   const [geoStaffCounts, setGeoStaffCounts] = useState({});
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [staffModalOpen, setStaffModalOpen] = useState(false);
+  const [selectedClientForStaff, setSelectedClientForStaff] = useState(null);
+  const [clientStaffList, setClientStaffList] = useState([]);
+  const [loadingStaffList, setLoadingStaffList] = useState(false);
+  const [deletingAllStaff, setDeletingAllStaff] = useState(false);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isSuperadmin = user.role === 'superadmin';
   const userPermissions = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : (user.permissions || {});
@@ -103,6 +110,52 @@ export default function SuperadminClients() {
       setGeoStaffCounts(geoStaffCounts);
     } catch (e) {
       console.error('Failed to load staff counts:', e);
+    }
+  };
+
+  const openStaffModal = async (client) => {
+    setSelectedClientForStaff(client);
+    setStaffModalOpen(true);
+    setLoadingStaffList(true);
+    try {
+      const res = await api.get(`/superadmin/clients/${client.id}/staff`);
+      if (res.data.success) {
+        setClientStaffList(res.data.staff || []);
+      }
+    } catch (e) {
+      message.error('Failed to load staff list');
+    } finally {
+      setLoadingStaffList(false);
+    }
+  };
+
+  const deleteSingleStaff = async (staffId) => {
+    try {
+      const res = await api.delete(`/superadmin/clients/${selectedClientForStaff.id}/staff/${staffId}`);
+      if (res.data.success) {
+        message.success('Staff member deleted successfully');
+        const updated = clientStaffList.filter(s => s.id !== staffId);
+        setClientStaffList(updated);
+        load();
+      }
+    } catch (e) {
+      message.error(e.response?.data?.message || 'Failed to delete staff member');
+    }
+  };
+
+  const deleteAllStaff = async () => {
+    setDeletingAllStaff(true);
+    try {
+      const res = await api.delete(`/superadmin/clients/${selectedClientForStaff.id}/staff`);
+      if (res.data.success) {
+        message.success(res.data.message || 'All staff members deleted successfully');
+        setClientStaffList([]);
+        load();
+      }
+    } catch (e) {
+      message.error(e.response?.data?.message || 'Failed to delete all staff');
+    } finally {
+      setDeletingAllStaff(false);
     }
   };
 
@@ -725,6 +778,14 @@ export default function SuperadminClients() {
                 onClick={() => openUpgrade(rec)}
               >
                 Upgrade
+              </Button>
+              <Button
+                size="small"
+                icon={<TeamOutlined />}
+                style={{ backgroundColor: '#096dd9', color: 'white', borderColor: '#096dd9' }}
+                onClick={() => openStaffModal(rec)}
+              >
+                Manage Staff
               </Button>
               <Button
                 size="small"
@@ -1358,6 +1419,80 @@ export default function SuperadminClients() {
             </div>
           )}
         </Form>
+      </Modal>
+
+      <Modal
+        title={`Manage Staff - ${selectedClientForStaff?.name || ''}`}
+        open={staffModalOpen}
+        onCancel={() => setStaffModalOpen(false)}
+        footer={null}
+        width={700}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            Total Staff: <strong>{clientStaffList.length}</strong>
+          </div>
+          {clientStaffList.length > 0 && (
+            <Popconfirm
+              title="Are you absolutely sure you want to delete ALL staff members of this organization? This action is irreversible!"
+              onConfirm={deleteAllStaff}
+              okText="Yes, Delete All"
+              cancelText="No"
+              okButtonProps={{ danger: true, loading: deletingAllStaff }}
+            >
+              <Button type="primary" danger icon={<DeleteOutlined />}>
+                Delete All Staff
+              </Button>
+            </Popconfirm>
+          )}
+        </div>
+
+        <Table
+          dataSource={clientStaffList}
+          rowKey="id"
+          loading={loadingStaffList}
+          pagination={{ pageSize: 10 }}
+          size="small"
+          columns={[
+            {
+              title: 'ID',
+              dataIndex: 'id',
+              width: 60,
+              render: (id) => <span style={{ color: '#8c8c8c' }}>#{id}</span>
+            },
+            {
+              title: 'Name',
+              dataIndex: ['profile', 'name'],
+              render: (name) => name || 'N/A'
+            },
+            {
+              title: 'Phone',
+              dataIndex: 'phone'
+            },
+            {
+              title: 'Role',
+              dataIndex: 'role',
+              render: (role) => <Tag color="blue" style={{ textTransform: 'capitalize' }}>{role}</Tag>
+            },
+            {
+              title: 'Action',
+              key: 'action',
+              width: 100,
+              render: (_, record) => (
+                <Popconfirm
+                  title="Are you sure you want to delete this staff member?"
+                  onConfirm={() => deleteSingleStaff(record.id)}
+                  okText="Delete"
+                  cancelText="Cancel"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+                </Popconfirm>
+              )
+            }
+          ]}
+        />
       </Modal>
       {/* <div style={{ fontSize: '12px', color: '#666', marginTop: 8 }}>
         Note: You can only increase staff limit during active subscription. Full subscription changes require expiration.

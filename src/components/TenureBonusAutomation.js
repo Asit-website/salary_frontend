@@ -131,7 +131,7 @@ export default function TenureBonusAutomation() {
         setSavingAssignment(true);
         try {
             const payload = {
-                userId: values.userId,
+                userIds: values.userIds,
                 tenureBonusRuleId: values.tenureBonusRuleId,
                 effectiveFrom: values.effectiveFrom.format('YYYY-MM-DD'),
                 effectiveTo: values.effectiveTo ? values.effectiveTo.format('YYYY-MM-DD') : null
@@ -605,21 +605,52 @@ export default function TenureBonusAutomation() {
                     >
                         <div style={{ paddingTop: '12px' }}>
                           <Form form={assignForm} layout="vertical" onFinish={handleAssignBonus}>
-                              <Form.Item name="userId" label={<span style={{ fontWeight: '600', color: '#475569' }}>Select Staff Member</span>} rules={[{ required: true, message: 'Staff selection is required' }]}>
-                                  <Select 
-                                      showSearch 
-                                      placeholder="Search staff by name or phone"
-                                      optionFilterProp="children"
-                                      style={{ borderRadius: '8px' }}
-                                      filterOption={(input, option) => option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0}
-                                  >
-                                      {staffList.map(s => (
-                                          <Option key={s.userId} value={s.userId}>
-                                              {s.name} ({s.staffId || 'No ID'})
-                                          </Option>
-                                      ))}
-                                  </Select>
-                              </Form.Item>
+                    <Form.Item name="userIds" label={<span style={{ fontWeight: '600', color: '#475569' }}>Select Staff Members</span>} rules={[{ required: true, message: 'Staff selection is required' }]}>
+                        <Select 
+                            showSearch 
+                            placeholder="Search staff by name or phone"
+                            optionFilterProp="children"
+                            mode="multiple"
+                            style={{ borderRadius: '8px' }}
+                            filterOption={(input, option) => {
+                                const label = option?.props?.label || '';
+                                return String(label).toLowerCase().includes(input.toLowerCase());
+                            }}
+                            dropdownRender={(menu) => (
+                                <>
+                                    <div style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between' }}>
+                                        <Button
+                                            type="link"
+                                            size="small"
+                                            onClick={() => {
+                                                assignForm.setFieldsValue({ userIds: staffList.map(s => s.userId) });
+                                            }}
+                                            style={{ fontWeight: '600' }}
+                                        >
+                                            Select All
+                                        </Button>
+                                        <Button
+                                            type="link"
+                                            size="small"
+                                            onClick={() => {
+                                                assignForm.setFieldsValue({ userIds: [] });
+                                            }}
+                                            style={{ fontWeight: '600', color: '#ef4444' }}
+                                        >
+                                            Clear All
+                                        </Button>
+                                    </div>
+                                    {menu}
+                                </>
+                            )}
+                        >
+                            {staffList.map(s => (
+                                <Option key={s.userId} value={s.userId} label={`${s.name} (${s.staffId || 'No ID'})`}>
+                                    {s.name} ({s.staffId || 'No ID'})
+                                </Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
                               <Form.Item name="tenureBonusRuleId" label={<span style={{ fontWeight: '600', color: '#475569' }}>Select Bonus Rule</span>} rules={[{ required: true, message: 'Bonus rule selection is required' }]}>
                                   <Select placeholder="Choose a rule template" style={{ borderRadius: '8px' }}>
                                       {rules.map(r => (

@@ -374,7 +374,7 @@ export default function BreakAutomation() {
                                                                 <span>:</span>
                                                                 <Form.Item {...restField} name={[name, 'm']} noStyle initialValue={30}>
                                                                     <Select style={{ width: 65 }}>
-                                                                        {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => <Option key={m} value={m}>{String(m).padStart(2, '0')}</Option>)}
+                                                                        {[...Array(60).keys()].map(m => <Option key={m} value={m}>{String(m).padStart(2, '0')}</Option>)}
                                                                     </Select>
                                                                 </Form.Item>
                                                                 <Text type="secondary">hh:mm</Text>
@@ -454,7 +454,7 @@ export default function BreakAutomation() {
                                     <Space>
                                         <Form.Item name="halfDayH" noStyle initialValue={2}><Select style={{ width: 65 }}>{[...Array(24).keys()].map(h => <Option key={h} value={h}>{String(h).padStart(2, '0')}</Option>)}</Select></Form.Item>
                                         <span>:</span>
-                                        <Form.Item name="halfDayM" noStyle initialValue={0}><Select style={{ width: 65 }}>{[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => <Option key={m} value={m}>{String(m).padStart(2, '0')}</Option>)}</Select></Form.Item>
+                                        <Form.Item name="halfDayM" noStyle initialValue={0}><Select style={{ width: 65 }}>{[...Array(60).keys()].map(m => <Option key={m} value={m}>{String(m).padStart(2, '0')}</Option>)}</Select></Form.Item>
                                         <Text type="secondary">hh:mm</Text>
                                     </Space>
                                     <div style={{ marginTop: 4 }}>
@@ -471,7 +471,7 @@ export default function BreakAutomation() {
                                     <Space>
                                         <Form.Item name="fullDayH" noStyle initialValue={4}><Select style={{ width: 65 }}>{[...Array(24).keys()].map(h => <Option key={h} value={h}>{String(h).padStart(2, '0')}</Option>)}</Select></Form.Item>
                                         <span>:</span>
-                                        <Form.Item name="fullDayM" noStyle initialValue={0}><Select style={{ width: 65 }}>{[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => <Option key={m} value={m}>{String(m).padStart(2, '0')}</Option>)}</Select></Form.Item>
+                                        <Form.Item name="fullDayM" noStyle initialValue={0}><Select style={{ width: 65 }}>{[...Array(60).keys()].map(m => <Option key={m} value={m}>{String(m).padStart(2, '0')}</Option>)}</Select></Form.Item>
                                         <Text type="secondary">hh:mm</Text>
                                     </Space>
                                     <div style={{ marginTop: 4 }}>

@@ -1026,7 +1026,7 @@ const AddRegularStaff = () => {
                         name="dateOfJoining"
                         label="Joining Date"
                       >
-                        <DatePicker style={{ width: '100%', height: '40px' }} />
+                        <DatePicker style={{ width: '100%', height: '40px' }} format="DD-MM-YYYY" />
                       </Form.Item>
                     </Col>
                   </Row>

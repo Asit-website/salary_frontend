@@ -28,6 +28,8 @@ const OrgReports = () => {
   const [employees, setEmployees] = useState([]);
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [reportScope, setReportScope] = useState('all'); // 'all' or 'selected'
+  const [departments, setDepartments] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState('');
   const [salaryRegisterEnabled, setSalaryRegisterEnabled] = useState(true);
   const [monthlySummaryEnabled, setMonthlySummaryEnabled] = useState(true);
   const [perDaySalaryEnabled, setPerDaySalaryEnabled] = useState(true);
@@ -38,7 +40,7 @@ const OrgReports = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Fetch employees for selection
+  // Fetch employees and departments for selection
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
@@ -53,7 +55,24 @@ const OrgReports = () => {
         console.error('Error fetching employees:', error);
       }
     };
+    const fetchDepartments = async () => {
+      try {
+        const response = await api.get('/admin/business-functions');
+        if (response.data.success) {
+          const list = response.data.data || [];
+          const deptFn = list.find((f) => String(f.name || '').toLowerCase() === 'department');
+          const values = Array.isArray(deptFn?.values) ? deptFn.values : [];
+          const items = values
+            .filter((v) => v && v.value)
+            .map((v) => ({ id: v.id, name: v.value }));
+          setDepartments(items);
+        }
+      } catch (error) {
+        console.error('Error fetching departments:', error);
+      }
+    };
     fetchEmployees();
+    fetchDepartments();
   }, []);
 
   // Fetch subscription info to check feature toggles
@@ -156,7 +175,14 @@ const OrgReports = () => {
     if (reportType && month) {
       fetchReportData();
     }
-  }, [reportType, month, reportScope, selectedEmployees]);
+  }, [reportType, month, reportScope, selectedEmployees, selectedDepartment]);
+
+  useEffect(() => {
+    const mainType = reportType[0];
+    if (mainType !== 'attendance' && mainType !== 'monthly-attendance') {
+      setSelectedDepartment('');
+    }
+  }, [reportType]);
 
   const fetchReportData = async () => {
     const requestId = ++activeRequestRef.current;
@@ -219,6 +245,9 @@ const OrgReports = () => {
         if (reportScope === 'selected' && selectedEmployees.length > 0) {
           params.employeeIds = selectedEmployees.join(',');
         }
+      }
+      if (selectedDepartment) {
+        params.department = selectedDepartment;
       }
 
       const response = await api.get(endpoint, { params });
@@ -392,6 +421,10 @@ const OrgReports = () => {
 
       if (reportScope === 'selected' && selectedEmployees.length > 0) {
         params.employeeIds = selectedEmployees.join(',');
+      }
+
+      if (selectedDepartment) {
+        params.department = selectedDepartment;
       }
 
       const response = await api.get(endpoint, {
@@ -1097,6 +1130,9 @@ const OrgReports = () => {
     />
   );
 
+  const showDept = reportType[0] === 'attendance' || reportType[0] === 'monthly-attendance';
+  const showEmployeeSelect = reportScope === 'selected';
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} />
@@ -1112,7 +1148,7 @@ const OrgReports = () => {
           <div style={{ paddingBottom: '24px' }}>
             <Card className="sales-content-card" bodyStyle={{ padding: '20px' }} style={{ marginBottom: '24px' }}>
               <Row gutter={[16, 16]} align="bottom">
-                <Col xs={24} sm={12} md={5}>
+                <Col xs={24} sm={12} md={showDept && showEmployeeSelect ? 3 : (showDept || showEmployeeSelect ? 4 : 5)}>
                   <div className="modal-field-label">Report Scope:</div>
                   <Select
                     style={{ width: '100%' }}
@@ -1125,8 +1161,8 @@ const OrgReports = () => {
                   </Select>
                 </Col>
 
-                {reportScope === 'selected' && (
-                  <Col xs={24} sm={12} md={6}>
+                {showEmployeeSelect && (
+                  <Col xs={24} sm={12} md={showDept ? 4 : 6}>
                     <div className="modal-field-label">Select Employees:</div>
                     <Select
                       mode="multiple"
@@ -1145,7 +1181,28 @@ const OrgReports = () => {
                   </Col>
                 )}
 
-                <Col xs={24} sm={12} md={7}>
+                {showDept && (
+                  <Col xs={24} sm={12} md={showEmployeeSelect ? 4 : 5}>
+                    <div className="modal-field-label">Department:</div>
+                    <Select
+                      style={{ width: '100%' }}
+                      value={selectedDepartment}
+                      onChange={setSelectedDepartment}
+                      placeholder="All Departments"
+                      dropdownStyle={{ borderRadius: '8px' }}
+                      allowClear
+                    >
+                      <Option value="">All Departments</Option>
+                      {departments.map((dept) => (
+                        <Option key={dept.name} value={dept.name}>
+                          {dept.name}
+                        </Option>
+                      ))}
+                    </Select>
+                  </Col>
+                )}
+
+                <Col xs={24} sm={12} md={showDept && showEmployeeSelect ? 5 : (showDept || showEmployeeSelect ? 6 : 7)}>
                   <div className="modal-field-label">Report Type:</div>
                   <Cascader
                     style={{ width: '100%' }}
@@ -1158,7 +1215,7 @@ const OrgReports = () => {
                   />
                 </Col>
 
-                <Col xs={24} sm={12} md={5}>
+                <Col xs={24} sm={12} md={showDept && showEmployeeSelect ? 3 : (showDept || showEmployeeSelect ? 4 : 5)}>
                   <div className="modal-field-label">Month:</div>
                   <Select
                     style={{ width: '100%' }}
@@ -1176,7 +1233,7 @@ const OrgReports = () => {
                   </Select>
                 </Col>
 
-                <Col xs={24} sm={12} md={reportScope === 'selected' ? 6 : 7} style={{ textAlign: 'right' }}>
+                <Col xs={24} sm={12} md={showDept && showEmployeeSelect ? 5 : (showDept || showEmployeeSelect ? 6 : 7)} style={{ textAlign: 'right' }}>
                   <Button
                     type="primary"
                     shape="round"

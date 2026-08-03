@@ -1190,7 +1190,7 @@ export default function StaffProfileView() {
                 <Col span={12}><Form.Item name="staffType" label="Staff Type"><Select allowClear options={[{ value: 'regular', label: 'Regular' }, { value: 'contractual', label: 'Contractual' }, { value: 'intern', label: 'Intern' }]} /></Form.Item></Col>
                 <Col span={12}><Form.Item name="phone" label="Contact Number"><Input /></Form.Item></Col>
                 <Col span={12}><Form.Item name="email" label="Email"><Input type="email" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="dateOfJoining" label="Date of Joining"><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+                <Col span={12}><Form.Item name="dateOfJoining" label="Date of Joining"><DatePicker style={{ width: '100%' }} format="DD-MM-YYYY" /></Form.Item></Col>
                 <Col span={12}><Form.Item name="salaryCycleDate" label="Salary Cycle Date"><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
                 <Col span={12}>
                   <Form.Item name="shiftSelection" label="Shift">

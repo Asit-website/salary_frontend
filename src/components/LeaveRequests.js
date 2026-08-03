@@ -24,7 +24,7 @@ const LeaveRequests = () => {
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(false);
     const [collapsed, setCollapsed] = useState(false);
-    const [statusFilter, setStatusFilter] = useState('PENDING');
+    const [statusFilter, setStatusFilter] = useState('ALL');
     const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [reviewAction, setReviewAction] = useState(null);
@@ -375,13 +375,14 @@ const LeaveRequests = () => {
                         <Select 
                             showSearch 
                             placeholder="Select staff member"
+                            optionFilterProp="label"
                             onChange={(uid) => {
                                 fetchCategories(uid);
                                 createForm.setFieldsValue({ categoryKey: undefined });
                             }}
                         >
                             {staffList.map(s => (
-                                <Option key={s.id} value={s.id}>{s.name} ({s.phone})</Option>
+                                <Option key={s.id} value={s.id} label={`${s.name} (${s.phone})`}>{s.name} ({s.phone})</Option>
                             ))}
                         </Select>
                     </Form.Item>
