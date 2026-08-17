@@ -411,6 +411,17 @@ export default function OvertimeAutomation() {
                                     </Checkbox>
                                 </Form.Item>
 
+                                <Form.Item name="ignoreLateInOT" valuePropName="checked" initialValue={false} noStyle>
+                                    <Checkbox>
+                                        <Text strong>Do not deduct late arrival from overtime</Text>
+                                        <br />
+                                        <Text type="secondary" size="small" style={{ marginLeft: 24 }}>
+                                            If enabled, minutes lost due to late punch-in will not reduce the overtime count.
+                                            e.g. Staff arrives 5 min late but works 65 min extra — full 65 min OT will be given.
+                                        </Text>
+                                    </Checkbox>
+                                </Form.Item>
+
                             </Space>
 
                             <div style={{ background: '#fafafa', padding: '20px', borderRadius: '12px', border: '1px solid #f0f2f5' }}>
