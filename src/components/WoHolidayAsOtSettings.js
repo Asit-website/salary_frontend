@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layout, Card, Radio, Button, message, Space, Switch, Table, Input, Select } from 'antd';
+import { Layout, Card, Radio, Button, message, Space, Switch, Table, Input, Select, DatePicker, InputNumber } from 'antd';
 import { ArrowLeftOutlined, SearchOutlined, CheckSquareOutlined, BorderOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 import Sidebar from './Sidebar';
 import MainHeader from './MainHeader';
 import api from '../api';
@@ -30,12 +31,17 @@ export default function WoHolidayAsOtSettings() {
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [selectedDesg, setSelectedDesg] = useState('ALL');
 
+  // Grace and Recalculate States
+  const [graceMinutes, setGraceMinutes] = useState(0);
+  const [recalculateFrom, setRecalculateFrom] = useState(dayjs().startOf('month'));
+
   const fetchList = async () => {
     try {
       setLoading(true);
       const resp = await api.get('/admin/salary/wo-holiday-as-ot');
       const rows = resp?.data?.items || [];
       setItems(rows);
+      setGraceMinutes(resp?.data?.graceMinutes || 0);
       const allTrue = rows.length > 0 && rows.every(r => !!r.woHolidayAsOt);
       const allFalse = rows.length > 0 && rows.every(r => !r.woHolidayAsOt);
       if (allTrue) setMode('all');
@@ -106,21 +112,56 @@ export default function WoHolidayAsOtSettings() {
   const onConfirm = async () => {
     try {
       setSaving(true);
+      const payloadBase = {
+        graceMinutes,
+        recalculateFrom: recalculateFrom ? recalculateFrom.format('YYYY-MM-DD') : null
+      };
+
       if (!enabled) {
-        if (allIds.length) await api.put('/admin/salary/wo-holiday-as-ot-bulk', { userIds: allIds, woHolidayAsOt: false });
+        if (allIds.length) {
+          await api.put('/admin/salary/wo-holiday-as-ot-bulk', { 
+            ...payloadBase, 
+            userIds: allIds, 
+            woHolidayAsOt: false 
+          });
+        }
         message.success('Settings saved successfully');
         fetchList();
         return;
       }
       if (mode === 'all') {
-        if (allIds.length) await api.put('/admin/salary/wo-holiday-as-ot-bulk', { userIds: allIds, woHolidayAsOt: true });
+        if (allIds.length) {
+          await api.put('/admin/salary/wo-holiday-as-ot-bulk', { 
+            ...payloadBase, 
+            userIds: allIds, 
+            woHolidayAsOt: true 
+          });
+        }
       } else if (mode === 'none') {
-        if (allIds.length) await api.put('/admin/salary/wo-holiday-as-ot-bulk', { userIds: allIds, woHolidayAsOt: false });
+        if (allIds.length) {
+          await api.put('/admin/salary/wo-holiday-as-ot-bulk', { 
+            ...payloadBase, 
+            userIds: allIds, 
+            woHolidayAsOt: false 
+          });
+        }
       } else {
         const sel = Array.from(new Set(selectedIds));
         const unSel = allIds.filter(id => !sel.includes(id));
-        if (sel.length) await api.put('/admin/salary/wo-holiday-as-ot-bulk', { userIds: sel, woHolidayAsOt: true });
-        if (unSel.length) await api.put('/admin/salary/wo-holiday-as-ot-bulk', { userIds: unSel, woHolidayAsOt: false });
+        if (sel.length) {
+          await api.put('/admin/salary/wo-holiday-as-ot-bulk', { 
+            ...payloadBase, 
+            userIds: sel, 
+            woHolidayAsOt: true 
+          });
+        }
+        if (unSel.length) {
+          await api.put('/admin/salary/wo-holiday-as-ot-bulk', { 
+            ...payloadBase, 
+            userIds: unSel, 
+            woHolidayAsOt: false 
+          });
+        }
       }
       message.success('Settings saved successfully');
       fetchList();
@@ -292,11 +333,34 @@ export default function WoHolidayAsOtSettings() {
                   <Radio.Button value="selected" style={{ borderRadius: '0 6px 6px 0' }}>Selected Staff</Radio.Button>
                 </Radio.Group>
                 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                   {mode === 'selected' && enabled && (
                     <span style={{ fontSize: '13px', fontWeight: '600', color: '#7c3aed', background: '#f5f3ff', padding: '4px 12px', borderRadius: '15px' }}>
                       Selected: {selectedIds.length} / {items.length}
                     </span>
+                  )}
+                  {enabled && (
+                    <Space size={16} wrap>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>Grace (mins):</span>
+                        <InputNumber
+                          min={0}
+                          style={{ width: '80px', borderRadius: '6px' }}
+                          value={graceMinutes}
+                          onChange={(val) => setGraceMinutes(val || 0)}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>Recalculate From:</span>
+                        <DatePicker
+                          value={recalculateFrom}
+                          onChange={setRecalculateFrom}
+                          format="YYYY-MM-DD"
+                          style={{ width: '140px', borderRadius: '6px' }}
+                          allowClear={false}
+                        />
+                      </div>
+                    </Space>
                   )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <Switch checked={enabled} onChange={setEnabled} />
