@@ -925,6 +925,7 @@ export default function Settings() {
         ...(subscriptionInfo?.esiAsTaEnabled ? [
           { key: 'esi-as-ta', icon: <SwapOutlined />, label: 'ESI as Travel Allowance Mapping', desc: 'Reimburse ESI deductions as Travel Allowance', onClick: () => navigate('/settings/esi-as-ta') }
         ] : []),
+        { key: 'esi-calculation', icon: <SafetyCertificateOutlined />, label: 'ESI Calculation Settings', desc: 'Configure base salary mode (Gross/Net) and exclusions for ESI', onClick: () => navigate('/settings/esi-calculation') },
         { key: 'no-absent-pay', icon: <CheckCircleOutlined />, label: 'No Absent Pay Settings', desc: 'Configure perfect attendance pay for staff', onClick: () => navigate('/settings/no-absent-pay') },
         { key: 'wo-holiday-as-ot', icon: <ThunderboltOutlined />, label: 'Weekly Off & Holiday Work as OT', desc: 'Pay weekly off/holiday work hours as Overtime', onClick: () => navigate('/settings/wo-holiday-as-ot') },
         ...(subscriptionInfo?.weeklyOffDeductionEnabled ? [

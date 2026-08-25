@@ -24,6 +24,7 @@ import ManageSalaryTemplate from './components/ManageSalaryTemplate';
 import SalaryCalculationLogic from './components/SalaryCalculationLogic';
 import SalaryDetailsAccess from './components/SalaryDetailsAccess';
 import EsiAsTaSettings from './components/EsiAsTaSettings';
+import EsiCalculationSettings from './components/EsiCalculationSettings';
 import ProvidentFundSettings from './components/ProvidentFundSettings';
 import NoAbsentPaySettings from './components/NoAbsentPaySettings';
 import WoHolidayAsOtSettings from './components/WoHolidayAsOtSettings';
@@ -131,6 +132,7 @@ function App() {
       <Route path="/settings/salary-calculation" element={<PrivateRoute><SalaryCalculationLogic /></PrivateRoute>} />
       <Route path="/settings/salary-access" element={<PrivateRoute><SalaryDetailsAccess /></PrivateRoute>} />
       <Route path="/settings/esi-as-ta" element={<PrivateRoute><EsiAsTaSettings /></PrivateRoute>} />
+      <Route path="/settings/esi-calculation" element={<PrivateRoute><EsiCalculationSettings /></PrivateRoute>} />
       <Route path="/settings/provident-fund" element={<PrivateRoute><ProvidentFundSettings /></PrivateRoute>} />
       <Route path="/settings/no-absent-pay" element={<PrivateRoute><NoAbsentPaySettings /></PrivateRoute>} />
       <Route path="/settings/wo-holiday-as-ot" element={<PrivateRoute><WoHolidayAsOtSettings /></PrivateRoute>} />
