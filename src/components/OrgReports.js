@@ -3,7 +3,7 @@ import {
   Card, Select, DatePicker, Button, Table, message, Space, Spin, Row, Col, 
   Typography, Layout, Tag, Cascader, Modal 
 } from 'antd';
-import { DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined, EyeOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
@@ -28,6 +28,8 @@ const OrgReports = () => {
   const [employees, setEmployees] = useState([]);
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [reportScope, setReportScope] = useState('all'); // 'all' or 'selected'
+  const [absentModalOpen, setAbsentModalOpen] = useState(false);
+  const [selectedStaffAbsent, setSelectedStaffAbsent] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [salaryRegisterEnabled, setSalaryRegisterEnabled] = useState(true);
@@ -99,6 +101,7 @@ const OrgReports = () => {
   const reportOptions = React.useMemo(() => {
     const options = [
       { value: 'attendance', label: 'Attendance Report' },
+      { value: 'absent-report', label: 'Absent Report' },
       { value: 'monthly-attendance', label: 'Monthly Attendance (Detailed Excel)' },
       { value: 'leave', label: 'Leave Report' },
       { value: 'applied-leave', label: 'Applied Leave Report' },
@@ -200,6 +203,8 @@ const OrgReports = () => {
       let endpoint;
       if (mainType === 'attendance') {
         endpoint = '/admin/reports/org-attendance-matrix';
+      } else if (mainType === 'absent-report') {
+        endpoint = '/admin/reports/absent-report';
       } else if (mainType === 'monthly-attendance') {
         endpoint = '/admin/reports/monthly-attendance';
       } else if (mainType === 'leave') {
@@ -371,6 +376,8 @@ const OrgReports = () => {
 
       if (mainType === 'attendance') {
         endpoint = '/admin/reports/org-attendance-matrix';
+      } else if (mainType === 'absent-report') {
+        endpoint = '/admin/reports/absent-report';
       } else if (mainType === 'monthly-attendance') {
         endpoint = '/admin/reports/monthly-attendance';
       } else if (mainType === 'leave') {
@@ -1083,10 +1090,41 @@ const OrgReports = () => {
     );
   };
 
+  const getAbsentReportColumns = () => [
+    { title: 'S.N.', dataIndex: 'sn', key: 'sn', width: 60 },
+    { title: 'Employee Name', dataIndex: 'staffName', key: 'staffName', render: (v) => <span style={{ fontWeight: '600', color: '#1677ff' }}>{v}</span> },
+    { title: 'Staff ID', dataIndex: 'staffId', key: 'staffId' },
+    { title: 'Department', dataIndex: 'department', key: 'department', render: (v) => <Tag color="blue">{v || 'General'}</Tag> },
+    { title: 'Salary Month', dataIndex: 'salaryMonth', key: 'salaryMonth' },
+    // { title: 'Total Working Days', dataIndex: 'totalWorkingDays', key: 'totalWorkingDays', align: 'right', render: (v) => <span style={{ fontWeight: '600' }}>{v}</span> },
+    // { title: 'Total Present Days', dataIndex: 'totalPresentDays', key: 'totalPresentDays', align: 'right', render: (v) => <Tag color="green" style={{ fontWeight: '600' }}>{v}</Tag> },
+    {
+      title: 'Total Absent Days',
+      dataIndex: 'totalAbsentDays',
+      key: 'totalAbsentDays',
+      align: 'right',
+      render: (v, record) => (
+        <Tag
+          color={v > 0 ? "red" : "default"}
+          style={{ fontWeight: '700', cursor: v > 0 ? 'pointer' : 'default', padding: '2px 8px' }}
+          onClick={() => {
+            if (v > 0 && record.absentDates && record.absentDates.length > 0) {
+              setSelectedStaffAbsent(record);
+              setAbsentModalOpen(true);
+            }
+          }}
+        >
+          {v} {v > 0 ? <EyeOutlined style={{ marginLeft: 6 }} /> : null}
+        </Tag>
+      )
+    },
+  ];
+
   const renderTable = () => (
     <Table
       columns={
         reportType[0] === 'attendance' ? getAttendanceColumns() :
+          reportType[0] === 'absent-report' ? getAbsentReportColumns() :
           reportType[0] === 'monthly-attendance' ? [] :
             reportType[0] === 'leave' ? getLeaveColumns() :
               reportType[0] === 'applied-leave' ? getAppliedLeaveColumns() :
@@ -1119,6 +1157,23 @@ const OrgReports = () => {
           : 'No data available'
       }}
       scroll={{ x: reportType[0] === 'attendance' || reportType[0] === 'punch-report' ? 'max-content' : 1200 }}
+      summary={(pageData) => {
+        if (reportType[0] !== 'absent-report' || !pageData || pageData.length === 0) return null;
+        const totalAbsent = pageData.reduce((acc, curr) => acc + Number(curr.totalAbsentDays || 0), 0);
+
+        return (
+          <Table.Summary fixed>
+            <Table.Summary.Row style={{ background: '#fafafa', fontWeight: 'bold' }}>
+              <Table.Summary.Cell index={0}>Total</Table.Summary.Cell>
+              <Table.Summary.Cell index={1}>{pageData.length} Employees</Table.Summary.Cell>
+              <Table.Summary.Cell index={2}></Table.Summary.Cell>
+              <Table.Summary.Cell index={3}></Table.Summary.Cell>
+              <Table.Summary.Cell index={4}></Table.Summary.Cell>
+              <Table.Summary.Cell index={5} align="right"><Tag color="red" style={{ fontWeight: '700', fontSize: 13 }}>{totalAbsent}</Tag></Table.Summary.Cell>
+            </Table.Summary.Row>
+          </Table.Summary>
+        );
+      }}
       expandable={
         reportType[0] === 'staff-login-logout'
           ? {
@@ -1252,6 +1307,7 @@ const OrgReports = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                 <Title level={4} style={{ margin: 0, fontWeight: 600 }}>
                   {reportType[0] === 'attendance' ? 'Monthly Attendance Report' :
+                    reportType[0] === 'absent-report' ? 'Absent Report' :
                     reportType[0] === 'monthly-attendance' ? 'Monthly Detailed Attendance Report (Excel Only)' :
                       reportType[0] === 'leave' ? 'Leave Report' :
                         reportType[0] === 'applied-leave' ? 'Applied Leave Report' :
@@ -1309,6 +1365,67 @@ const OrgReports = () => {
             { title: 'Minutes', dataIndex: 'minutes', key: 'minutes', align: 'right', render: (m) => <span style={{ fontWeight: '700', color: '#1677ff' }}>{m} m</span> }
           ]}
         />
+      </Modal>
+
+      <Modal
+        title={
+          selectedStaffAbsent ? (
+            <div>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#1677ff' }}>
+                {selectedStaffAbsent.staffName}
+              </span>
+              <Tag color="blue" style={{ marginLeft: 8 }}>{selectedStaffAbsent.department}</Tag>
+              <Tag style={{ marginLeft: 4 }}>ID: {selectedStaffAbsent.staffId}</Tag>
+            </div>
+          ) : 'Absent Breakdown'
+        }
+        open={absentModalOpen}
+        onCancel={() => setAbsentModalOpen(false)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setAbsentModalOpen(false)}>
+            Close Overview
+          </Button>
+        ]}
+        width={550}
+        destroyOnClose
+      >
+        {selectedStaffAbsent && (
+          <div>
+            <div style={{ background: '#FFF1F0', border: '1px solid #FFA39E', borderRadius: 8, padding: '12px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontWeight: 600, color: '#CF1322', fontSize: 13 }}>Salary Month: </span>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{selectedStaffAbsent.salaryMonth}</span>
+              </div>
+              <div>
+                <Tag color="red" style={{ fontSize: 13, fontWeight: 700, padding: '4px 10px' }}>
+                  Total Absent: {selectedStaffAbsent.totalAbsentDays} Days
+                </Tag>
+              </div>
+            </div>
+
+            <Table
+              dataSource={selectedStaffAbsent.absentDates || []}
+              rowKey="date"
+              pagination={{ pageSize: 10, showSizeChanger: true }}
+              size="small"
+              columns={[
+                { title: '#', key: 'idx', width: 50, render: (_, __, idx) => idx + 1 },
+                { title: 'Date', dataIndex: 'dateFormatted', key: 'dateFormatted', render: (d) => <span style={{ fontWeight: 600 }}>{d}</span> },
+                { title: 'Day of Week', dataIndex: 'dayName', key: 'dayName', render: (day) => <Tag color="purple">{day}</Tag> },
+                {
+                  title: 'Status',
+                  dataIndex: 'statusText',
+                  key: 'statusText',
+                  render: (statusText, item) => (
+                    <Tag color={item.status === 'HALF_DAY' ? 'orange' : 'red'} style={{ fontWeight: 600 }}>
+                      {statusText}
+                    </Tag>
+                  )
+                }
+              ]}
+            />
+          </div>
+        )}
       </Modal>
     </Layout>
   );

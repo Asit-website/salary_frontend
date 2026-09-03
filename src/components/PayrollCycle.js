@@ -22,7 +22,7 @@ import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined, InfoCircleOutline
 import { jsPDF } from 'jspdf';
 import moment from 'moment';
 import Sidebar from './Sidebar';
-import api from '../api';
+import api, { API_BASE_URL } from '../api';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -668,6 +668,15 @@ export default function PayrollCycle() {
       yPosition += 15;
 
       // Employer Signature
+      try {
+        const infoRes = await api.get('/admin/settings/business-info');
+        const sigUrl = infoRes?.data?.info?.signatureUrl;
+        if (sigUrl) {
+          const fullSigUrl = sigUrl.startsWith('/') ? `${API_BASE_URL}${sigUrl}` : sigUrl;
+          pdf.addImage(fullSigUrl, 'PNG', tableStartX + 100, yPosition - 30, 45, 18);
+        }
+      } catch (_) {}
+
       pdf.text('Employer Signature', tableStartX + 100, yPosition - 15);
       pdf.line(tableStartX + 100, yPosition - 10, tableStartX + 180, yPosition - 10); // Signature line
 

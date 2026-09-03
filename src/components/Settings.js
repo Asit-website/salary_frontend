@@ -16,7 +16,8 @@ import {
   Menu,
   Radio,
   Switch,
-  Table
+  Table,
+  Tabs
 } from 'antd';
 import {
   SettingOutlined,
@@ -46,7 +47,9 @@ import {
   SearchOutlined,
   SwapOutlined,
   CheckCircleOutlined,
-  StopOutlined
+  StopOutlined,
+  EditOutlined,
+  HighlightOutlined
 } from '@ant-design/icons';
 import Sidebar from './Sidebar';
 import MainHeader from './MainHeader';
@@ -192,6 +195,11 @@ export default function Settings() {
   const [logoOpen, setLogoOpen] = useState(false);
   const [logoSaving, setLogoSaving] = useState(false);
   const [logoUrl, setLogoUrl] = useState('');
+  const [signatureOpen, setSignatureOpen] = useState(false);
+  const [signatureSaving, setSignatureSaving] = useState(false);
+  const [signatureUrl, setSignatureUrl] = useState('');
+  const [isDrawingSignature, setIsDrawingSignature] = useState(false);
+  const canvasRef = React.useRef(null);
   const [accNameOpen, setAccNameOpen] = useState(false);
   const [accNameSaving, setAccNameSaving] = useState(false);
   const [accName, setAccName] = useState('');
@@ -260,6 +268,7 @@ export default function Settings() {
         setAddr2(info.addressLine2 || '');
         setAddrPin(info.pincode || '');
         setLogoUrl(info.logoUrl || '');
+        setSignatureUrl(info.signatureUrl || '');
         setSidebarHeaderType(info.sidebarHeaderType || 'name');
       } catch (_) { }
       try {
@@ -444,6 +453,123 @@ export default function Settings() {
       message.error(e?.response?.data?.message || 'Failed to remove logo');
     } finally {
       setLogoSaving(false);
+    }
+  };
+
+  const openSignatureModal = async () => {
+    try {
+      const resp = await api.get('/admin/settings/business-info');
+      const info = resp?.data?.info || {};
+      setSignatureUrl(info.signatureUrl || '');
+    } catch (_) {
+      setSignatureUrl('');
+    } finally {
+      setSignatureOpen(true);
+    }
+  };
+
+  const uploadSignature = async () => {
+    try {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.png,.jpg,.jpeg,.webp';
+      input.onchange = async () => {
+        if (!input.files || !input.files[0]) return;
+        const form = new FormData();
+        form.append('file', input.files[0]);
+        const resp = await api.post('/admin/settings/business-info/signature', form);
+        if (resp?.data?.success) {
+          setSignatureUrl(resp.data.url);
+          message.success('Employer signature uploaded');
+        } else {
+          message.error(resp?.data?.message || 'Upload failed');
+        }
+      };
+      input.click();
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Upload failed');
+    }
+  };
+
+  const deleteSignature = async () => {
+    try {
+      setSignatureSaving(true);
+      const resp = await api.delete('/admin/settings/business-info/signature');
+      if (resp?.data?.success) {
+        setSignatureUrl('');
+        message.success('Employer signature removed');
+      } else {
+        message.error(resp?.data?.message || 'Failed to remove signature');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to remove signature');
+    } finally {
+      setSignatureSaving(false);
+    }
+  };
+
+  const startCanvasDrawing = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+    if (clientX === undefined || clientY === undefined) return;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawingSignature(true);
+  };
+
+  const drawCanvasSignature = (e) => {
+    if (!isDrawingSignature) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+    if (clientX === undefined || clientY === undefined) return;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#000000';
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopCanvasDrawing = () => {
+    setIsDrawingSignature(false);
+  };
+
+  const clearCanvasSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const saveCanvasSignature = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const base64 = canvas.toDataURL('image/png');
+    setSignatureSaving(true);
+    try {
+      const resp = await api.post('/admin/settings/business-info/signature', { signatureBase64: base64 });
+      if (resp?.data?.success) {
+        setSignatureUrl(resp.data.url);
+        message.success('Employer signature saved!');
+        setSignatureOpen(false);
+      } else {
+        message.error(resp?.data?.message || 'Failed to save signature');
+      }
+    } catch (err) {
+      message.error('Failed to save signature');
+    } finally {
+      setSignatureSaving(false);
     }
   };
 
@@ -967,6 +1093,7 @@ export default function Settings() {
         { key: 'sidebar-header', icon: <LayoutOutlined />, label: 'Sidebar Header Display', desc: sidebarHeaderType === 'logo' ? 'Business Logo' : 'Business Name', onClick: () => setSidebarHeaderOpen(true) },
         { key: 'biz-address', icon: <HomeOutlined />, label: 'Business Address', desc: [addr1, addr2].filter(Boolean).join(', ') || '—', onClick: () => setAddrOpen(true) },
         { key: 'biz-logo', icon: <ProfileOutlined />, label: 'Business Logo', desc: logoUrl ? 'Logo added' : 'Logo not added', onClick: openLogoModal, thumb: logoUrl ? (logoUrl.startsWith('/') ? `${API_BASE_URL}${logoUrl}` : logoUrl) : undefined },
+        { key: 'biz-signature', icon: <EditOutlined />, label: 'Employer Signature', desc: signatureUrl ? 'Signature added' : 'Signature not added', onClick: openSignatureModal, thumb: signatureUrl ? (signatureUrl.startsWith('/') ? `${API_BASE_URL}${signatureUrl}` : signatureUrl) : undefined },
       ],
     },
     {
@@ -1022,7 +1149,7 @@ export default function Settings() {
         { key: 'tally-integration', icon: <ApiOutlined />, label: 'Tally Prime Integration', desc: 'Push salary payouts directly to Tally Prime', onClick: () => navigate('/settings/tally-integration') },
       ],
     },
-  ], [brandName, bizState, bizCity, addr1, addr2, addrPin, logoUrl, accName, accPhone, accEmail, bankMasked, sidebarHeaderType, subscriptionInfo]);
+  ], [brandName, bizState, bizCity, addr1, addr2, addrPin, logoUrl, signatureUrl, accName, accPhone, accEmail, bankMasked, sidebarHeaderType, subscriptionInfo]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -1227,6 +1354,81 @@ export default function Settings() {
               } catch (_) { }
               setLogoOpen(false);
             }}>Save</Button>
+          </div>
+        </Space>
+      </Modal>
+
+      <Modal
+        title="Employer Signature"
+        open={signatureOpen}
+        onCancel={() => setSignatureOpen(false)}
+        footer={null}
+        destroyOnClose
+        width={520}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          {signatureUrl ? (
+            <div style={{ background: '#FAFAFA', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#4B5563' }}>Current Signature:</span>
+                <div style={{ height: 50, padding: 4, background: '#fff', border: '1px solid #D1D5DB', borderRadius: 4, display: 'flex', alignItems: 'center' }}>
+                  <img
+                    src={signatureUrl.startsWith('/') ? `${API_BASE_URL}${signatureUrl}` : signatureUrl}
+                    alt="Employer Signature"
+                    style={{ maxHeight: 40, maxWidth: 150 }}
+                  />
+                </div>
+              </div>
+              <Button danger size="small" loading={signatureSaving} onClick={deleteSignature}>Remove Signature</Button>
+            </div>
+          ) : null}
+
+          <Tabs
+            defaultActiveKey="upload"
+            items={[
+              {
+                key: 'upload',
+                label: 'Upload Image File',
+                children: (
+                  <div style={{ padding: '16px 0', textAlign: 'center' }}>
+                    <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>Upload a PNG, JPG, or WEBP signature file (Max 2 MB)</p>
+                    <Button type="primary" onClick={uploadSignature}>Choose Signature File</Button>
+                  </div>
+                ),
+              },
+              {
+                key: 'draw',
+                label: 'Draw Digital Signature',
+                children: (
+                  <div style={{ padding: '12px 0' }}>
+                    <p style={{ color: '#6B7280', fontSize: 12, marginBottom: 8 }}>Draw your signature using mouse or touch screen below:</p>
+                    <div style={{ border: '2px dashed #D1D5DB', borderRadius: 8, background: '#FFFFFF', display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                      <canvas
+                        ref={canvasRef}
+                        width={460}
+                        height={160}
+                        style={{ cursor: 'crosshair', touchAction: 'none', background: '#FFFFFF' }}
+                        onMouseDown={startCanvasDrawing}
+                        onMouseMove={drawCanvasSignature}
+                        onMouseUp={stopCanvasDrawing}
+                        onMouseLeave={stopCanvasDrawing}
+                        onTouchStart={startCanvasDrawing}
+                        onTouchMove={drawCanvasSignature}
+                        onTouchEnd={stopCanvasDrawing}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Button onClick={clearCanvasSignature}>Clear Pad</Button>
+                      <Button type="primary" loading={signatureSaving} onClick={saveCanvasSignature}>Save Signature Drawing</Button>
+                    </div>
+                  </div>
+                ),
+              },
+            ]}
+          />
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+            <Button onClick={() => setSignatureOpen(false)}>Close</Button>
           </div>
         </Space>
       </Modal>
