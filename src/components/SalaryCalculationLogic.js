@@ -14,6 +14,7 @@ export default function SalaryCalculationLogic() {
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState('calendar');
+  const [fixedDaysCalcRule, setFixedDaysCalcRule] = useState('deduct_extra_days');
 
   const fetchSettings = async () => {
     try {
@@ -30,6 +31,7 @@ export default function SalaryCalculationLogic() {
       else if (apiMode === 'exclude_weekly_offs') uiMode = 'exclude_weekly_offs';
       
       setMode(uiMode);
+      setFixedDaysCalcRule(s.fixedDaysCalcRule || s.thirtyDaysCalcRule || 'deduct_extra_days');
     } catch (e) {
       message.error('Failed to load salary calculation settings');
     }
@@ -41,6 +43,9 @@ export default function SalaryCalculationLogic() {
     try {
       setLoading(true);
       
+      const respGet = await api.get('/admin/settings/salary');
+      const currentSettings = respGet?.data?.settings || {};
+
       // Map Frontend UI value to API value
       let apiMode = 'calendar_month';
       if (mode === 'calendar') apiMode = 'calendar_month';
@@ -49,10 +54,17 @@ export default function SalaryCalculationLogic() {
       else if (mode === 'fixed_26') apiMode = 'every_26';
       else if (mode === 'exclude_weekly_offs') apiMode = 'exclude_weekly_offs';
 
-      const payload = { payableDaysMode: apiMode };
+      const payload = {
+        ...currentSettings,
+        payableDaysMode: apiMode,
+        fixedDaysCalcRule,
+        thirtyDaysCalcRule: fixedDaysCalcRule
+      };
       const resp = await api.put('/admin/settings/salary', payload);
       if (resp.data?.success) {
         message.success('Salary calculation logic saved');
+        const s = resp.data.settings || {};
+        setFixedDaysCalcRule(s.fixedDaysCalcRule || s.thirtyDaysCalcRule || fixedDaysCalcRule);
       } else {
         message.error(resp.data?.message || 'Failed to save');
       }
@@ -211,6 +223,90 @@ export default function SalaryCalculationLogic() {
                   );
                 })}
               </div>
+
+              {/* Fixed Days Calculation Rule Sub-Options */}
+              {['fixed_30', 'fixed_28', 'fixed_26'].includes(mode) && (
+                <div style={{
+                  marginTop: '20px',
+                  padding: '20px',
+                  backgroundColor: '#fafafa',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '12px'
+                }}>
+                  <div style={{ fontWeight: '700', fontSize: '14px', color: '#1e293b', marginBottom: '4px' }}>
+                    Fixed Days Calculation Rule (For 31-Day Months)
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>
+                    Choose how payable days are calculated when calendar month days exceed the fixed base rate:
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div 
+                      onClick={() => setFixedDaysCalcRule('deduct_extra_days')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '14px 16px',
+                        borderRadius: '10px',
+                        border: fixedDaysCalcRule === 'deduct_extra_days' ? '2px solid #1677ff' : '1px solid #e2e8f0',
+                        backgroundColor: fixedDaysCalcRule === 'deduct_extra_days' ? '#e6f4ff' : '#fff',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: '600', fontSize: '13px', color: '#1e293b' }}>
+                          Rule 1 (Default): Fixed Base Days (Payable Days + Absent = Base Days)
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                          Deducts extra calendar days in 31-day months (e.g. 28 earned - 1 = 27 Payable Days + 3 Absents = 30).
+                        </div>
+                      </div>
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        border: fixedDaysCalcRule === 'deduct_extra_days' ? '5px solid #1677ff' : '2px solid #cbd5e1',
+                        backgroundColor: '#fff',
+                        flexShrink: 0
+                      }} />
+                    </div>
+
+                    <div 
+                      onClick={() => setFixedDaysCalcRule('actual_earned_days')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '14px 16px',
+                        borderRadius: '10px',
+                        border: fixedDaysCalcRule === 'actual_earned_days' ? '2px solid #1677ff' : '1px solid #e2e8f0',
+                        backgroundColor: fixedDaysCalcRule === 'actual_earned_days' ? '#e6f4ff' : '#fff',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: '600', fontSize: '13px', color: '#1e293b' }}>
+                          Rule 2: Pay Actual Earned Days (Payable Days = Present + WO + Leaves)
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                          Does not deduct extra calendar days in 31-day months (e.g. 24 Present + 4 WO = 28 Payable Days + 3 Absents = 31).
+                        </div>
+                      </div>
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        border: fixedDaysCalcRule === 'actual_earned_days' ? '5px solid #1677ff' : '2px solid #cbd5e1',
+                        backgroundColor: '#fff',
+                        flexShrink: 0
+                      }} />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Action Buttons Row */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '32px', paddingTop: '20px', borderTop: '1px solid #f1f5f9' }}>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Card, Button, message, Space, Typography } from 'antd';
-import { ArrowLeftOutlined, PercentageOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { Layout, Card, Button, message, Space, Typography, Switch, InputNumber } from 'antd';
+import { ArrowLeftOutlined, PercentageOutlined, SafetyCertificateOutlined, FilterOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MainHeader from './MainHeader';
@@ -14,12 +14,16 @@ export default function ProvidentFundSettings() {
   const [subLoading, setSubLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [pfCalculationMode, setPfCalculationMode] = useState('basic');
+  const [pfCapEnabled, setPfCapEnabled] = useState(false);
+  const [pfCapAmount, setPfCapAmount] = useState(1800);
 
   const fetchSettings = async () => {
     try {
       const resp = await api.get('/admin/settings/salary');
       const s = resp?.data?.settings || {};
       setPfCalculationMode(s.pfCalculationMode || 'basic');
+      setPfCapEnabled(s.pfCapEnabled === true);
+      setPfCapAmount(s.pfCapAmount !== undefined ? Number(s.pfCapAmount) : 1800);
     } catch (e) {
       message.error('Failed to load provident fund settings');
     }
@@ -54,7 +58,9 @@ export default function ProvidentFundSettings() {
 
       const payload = {
         ...currentSettings,
-        pfCalculationMode
+        pfCalculationMode,
+        pfCapEnabled,
+        pfCapAmount: Number(pfCapAmount) > 0 ? Number(pfCapAmount) : 1800
       };
 
       const resp = await api.put('/admin/settings/salary', payload);
@@ -73,15 +79,15 @@ export default function ProvidentFundSettings() {
   const options = [
     {
       value: 'basic',
-      label: 'Standard Basic Salary',
-      desc: 'Calculate Employee Provident Fund (PF) using the full basic salary, without any deductions or penalties.',
+      label: 'Standard Basic + DA Salary',
+      desc: 'Calculate Employee Provident Fund (PF) using full Basic + DA salary, without any deductions or penalties.',
       icon: <SafetyCertificateOutlined style={{ fontSize: '20px', color: '#1677ff' }} />,
       badge: 'Standard'
     },
     {
       value: 'basic_minus_penalties',
-      label: 'Basic Salary minus Penalties',
-      desc: 'Subtract late punch-in and early exit penalties from the basic salary before calculating the Employee Provident Fund (PF).',
+      label: 'Basic + DA Salary minus Penalties',
+      desc: 'Subtract late punch-in and early exit penalties from Basic + DA salary before calculating Employee Provident Fund (PF).',
       icon: <PercentageOutlined style={{ fontSize: '20px', color: '#52c41a' }} />,
       badge: 'Penalties Deducted'
     }
@@ -123,7 +129,7 @@ export default function ProvidentFundSettings() {
               <div style={{ marginBottom: '24px' }}>
                 <div style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b' }}>Select PF Calculation Base Mode</div>
                 <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
-                  Choose whether provident fund contribution should be calculated on standard basic salary or after subtracting penalties (late punch-in / early exit).
+                  Choose whether provident fund contribution should be calculated on standard Basic + DA salary or after subtracting penalties (late punch-in / early exit).
                 </div>
               </div>
 
@@ -198,6 +204,60 @@ export default function ProvidentFundSettings() {
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Maximum PF Contribution Capping Section */}
+              <div style={{
+                marginTop: '24px',
+                padding: '20px',
+                backgroundColor: '#fafafa',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: pfCapEnabled ? '16px' : '0' }}>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <FilterOutlined style={{ color: '#1677ff' }} />
+                      Maximum PF Contribution Capping Limit
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>
+                      Cap the employee PF contribution at a maximum limit (e.g. ₹1800) regardless of higher basic + DA salary.
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={pfCapEnabled} 
+                    onChange={(checked) => setPfCapEnabled(checked)}
+                    style={{ backgroundColor: pfCapEnabled ? '#1677ff' : undefined }}
+                  />
+                </div>
+
+                {pfCapEnabled && (
+                  <div style={{
+                    paddingTop: '16px',
+                    borderTop: '1px solid #e2e8f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>
+                        Maximum Monthly PF Cap (₹):
+                      </div>
+                      <InputNumber 
+                        min={1}
+                        max={100000}
+                        value={pfCapAmount}
+                        onChange={(val) => setPfCapAmount(val || 1800)}
+                        size="large"
+                        addonBefore="₹"
+                        style={{ width: '200px' }}
+                      />
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#64748b', maxWidth: '400px', marginTop: '20px' }}>
+                      When enabled, employee PF deduction will be capped at a maximum of <strong>₹{pfCapAmount || 1800}</strong> per month even if calculated PF is higher.
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons Row */}
