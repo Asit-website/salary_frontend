@@ -78,16 +78,27 @@ const LeaveEncashment = () => {
         fetchStaffList();
     }, []);
 
-    // Live balance check when staff and category are selected
-    const handleCheckBalance = async (userId, categoryKey) => {
-        if (!userId || !categoryKey) {
+    // Live balance check when staff, category, or month is selected
+    const handleCheckBalance = async (userId, categoryKey, monthVal) => {
+        const targetUserId = userId || createForm.getFieldValue('userId');
+        const targetCat = categoryKey || createForm.getFieldValue('categoryKey');
+        const targetMonth = monthVal || createForm.getFieldValue('monthKey');
+
+        if (!targetUserId || !targetCat) {
             setAvailableBalance(null);
             return;
         }
+
+        let monthStr = dayjs().format('YYYY-MM');
+        if (targetMonth) {
+            if (typeof targetMonth === 'string') monthStr = targetMonth;
+            else if (targetMonth.format) monthStr = targetMonth.format('YYYY-MM');
+        }
+
         setCheckingBalance(true);
         try {
             const res = await api.get('/leave/encash/balance-check', {
-                params: { userId, categoryKey }
+                params: { userId: targetUserId, categoryKey: targetCat, monthKey: monthStr }
             });
             if (res.data?.success) {
                 setAvailableBalance(res.data.remaining !== undefined ? res.data.remaining : 0);
@@ -489,6 +500,9 @@ const LeaveEncashment = () => {
                             format="YYYY-MM"
                             style={{ width: '100%' }}
                             placeholder="Select month"
+                            onChange={(val) => {
+                                handleCheckBalance(null, null, val);
+                            }}
                         />
                     </Form.Item>
 
