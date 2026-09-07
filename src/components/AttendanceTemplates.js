@@ -298,6 +298,7 @@ export default function AttendanceTemplates() {
               { title: 'Phone', render: (_, r) => r.user?.phone || '-' },
               { title: 'Department', render: (_, r) => r.user?.profile?.department || '-' },
               { title: 'Designation', render: (_, r) => r.user?.profile?.designation || '-' },
+              { title: 'Effective Date', render: (_, r) => r.effectiveFrom ? <Tag color="geekblue">{r.effectiveFrom}</Tag> : '-' },
               {
                 title: 'Action',
                 key: 'action',

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, Fragment } from 'react';
 import { Layout, Card, Row, Col, Button, Input, Typography, Space, Tag, Modal, Form, Select, TimePicker, InputNumber, DatePicker, Dropdown, message, Table } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined, MoreOutlined, SearchOutlined, UserAddOutlined, EditOutlined, UserOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, PlusOutlined, MoreOutlined, SearchOutlined, UserAddOutlined, EditOutlined, UserOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import Sidebar from './Sidebar';
 import MainHeader from './MainHeader';
@@ -142,6 +142,7 @@ export default function ShiftSettings() {
   const [staffOptions, setStaffOptions] = useState([]);
   const [selectedStaffIds, setSelectedStaffIds] = useState([]);
   const [effectiveFrom, setEffectiveFrom] = useState(null);
+  const [assignLoading, setAssignLoading] = useState(false);
 
   const [assignedListOpen, setAssignedListOpen] = useState(false);
   const [assignedListTpl, setAssignedListTpl] = useState(null);
@@ -174,6 +175,31 @@ export default function ShiftSettings() {
     }
   };
 
+  const handleUnassignStaff = (staff) => {
+    Modal.confirm({
+      title: 'Unassign Staff',
+      content: `Are you sure you want to unassign ${staff.name || 'this staff'} from '${assignedListTpl?.name}' shift?`,
+      okText: 'Unassign',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await api.post('/admin/shifts/unassign', {
+            userId: staff.id,
+            shiftTemplateId: assignedListTpl?.id,
+          });
+          message.success(`Unassigned ${staff.name || 'staff'} from shift`);
+          if (assignedListTpl) {
+            openAssignedList(assignedListTpl);
+          }
+          load();
+        } catch (e) {
+          message.error(e?.response?.data?.message || 'Failed to unassign staff');
+        }
+      },
+    });
+  };
+
   const openAssign = async (tpl) => {
     try {
       setAssigningTpl(tpl);
@@ -193,8 +219,9 @@ export default function ShiftSettings() {
       if (selectedStaffIds.length === 0) return message.warning('Select at least one staff member');
       if (!effectiveFrom) return message.warning('Select effective from date');
       const dateStr = effectiveFrom.format('YYYY-MM-DD');
+      setAssignLoading(true);
       await Promise.all(selectedStaffIds.map(uid => api.post('/admin/shifts/assign', { userId: uid, shiftTemplateId: assigningTpl.id, effectiveFrom: dateStr })));
-      message.success(`Shift '${assigningTpl.name}' assigned successfully from ${dateStr}`);
+      message.success(`Shift '${assigningTpl.name}' assigned & attendance recalculated successfully from ${dateStr}`);
       setAssignOpen(false);
       setAssigningTpl(null);
       setSelectedStaffIds([]);
@@ -202,6 +229,8 @@ export default function ShiftSettings() {
       load();
     } catch (e) {
       message.error(e?.response?.data?.message || 'Failed to assign shift');
+    } finally {
+      setAssignLoading(false);
     }
   };
 
@@ -538,6 +567,7 @@ export default function ShiftSettings() {
           onCancel={() => setAssignOpen(false)} 
           onOk={saveAssign} 
           okText="Assign Shift"
+          confirmLoading={assignLoading}
           destroyOnClose
         >
           <Space direction="vertical" style={{ width: '100%', marginTop: 8 }} size={16}>
@@ -598,7 +628,7 @@ export default function ShiftSettings() {
           open={assignedListOpen}
           onCancel={() => setAssignedListOpen(false)}
           footer={null}
-          width={700}
+          width={780}
           destroyOnClose
         >
           <Table
@@ -613,6 +643,30 @@ export default function ShiftSettings() {
               { title: 'Phone', render: (_, r) => r.phone || '-' },
               { title: 'Department', render: (_, r) => r.department || '-' },
               { title: 'Designation', render: (_, r) => r.designation || '-' },
+              { 
+                title: 'Effective Date', 
+                render: (_, r) => (
+                  <Tag color="geekblue">
+                    {r.effectiveFrom ? dayjs(r.effectiveFrom).format('YYYY-MM-DD') : '-'}
+                  </Tag>
+                ) 
+              },
+              { 
+                title: 'Action', 
+                key: 'action',
+                align: 'right',
+                render: (_, r) => (
+                  <Button 
+                    type="link" 
+                    danger 
+                    icon={<DeleteOutlined />} 
+                    size="small"
+                    onClick={() => handleUnassignStaff(r)}
+                  >
+                    Unassign
+                  </Button>
+                ) 
+              },
             ]}
           />
         </Modal>

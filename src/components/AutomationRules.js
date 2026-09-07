@@ -329,7 +329,7 @@ export default function AutomationRules() {
                                                 onClick={() => saveRule('zkteco_integration', zktecoConfig.active, {
                                                     url: zktecoConfig.url || 'http://15.206.144.225:8081/',
                                                     username: zktecoConfig.username || 'admin',
-                                                    password: zktecoConfig.password || 'Admin@1234',
+                                                    password: zktecoConfig.password || 'Admin@12345',
                                                     companyId: zktecoConfig.companyId || ''
                                                 })}
                                                 loading={saving}

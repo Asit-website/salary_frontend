@@ -425,6 +425,12 @@ export default function OvertimeAutomation() {
                             </Space>
 
                             <div style={{ background: '#fafafa', padding: '20px', borderRadius: '12px', border: '1px solid #f0f2f5' }}>
+                                <div style={{ marginBottom: 12 }}>
+                                    <Text type="secondary" style={{ fontSize: '12px', color: '#64748b' }}>
+                                        <InfoCircleOutlined style={{ marginRight: 6, color: '#1677ff' }} />
+                                        For Open Shifts, overtime thresholds apply after completing the shift's required work duration (e.g. 8h 30m).
+                                    </Text>
+                                </div>
                                 <Form.List name="thresholds" initialValue={[{ h: 0, m: 0, rewardType: 'FIXED_AMOUNT', value: 0 }]}>
                                     {(fields, { add, remove }) => (
                                         <>
