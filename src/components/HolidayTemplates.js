@@ -112,6 +112,7 @@ export default function HolidayTemplates(){
   const [form] = Form.useForm();
   const [editing, setEditing] = useState(null);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [assignLoading, setAssignLoading] = useState(false);
   const [assigningTpl, setAssigningTpl] = useState(null);
   const [staffOptions, setStaffOptions] = useState([]);
   const [selectedStaffIds, setSelectedStaffIds] = useState([]);
@@ -301,6 +302,7 @@ export default function HolidayTemplates(){
       if (!effectiveFrom) return message.warning('Select effective from date');
       const fromStr = effectiveFrom.format('YYYY-MM-DD');
       const toStr = effectiveTo ? effectiveTo.format('YYYY-MM-DD') : null;
+      setAssignLoading(true);
       await api.post('/admin/holidays/assign', { userIds: selectedStaffIds, holidayTemplateId: assigningTpl.id, effectiveFrom: fromStr, effectiveTo: toStr });
       message.success('Assigned');
       setAssignOpen(false);
@@ -311,6 +313,8 @@ export default function HolidayTemplates(){
       await load();
     } catch (e) {
       message.error(e?.response?.data?.message || 'Failed to assign');
+    } finally {
+      setAssignLoading(false);
     }
   };
 
@@ -531,6 +535,7 @@ export default function HolidayTemplates(){
           onCancel={() => setAssignOpen(false)} 
           onOk={saveAssign} 
           okText="Assign"
+          confirmLoading={assignLoading}
           cancelButtonProps={{ shape: 'round' }}
           okButtonProps={{ shape: 'round' }}
         >

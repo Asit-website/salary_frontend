@@ -24,6 +24,7 @@ export default function OvertimeAutomation() {
 
     // Assignment state
     const [assignOpen, setAssignOpen] = useState(false);
+    const [assignLoading, setAssignLoading] = useState(false);
     const [assigningRule, setAssigningRule] = useState(null);
     const [staffOptions, setStaffOptions] = useState([]);
     const [selectedStaffIds, setSelectedStaffIds] = useState([]);
@@ -132,6 +133,7 @@ export default function OvertimeAutomation() {
             if (!assigningRule) return;
             if (selectedStaffIds.length === 0) return message.warning('Select at least one staff');
             
+            setAssignLoading(true);
             const resp = await api.post(`/admin/settings/overtime-rules/${assigningRule.id}/assign`, { 
                 userIds: selectedStaffIds,
                 effectiveFrom: effectiveFrom.format('YYYY-MM-DD'),
@@ -152,6 +154,8 @@ export default function OvertimeAutomation() {
             fetchRules();
         } catch (err) {
             message.error('Failed to assign staff');
+        } finally {
+            setAssignLoading(false);
         }
     };
 
@@ -631,6 +635,7 @@ export default function OvertimeAutomation() {
                         onCancel={() => setAssignOpen(false)} 
                         onOk={saveAssign} 
                         okText="Assign"
+                        confirmLoading={assignLoading}
                         className="sales-modal"
                     >
                         <Space direction="vertical" style={{ width: '100%' }} size={16}>

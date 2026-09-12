@@ -37,7 +37,9 @@ const TemplateCard = ({ tpl, onEdit, onAssign }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div>
             <div style={{ fontWeight: '700', fontSize: '15px', color: '#1e293b', textTransform: 'capitalize' }}>{tpl.name}</div>
-            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px', fontWeight: '500' }}>Cycle: {tpl.cycle || 'Yearly'}</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px', fontWeight: '500', textTransform: 'capitalize' }}>
+              Cycle: {tpl.cycle || 'yearly'}
+            </div>
           </div>
           <Space size={6}>
             <span style={{ 
@@ -179,6 +181,7 @@ export default function LeaveTemplates(){
         carryLimitDays: c.carryLimitDays == null ? null : Number(c.carryLimitDays),
         encashLimitDays: c.encashLimitDays == null ? null : Number(c.encashLimitDays),
         carryForward: c.carryForward === true || c.carryForward === 1 || c.carry_forward === true || c.carry_forward === 1,
+        payAsHalfDay: c.payAsHalfDay === true || c.payAsHalfDay === 1 || c.pay_as_half_day === true || c.pay_as_half_day === 1,
         maxLeavePerMonth: c.maxLeavePerMonth == null ? null : Number(c.maxLeavePerMonth),
       })),
     });
@@ -202,6 +205,7 @@ export default function LeaveTemplates(){
           carryLimitDays: c.carryLimitDays == null ? null : Number(c.carryLimitDays),
           encashLimitDays: c.encashLimitDays == null ? null : Number(c.encashLimitDays),
           carryForward: !!c.carryForward,
+          payAsHalfDay: !!c.payAsHalfDay,
           maxLeavePerMonth: c.maxLeavePerMonth == null || c.maxLeavePerMonth === "" ? null : Number(c.maxLeavePerMonth),
         })),
         cycleStartDate: v.cycleStartDate ? v.cycleStartDate.format('YYYY-MM-DD') : null,
@@ -447,13 +451,19 @@ export default function LeaveTemplates(){
                                 <Switch size="small" />
                               </Form.Item>
                             </Col>
+                            <Col span={12} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>Pay as Half Day:</span>
+                              <Form.Item {...rest} name={[name, 'payAsHalfDay']} valuePropName="checked" style={{ marginBottom: 0 }}>
+                                <Switch size="small" />
+                              </Form.Item>
+                            </Col>
                           </Row>
                         </Card>
                       ))}
                       <Button 
                         type="dashed" 
                         block 
-                        onClick={() => add({ name:'', key:'', leaveCount:0, unusedRule:'lapse' })}
+                        onClick={() => add({ name:'', key:'', leaveCount:0, unusedRule:'lapse', carryForward: false, payAsHalfDay: false })}
                         icon={<PlusOutlined />}
                         style={{ borderRadius: '8px', marginTop: '8px' }}
                       >

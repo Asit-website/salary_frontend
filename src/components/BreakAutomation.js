@@ -24,6 +24,7 @@ export default function BreakAutomation() {
 
     // Assignment state
     const [assignOpen, setAssignOpen] = useState(false);
+    const [assignLoading, setAssignLoading] = useState(false);
     const [assigningRule, setAssigningRule] = useState(null);
     const [staffOptions, setStaffOptions] = useState([]);
     const [selectedStaffIds, setSelectedStaffIds] = useState([]);
@@ -134,6 +135,7 @@ export default function BreakAutomation() {
             if (!assigningRule) return;
             if (selectedStaffIds.length === 0) return message.warning('Select at least one staff');
             
+            setAssignLoading(true);
             const resp = await api.post(`/admin/settings/break-rules/${assigningRule.id}/assign`, { 
                 userIds: selectedStaffIds,
                 effectiveFrom: effectiveFrom.format('YYYY-MM-DD'),
@@ -154,6 +156,8 @@ export default function BreakAutomation() {
             fetchRules();
         } catch (err) {
             message.error('Failed to assign staff');
+        } finally {
+            setAssignLoading(false);
         }
     };
 
@@ -528,6 +532,7 @@ export default function BreakAutomation() {
                         onCancel={() => setAssignOpen(false)} 
                         onOk={saveAssign} 
                         okText="Assign"
+                        confirmLoading={assignLoading}
                         className="sales-modal"
                         okButtonProps={{ shape: 'round' }}
                         cancelButtonProps={{ shape: 'round' }}

@@ -159,6 +159,7 @@ export default function WeeklyOffTemplates() {
   const [form] = Form.useForm();
   const [editing, setEditing] = useState(null);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [assignLoading, setAssignLoading] = useState(false);
   const [assigningTpl, setAssigningTpl] = useState(null);
   const [staffOptions, setStaffOptions] = useState([]);
   const [selectedStaffIds, setSelectedStaffIds] = useState([]);
@@ -268,6 +269,7 @@ export default function WeeklyOffTemplates() {
       if (!effectiveFrom) return message.warning('Select effective from date');
       const fromStr = effectiveFrom.format('YYYY-MM-DD');
       const toStr = effectiveTo ? effectiveTo.format('YYYY-MM-DD') : null;
+      setAssignLoading(true);
       await api.post('/admin/weekly-off/assign', { userIds: selectedStaffIds, weeklyOffTemplateId: assigningTpl.id, effectiveFrom: fromStr, effectiveTo: toStr });
       message.success('Assigned');
       setAssignOpen(false);
@@ -278,6 +280,8 @@ export default function WeeklyOffTemplates() {
       await load();
     } catch (e) {
       message.error(e?.response?.data?.message || 'Failed to assign');
+    } finally {
+      setAssignLoading(false);
     }
   };
 
@@ -517,6 +521,7 @@ export default function WeeklyOffTemplates() {
           onCancel={() => setAssignOpen(false)} 
           onOk={saveAssign} 
           okText="Assign"
+          confirmLoading={assignLoading}
           cancelButtonProps={{ shape: 'round', style: { fontWeight: '600' } }}
           okButtonProps={{ 
             shape: 'round', 

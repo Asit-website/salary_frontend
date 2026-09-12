@@ -182,16 +182,21 @@ const LeaveRequests = () => {
         {
             title: 'Duration',
             key: 'duration',
-            render: (_, record) => (
-                <Space direction="vertical" size={2}>
-                    <Typography.Text style={{ fontSize: '14px', fontWeight: '500' }}>
-                        {moment(record.startDate).format('DD MMM YYYY')} - {moment(record.endDate).format('DD MMM YYYY')}
-                    </Typography.Text>
-                    <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
-                        {record.days} Days ({record.leaveType})
-                    </Typography.Text>
-                </Space>
-            )
+            render: (_, record) => {
+                const days = (record.paidDays !== undefined && record.paidDays !== null)
+                    ? record.paidDays
+                    : (record.payAsHalfDay ? Number(record.days || 0) * 0.5 : Number(record.days || 0));
+                return (
+                    <Space direction="vertical" size={2}>
+                        <Typography.Text style={{ fontSize: '14px', fontWeight: '500' }}>
+                            {moment(record.startDate).format('DD MMM YYYY')} - {moment(record.endDate).format('DD MMM YYYY')}
+                        </Typography.Text>
+                        <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                            {Number(days).toFixed(2)} Days ({record.categoryName || record.leaveType})
+                        </Typography.Text>
+                    </Space>
+                );
+            }
         },
         {
             title: 'Leave Type',

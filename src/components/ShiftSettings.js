@@ -148,6 +148,21 @@ export default function ShiftSettings() {
   const [assignedListTpl, setAssignedListTpl] = useState(null);
   const [assignedListRows, setAssignedListRows] = useState([]);
   const [assignedListLoading, setAssignedListLoading] = useState(false);
+  const [assignedStaffSearch, setAssignedStaffSearch] = useState('');
+  const [selectedAssignedKeys, setSelectedAssignedKeys] = useState([]);
+  const [bulkUnassignLoading, setBulkUnassignLoading] = useState(false);
+
+  const filteredAssignedRows = useMemo(() => {
+    const q = (assignedStaffSearch || '').trim().toLowerCase();
+    if (!q) return assignedListRows;
+    return (assignedListRows || []).filter(r => 
+      (r.name || '').toLowerCase().includes(q) ||
+      (r.staffId || '').toLowerCase().includes(q) ||
+      (r.phone || '').toLowerCase().includes(q) ||
+      (r.department || '').toLowerCase().includes(q) ||
+      (r.designation || '').toLowerCase().includes(q)
+    );
+  }, [assignedListRows, assignedStaffSearch]);
 
   const load = async () => {
     try {
@@ -164,6 +179,8 @@ export default function ShiftSettings() {
     try {
       setAssignedListTpl(tpl);
       setAssignedListOpen(true);
+      setAssignedStaffSearch('');
+      setSelectedAssignedKeys([]);
       setAssignedListLoading(true);
       const res = await api.get(`/admin/shifts/templates/${tpl.id}/assignments`);
       setAssignedListRows(res?.data?.staff || []);
@@ -195,6 +212,41 @@ export default function ShiftSettings() {
           load();
         } catch (e) {
           message.error(e?.response?.data?.message || 'Failed to unassign staff');
+        }
+      },
+    });
+  };
+
+  const handleBulkUnassign = () => {
+    if (!selectedAssignedKeys || selectedAssignedKeys.length === 0) return;
+    const count = selectedAssignedKeys.length;
+    Modal.confirm({
+      title: 'Bulk Unassign Staff',
+      content: `Are you sure you want to unassign ${count} selected staff member${count > 1 ? 's' : ''} from '${assignedListTpl?.name}' shift?`,
+      okText: `Unassign ${count} Staff`,
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          setBulkUnassignLoading(true);
+          await Promise.all(
+            selectedAssignedKeys.map(uid => 
+              api.post('/admin/shifts/unassign', {
+                userId: uid,
+                shiftTemplateId: assignedListTpl?.id,
+              })
+            )
+          );
+          message.success(`Successfully unassigned ${count} staff member${count > 1 ? 's' : ''}`);
+          setSelectedAssignedKeys([]);
+          if (assignedListTpl) {
+            openAssignedList(assignedListTpl);
+          }
+          load();
+        } catch (e) {
+          message.error(e?.response?.data?.message || 'Failed to unassign staff');
+        } finally {
+          setBulkUnassignLoading(false);
         }
       },
     });
@@ -626,15 +678,45 @@ export default function ShiftSettings() {
         <Modal
           title={`Assigned Staff • ${assignedListTpl?.name || ''}`}
           open={assignedListOpen}
-          onCancel={() => setAssignedListOpen(false)}
+          onCancel={() => {
+            setAssignedListOpen(false);
+            setAssignedStaffSearch('');
+            setSelectedAssignedKeys([]);
+          }}
           footer={null}
           width={780}
           destroyOnClose
         >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 }}>
+            <Input 
+              prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+              placeholder="Search staff by name, staff ID, phone, department, designation..." 
+              allowClear 
+              value={assignedStaffSearch}
+              onChange={(e) => setAssignedStaffSearch(e.target.value)}
+              style={{ borderRadius: '6px', flex: 1 }}
+            />
+            {selectedAssignedKeys.length > 0 && (
+              <Button 
+                danger 
+                type="primary"
+                icon={<DeleteOutlined />}
+                loading={bulkUnassignLoading}
+                onClick={handleBulkUnassign}
+                style={{ borderRadius: '6px' }}
+              >
+                Unassign Selected ({selectedAssignedKeys.length})
+              </Button>
+            )}
+          </div>
           <Table
             rowKey="id"
+            rowSelection={{
+              selectedRowKeys: selectedAssignedKeys,
+              onChange: (newKeys) => setSelectedAssignedKeys(newKeys),
+            }}
             loading={assignedListLoading}
-            dataSource={assignedListRows}
+            dataSource={filteredAssignedRows}
             size="small"
             pagination={{ pageSize: 8 }}
             columns={[
