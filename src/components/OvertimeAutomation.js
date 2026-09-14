@@ -590,6 +590,114 @@ export default function OvertimeAutomation() {
                                     </Space>
                                 </div>
                             </div>
+
+                            <Divider style={{ margin: '16px 0' }} />
+
+                            {/* Weekly Off Overtime Rate Override */}
+                            <div style={{ marginBottom: 16 }}>
+                                <Form.Item name="overrideWeeklyOffMultiplier" valuePropName="checked" initialValue={false} noStyle>
+                                    <Checkbox><Text strong>Override Weekly Off Overtime Rate</Text></Checkbox>
+                                </Form.Item>
+                                <Form.Item
+                                    noStyle
+                                    shouldUpdate={(prevValues, curValues) => prevValues.overrideWeeklyOffMultiplier !== curValues.overrideWeeklyOffMultiplier}
+                                >
+                                    {({ getFieldValue }) => getFieldValue('overrideWeeklyOffMultiplier') && (
+                                        <div style={{ marginTop: 8, paddingLeft: 24 }}>
+                                            <Row gutter={16} align="middle">
+                                                <Col span={12}>
+                                                    <span className="modal-field-label" style={{ fontSize: '13px', display: 'block', marginBottom: 4 }}>Overtime Type</span>
+                                                    <Form.Item name="weeklyOffRewardType" noStyle initialValue="SALARY_MULTIPLIER">
+                                                        <Select style={{ width: '100%' }}>
+                                                            <Option value="SALARY_MULTIPLIER">Salary Multiplier</Option>
+                                                            <Option value="FIXED_AMOUNT_PER_HOUR">Fixed Amount Per Hour</Option>
+                                                        </Select>
+                                                    </Form.Item>
+                                                </Col>
+                                                <Col span={12}>
+                                                    <Form.Item
+                                                        noStyle
+                                                        shouldUpdate={(prevValues, curValues) => prevValues.weeklyOffRewardType !== curValues.weeklyOffRewardType}
+                                                    >
+                                                        {({ getFieldValue }) => {
+                                                            const isMultiplier = getFieldValue('weeklyOffRewardType') !== 'FIXED_AMOUNT_PER_HOUR';
+                                                            return (
+                                                                <>
+                                                                    <span className="modal-field-label" style={{ fontSize: '13px', display: 'block', marginBottom: 4 }}>
+                                                                        {isMultiplier ? 'Multiplier' : 'Fixed Amount Per Hour'}
+                                                                    </span>
+                                                                    <Form.Item name="weeklyOffMultiplier" noStyle initialValue={1.5}>
+                                                                        <InputNumber
+                                                                            style={{ width: '100%' }}
+                                                                            prefix={isMultiplier ? '' : '₹'}
+                                                                            step={0.1}
+                                                                            min={0}
+                                                                            placeholder={isMultiplier ? 'e.g. 1.5' : 'e.g. 100'}
+                                                                        />
+                                                                    </Form.Item>
+                                                                </>
+                                                            );
+                                                        }}
+                                                    </Form.Item>
+                                                </Col>
+                                            </Row>
+                                        </div>
+                                    )}
+                                </Form.Item>
+                            </div>
+
+                            {/* Holiday Overtime Rate Override */}
+                            <div style={{ marginBottom: 16 }}>
+                                <Form.Item name="overrideHolidayMultiplier" valuePropName="checked" initialValue={false} noStyle>
+                                    <Checkbox><Text strong>Override Holiday Overtime Rate</Text></Checkbox>
+                                </Form.Item>
+                                <Form.Item
+                                    noStyle
+                                    shouldUpdate={(prevValues, curValues) => prevValues.overrideHolidayMultiplier !== curValues.overrideHolidayMultiplier}
+                                >
+                                    {({ getFieldValue }) => getFieldValue('overrideHolidayMultiplier') && (
+                                        <div style={{ marginTop: 8, paddingLeft: 24 }}>
+                                            <Row gutter={16} align="middle">
+                                                <Col span={12}>
+                                                    <span className="modal-field-label" style={{ fontSize: '13px', display: 'block', marginBottom: 4 }}>Overtime Type</span>
+                                                    <Form.Item name="holidayRewardType" noStyle initialValue="SALARY_MULTIPLIER">
+                                                        <Select style={{ width: '100%' }}>
+                                                            <Option value="SALARY_MULTIPLIER">Salary Multiplier</Option>
+                                                            <Option value="FIXED_AMOUNT_PER_HOUR">Fixed Amount Per Hour</Option>
+                                                        </Select>
+                                                    </Form.Item>
+                                                </Col>
+                                                <Col span={12}>
+                                                    <Form.Item
+                                                        noStyle
+                                                        shouldUpdate={(prevValues, curValues) => prevValues.holidayRewardType !== curValues.holidayRewardType}
+                                                    >
+                                                        {({ getFieldValue }) => {
+                                                            const isMultiplier = getFieldValue('holidayRewardType') !== 'FIXED_AMOUNT_PER_HOUR';
+                                                            return (
+                                                                <>
+                                                                    <span className="modal-field-label" style={{ fontSize: '13px', display: 'block', marginBottom: 4 }}>
+                                                                        {isMultiplier ? 'Multiplier' : 'Fixed Amount Per Hour'}
+                                                                    </span>
+                                                                    <Form.Item name="holidayMultiplier" noStyle initialValue={2.0}>
+                                                                        <InputNumber
+                                                                            style={{ width: '100%' }}
+                                                                            prefix={isMultiplier ? '' : '₹'}
+                                                                            step={0.1}
+                                                                            min={0}
+                                                                            placeholder={isMultiplier ? 'e.g. 2.0' : 'e.g. 200'}
+                                                                        />
+                                                                    </Form.Item>
+                                                                </>
+                                                            );
+                                                        }}
+                                                    </Form.Item>
+                                                </Col>
+                                            </Row>
+                                        </div>
+                                    )}
+                                </Form.Item>
+                            </div>
                         </Form>
                     </Modal>
 
