@@ -310,18 +310,25 @@ export default function UserAccess() {
       render: (v) => <span style={{ fontSize: 14, color: '#434343', fontWeight: 500 }}>{v || '—'}</span>,
     },
     {
-      title: 'Assigned Badges',
+      title: 'Assigned Badges & Web Access',
       key: 'badges',
-      render: (_, row) => (
-        <Space wrap size={4}>
-          {(row?.badges || []).length === 0
-            ? <span style={{ color: '#cbd5e1' }}>—</span>
-            : (row.badges || []).map((b) => (
-              <Tag key={b.id} style={{ borderRadius: 20, fontSize: 11 }}>{b.name}</Tag>
-            ))
-          }
-        </Space>
-      ),
+      render: (_, row) => {
+        const hasBadges = (row?.badges || []).length > 0;
+        return (
+          <Space wrap size={4}>
+            {hasBadges ? (
+              <>
+                <Tag color="green" style={{ borderRadius: 20, fontSize: 11, fontWeight: 600 }}>Web Access Allowed</Tag>
+                {(row.badges || []).map((b) => (
+                  <Tag key={b.id} style={{ borderRadius: 20, fontSize: 11 }}>{b.name}</Tag>
+                ))}
+              </>
+            ) : (
+              <Tag color="red" style={{ borderRadius: 20, fontSize: 11, fontWeight: 600 }}>No Web Access</Tag>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: 'Actions',
@@ -475,7 +482,7 @@ export default function UserAccess() {
               </div>
             }
           >
-            <div style={{ padding: '14px 20px', borderBottom: '1px solid #f0f2f5' }}>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #f0f2f5', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
               <Input
                 allowClear
                 placeholder="Search staff by name or phone..."
@@ -484,6 +491,9 @@ export default function UserAccess() {
                 onChange={(e) => setStaffSearch(e.target.value)}
                 style={{ maxWidth: 320, borderRadius: 20 }}
               />
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                ℹ️ <strong>Web Access Policy</strong>: Staff members (user role) require at least 1 assigned badge to log in to the Web Portal of this company.
+              </Text>
             </div>
             <Table
               className="sales-table"
