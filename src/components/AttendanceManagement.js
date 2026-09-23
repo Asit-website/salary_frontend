@@ -205,12 +205,18 @@ const AttendanceManagement = () => {
       ? attendance.find(a => (a.userId === staffId || a.userId === Number(staffId)) && a.date === selectedDate.format('YYYY-MM-DD'))
       : null;
 
+    const parsedIn = parseTimeValue(existingRecord?.checkIn) || parseTimeValue('09:30');
+    const parsedOut = parseTimeValue(existingRecord?.checkOut) || parseTimeValue('18:00');
+    const isNight = parsedIn && parsedOut && parsedOut.isBefore(parsedIn);
+
     markForm.setFieldsValue({
       staffId,
       date: selectedDate,
+      checkInDate: existingRecord?.punchedInAt ? dayjs(existingRecord.punchedInAt) : selectedDate,
+      checkOutDate: existingRecord?.punchedOutAt ? dayjs(existingRecord.punchedOutAt) : (isNight ? selectedDate.add(1, 'day') : selectedDate),
       status: existingRecord?.status || 'present',
-      checkIn: parseTimeValue(existingRecord?.checkIn) || parseTimeValue('09:30'),
-      checkOut: parseTimeValue(existingRecord?.checkOut) || parseTimeValue('18:00'),
+      checkIn: parsedIn,
+      checkOut: parsedOut,
       overtimeMinutes: null,
     });
 
@@ -268,6 +274,8 @@ const AttendanceManagement = () => {
       const payload = {
         staffId: values.staffId,
         date: values.date?.format('YYYY-MM-DD'),
+        checkInDate: values.checkInDate ? values.checkInDate.format('YYYY-MM-DD') : values.date?.format('YYYY-MM-DD'),
+        checkOutDate: values.checkOutDate ? values.checkOutDate.format('YYYY-MM-DD') : undefined,
         status: values.status,
         checkIn: values.checkIn ? values.checkIn.format('HH:mm:ss') : null,
         checkOut: values.checkOut ? values.checkOut.format('HH:mm:ss') : null,
@@ -291,14 +299,14 @@ const AttendanceManagement = () => {
 
   const handleBulkStaffSelect = async (uid) => {
     const staffInfo = staffList.find(s => s.id === uid || s.id === Number(uid));
+    const dateStr = bulkDate.format('YYYY-MM-DD');
     const rec = attendance.find(
-      a => (a.userId === uid || a.userId === Number(uid)) && a.date === bulkDate.format('YYYY-MM-DD')
+      a => (a.userId === uid || a.userId === Number(uid)) && a.date === dateStr
     );
 
     let hasAutoOT = false;
     let shiftData = null;
     try {
-      const dateStr = bulkDate.format('YYYY-MM-DD');
       const sRes = await api.get(`/admin/shifts/effective/${uid}?date=${dateStr}`);
       shiftData = sRes.data?.shift;
       if (shiftData && Number(shiftData.overtimeStartMinutes) > 0) {
@@ -306,14 +314,23 @@ const AttendanceManagement = () => {
       }
     } catch (_) { }
 
+    const parsedIn = parseTimeValue(rec?.checkIn) || parseTimeValue(shiftData?.startTime) || parseTimeValue('09:30');
+    const parsedOut = parseTimeValue(rec?.checkOut) || parseTimeValue(shiftData?.endTime) || parseTimeValue('18:00');
+    const isNight = parsedIn && parsedOut && parsedOut.isBefore(parsedIn);
+
+    const inDate = rec?.punchedInAt ? dayjs(rec.punchedInAt) : bulkDate;
+    const outDate = rec?.punchedOutAt ? dayjs(rec.punchedOutAt) : (isNight ? bulkDate.add(1, 'day') : bulkDate);
+
     setBulkRows(prev => [
       ...prev,
       {
         userId: uid,
         name: staffInfo ? `${staffInfo.name} (${staffInfo.staffId || 'N/A'})` : `Staff ${uid}`,
         status: rec?.status || 'present',
-        checkIn: parseTimeValue(rec?.checkIn) || parseTimeValue(shiftData?.startTime) || parseTimeValue('09:30'),
-        checkOut: parseTimeValue(rec?.checkOut) || parseTimeValue(shiftData?.endTime) || parseTimeValue('18:00'),
+        checkInDate: inDate,
+        checkIn: parsedIn,
+        checkOutDate: outDate,
+        checkOut: parsedOut,
         hasAutoOT,
       }
     ]);
@@ -364,6 +381,8 @@ const AttendanceManagement = () => {
         api.post('/admin/attendance', {
           staffId: row.userId,
           date: dateStr,
+          checkInDate: row.checkInDate ? row.checkInDate.format('YYYY-MM-DD') : dateStr,
+          checkOutDate: row.checkOutDate ? row.checkOutDate.format('YYYY-MM-DD') : undefined,
           status: row.status,
           checkIn: row.checkIn ? row.checkIn.format('HH:mm:ss') : null,
           checkOut: row.checkOut ? row.checkOut.format('HH:mm:ss') : null,
@@ -1076,26 +1095,44 @@ const AttendanceManagement = () => {
                     const rec = attendance.find(
                       a => (a.userId === uid || a.userId === Number(uid)) && a.date === dateStr
                     );
+                    const currentFormDate = markForm.getFieldValue('date') || selectedDate;
                     if (rec) {
+                      const parsedIn = parseTimeValue(rec.checkIn) || parseTimeValue('09:30');
+                      const parsedOut = parseTimeValue(rec.checkOut) || parseTimeValue('18:00');
+                      const isNight = parsedIn && parsedOut && parsedOut.isBefore(parsedIn);
+
+                      const inDate = rec.punchedInAt ? dayjs(rec.punchedInAt) : currentFormDate;
+                      const outDate = rec.punchedOutAt ? dayjs(rec.punchedOutAt) : (isNight ? currentFormDate.add(1, 'day') : currentFormDate);
+
                       markForm.setFieldsValue({
                         status: rec.status || 'present',
-                        checkIn: parseTimeValue(rec.checkIn) || parseTimeValue('09:30'),
-                        checkOut: parseTimeValue(rec.checkOut) || parseTimeValue('18:00'),
+                        checkIn: parsedIn,
+                        checkOut: parsedOut,
+                        checkInDate: inDate,
+                        checkOutDate: outDate,
                       });
                     } else {
                       markForm.setFieldsValue({
                         status: 'present',
                         checkIn: parseTimeValue('09:30'),
                         checkOut: parseTimeValue('18:00'),
+                        checkInDate: currentFormDate,
+                        checkOutDate: currentFormDate,
                       });
                     }
                     api.get(`/admin/shifts/effective/${uid}?date=${dateStr}`).then(res => {
                       const shift = res.data?.shift;
                       setEffectiveShift(shift || null);
                       if (!rec && shift) {
+                        const parsedIn = parseTimeValue(shift.startTime) || parseTimeValue('09:30');
+                        const parsedOut = parseTimeValue(shift.endTime) || parseTimeValue('18:00');
+                        const isNight = parsedIn && parsedOut && parsedOut.isBefore(parsedIn);
+
                         markForm.setFieldsValue({
-                          checkIn: parseTimeValue(shift.startTime) || parseTimeValue('09:30'),
-                          checkOut: parseTimeValue(shift.endTime) || parseTimeValue('18:00'),
+                          checkIn: parsedIn,
+                          checkOut: parsedOut,
+                          checkInDate: currentFormDate,
+                          checkOutDate: isNight ? currentFormDate.add(1, 'day') : currentFormDate,
                         });
                       }
                     }).catch(() => setEffectiveShift(null));
@@ -1132,7 +1169,46 @@ const AttendanceManagement = () => {
               )}
 
               <Form.Item name="date" label={<span className="modal-field-label">Date</span>} rules={[{ required: true, message: 'Please choose date' }]} >
-                <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+                <DatePicker
+                  style={{ width: '100%' }}
+                  format="DD MMM YYYY"
+                  onChange={(d) => {
+                    if (!d) return;
+                    const uid = markForm.getFieldValue('staffId');
+                    const dateStr = d.format('YYYY-MM-DD');
+                    if (uid) {
+                      const rec = attendance.find(
+                        a => (a.userId === uid || a.userId === Number(uid)) && a.date === dateStr
+                      );
+                      if (rec) {
+                        const parsedIn = parseTimeValue(rec.checkIn) || parseTimeValue('09:30');
+                        const parsedOut = parseTimeValue(rec.checkOut) || parseTimeValue('18:00');
+                        const isNight = parsedIn && parsedOut && parsedOut.isBefore(parsedIn);
+
+                        const inDate = rec.punchedInAt ? dayjs(rec.punchedInAt) : d;
+                        const outDate = rec.punchedOutAt ? dayjs(rec.punchedOutAt) : (isNight ? d.add(1, 'day') : d);
+
+                        markForm.setFieldsValue({
+                          status: rec.status || 'present',
+                          checkIn: parsedIn,
+                          checkOut: parsedOut,
+                          checkInDate: inDate,
+                          checkOutDate: outDate,
+                        });
+                      } else {
+                        markForm.setFieldsValue({
+                          checkInDate: d,
+                          checkOutDate: d,
+                        });
+                      }
+                    } else {
+                      markForm.setFieldsValue({
+                        checkInDate: d,
+                        checkOutDate: d,
+                      });
+                    }
+                  }}
+                />
               </Form.Item>
               <Form.Item name="status" label={<span className="modal-field-label">Status</span>} rules={[{ required: true }]}>
                 <Radio.Group>
@@ -1161,12 +1237,30 @@ const AttendanceManagement = () => {
                   return null;
                 }}
               </Form.Item>
-              <Form.Item name="checkIn" label={<span className="modal-field-label">Check-in Time</span>}>
-                <TimePicker style={{ width: '100%' }} format="HH:mm" needConfirm={false} />
-              </Form.Item>
-              <Form.Item name="checkOut" label={<span className="modal-field-label">Check-out Time</span>}>
-                <TimePicker style={{ width: '100%' }} format="HH:mm" needConfirm={false} />
-              </Form.Item>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="checkInDate" label={<span className="modal-field-label">Check-in Date</span>}>
+                    <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="checkIn" label={<span className="modal-field-label">Check-in Time</span>}>
+                    <TimePicker style={{ width: '100%' }} format="HH:mm" needConfirm={false} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="checkOutDate" label={<span className="modal-field-label">Check-out Date</span>}>
+                    <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="checkOut" label={<span className="modal-field-label">Check-out Time</span>}>
+                    <TimePicker style={{ width: '100%' }} format="HH:mm" needConfirm={false} />
+                  </Form.Item>
+                </Col>
+              </Row>
             </Form>
           </Modal>
 
@@ -1176,7 +1270,7 @@ const AttendanceManagement = () => {
             onCancel={() => { setBulkMarkOpen(false); setBulkRows([]); }}
             onOk={submitBulkMark}
             okText="Save Bulk Attendance"
-            width={900}
+            width={1050}
             className="sales-modal"
             destroyOnClose
           >
@@ -1185,7 +1279,31 @@ const AttendanceManagement = () => {
               <span className="modal-field-label">Select Date</span>
               <DatePicker
                 value={bulkDate}
-                onChange={(d) => setBulkDate(d)}
+                onChange={(d) => {
+                  setBulkDate(d);
+                  if (!d) return;
+                  setBulkRows(prev => prev.map(row => {
+                    const dateStr = d.format('YYYY-MM-DD');
+                    const rec = attendance.find(
+                      a => (a.userId === row.userId || a.userId === Number(row.userId)) && a.date === dateStr
+                    );
+                    const parsedIn = parseTimeValue(rec?.checkIn) || row.checkIn || parseTimeValue('09:30');
+                    const parsedOut = parseTimeValue(rec?.checkOut) || row.checkOut || parseTimeValue('18:00');
+                    const isNight = parsedIn && parsedOut && parsedOut.isBefore(parsedIn);
+
+                    const inDate = rec?.punchedInAt ? dayjs(rec.punchedInAt) : d;
+                    const outDate = rec?.punchedOutAt ? dayjs(rec.punchedOutAt) : (isNight ? d.add(1, 'day') : d);
+
+                    return {
+                      ...row,
+                      checkInDate: inDate,
+                      checkOutDate: outDate,
+                      checkIn: parsedIn,
+                      checkOut: parsedOut,
+                      status: rec?.status || row.status,
+                    };
+                  }));
+                }}
                 format="DD MMM YYYY"
                 style={{ width: 200 }}
               />
@@ -1220,8 +1338,10 @@ const AttendanceManagement = () => {
                   <tr style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
                     <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Staff</th>
                     <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Status</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-in</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-out</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-in Date</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-in Time</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-out Date</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-out Time</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1233,7 +1353,7 @@ const AttendanceManagement = () => {
                           size="small"
                           value={row.status}
                           onChange={v => updateBulkRow(row.userId, 'status', v)}
-                          style={{ width: 110 }}
+                          style={{ width: 100 }}
                         >
                           <Option value="present">Present</Option>
                           <Option value="overtime">Overtime</Option>
@@ -1248,9 +1368,18 @@ const AttendanceManagement = () => {
                             placeholder="OT minutes"
                             value={row.overtimeMinutes ?? ''}
                             onChange={(e) => updateBulkRow(row.userId, 'overtimeMinutes', e.target.value)}
-                            style={{ width: 120, marginTop: 6, display: 'block' }}
+                            style={{ width: 100, marginTop: 6, display: 'block' }}
                           />
                         ) : null}
+                      </td>
+                      <td style={{ padding: '12px 8px' }}>
+                        <DatePicker
+                          size="small"
+                          value={row.checkInDate}
+                          format="DD MMM YYYY"
+                          onChange={d => updateBulkRow(row.userId, 'checkInDate', d)}
+                          style={{ width: 125 }}
+                        />
                       </td>
                       <td style={{ padding: '12px 8px' }}>
                         <TimePicker
@@ -1259,7 +1388,16 @@ const AttendanceManagement = () => {
                           format="HH:mm"
                           needConfirm={false}
                           onChange={v => updateBulkRow(row.userId, 'checkIn', v)}
-                          style={{ width: 120 }}
+                          style={{ width: 95 }}
+                        />
+                      </td>
+                      <td style={{ padding: '12px 8px' }}>
+                        <DatePicker
+                          size="small"
+                          value={row.checkOutDate}
+                          format="DD MMM YYYY"
+                          onChange={d => updateBulkRow(row.userId, 'checkOutDate', d)}
+                          style={{ width: 125 }}
                         />
                       </td>
                       <td style={{ padding: '12px 8px' }}>
@@ -1269,7 +1407,7 @@ const AttendanceManagement = () => {
                           format="HH:mm"
                           needConfirm={false}
                           onChange={v => updateBulkRow(row.userId, 'checkOut', v)}
-                          style={{ width: 120 }}
+                          style={{ width: 95 }}
                         />
                       </td>
                     </tr>
