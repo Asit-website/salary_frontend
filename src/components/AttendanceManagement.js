@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Table, Button, DatePicker, Select, message, Space, Typography, Tag, Menu, Input, Modal, Form, Radio, TimePicker, Input as AntInput, Image, Row, Col, Popconfirm } from 'antd';
+import { Layout, Card, Table, Button, DatePicker, Select, message, Space, Typography, Tag, Menu, Input, Modal, Form, Radio, TimePicker, Input as AntInput, Image, Row, Col, Popconfirm, Checkbox } from 'antd';
 import './AttendanceManagement.css';
 import {
   CalendarOutlined,
@@ -14,7 +14,8 @@ import {
   FilterOutlined,
   EnvironmentOutlined,
   PhoneOutlined,
-  SearchOutlined
+  SearchOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
@@ -74,8 +75,18 @@ const AttendanceManagement = () => {
   const [bulkMarkOpen, setBulkMarkOpen] = useState(false);
   const [markForm] = Form.useForm();
   const [bulkForm] = Form.useForm();
-  const [bulkRows, setBulkRows] = useState([]);   // per-staff rows: [{userId, name, status, checkIn, checkOut}]
+  const [bulkStaffIds, setBulkStaffIds] = useState([]); // selected staff ids
+  const [bulkRows, setBulkRows] = useState([]);   // per-date-staff rows: [{key, userId, staffName, date, dateStr, formattedDate, status, checkInDate, checkIn, checkOutDate, checkOut}]
+  const [bulkDateMode, setBulkDateMode] = useState('single'); // 'single' | 'range' | 'multiple'
   const [bulkDate, setBulkDate] = useState(dayjs());
+  const [bulkDateRange, setBulkDateRange] = useState([dayjs(), dayjs()]);
+  const [bulkMultipleDates, setBulkMultipleDates] = useState([dayjs()]);
+  const [masterStatus, setMasterStatus] = useState('present');
+  const [masterCheckIn, setMasterCheckIn] = useState(parseTimeValue('09:30'));
+  const [masterCheckOut, setMasterCheckOut] = useState(parseTimeValue('18:00'));
+  const [excludeWeeklyOff, setExcludeWeeklyOff] = useState(false);
+  const [excludeHoliday, setExcludeHoliday] = useState(false);
+  const [excludePaidLeave, setExcludePaidLeave] = useState(false);
   const [effectiveTemplate, setEffectiveTemplate] = useState(null);
   const [effectiveShift, setEffectiveShift] = useState(null);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -292,96 +303,195 @@ const AttendanceManagement = () => {
   };
 
   const openBulkMarkModal = () => {
+    setBulkStaffIds([]);
     setBulkRows([]);
-    setBulkDate(selectedDate);
+    setBulkDateMode('single');
+    const initDate = selectedDate || dayjs();
+    setBulkDate(initDate);
+    setBulkDateRange([initDate, initDate]);
+    setBulkMultipleDates([initDate]);
     setBulkMarkOpen(true);
   };
 
-  const handleBulkStaffSelect = async (uid) => {
+  const getBulkSelectedDates = (overrideMode, overrideDate, overrideRange, overrideMulti) => {
+    const mode = overrideMode || bulkDateMode;
+    if (mode === 'single') {
+      const d = overrideDate || bulkDate;
+      return d ? [d] : [];
+    }
+    if (mode === 'range') {
+      const range = overrideRange || bulkDateRange;
+      if (!range || !range[0] || !range[1]) return [];
+      const dates = [];
+      let curr = range[0].startOf('day');
+      const end = range[1].startOf('day');
+      while (curr.isBefore(end) || curr.isSame(end, 'day')) {
+        dates.push(curr.clone());
+        curr = curr.add(1, 'day');
+      }
+      return dates;
+    }
+    if (mode === 'multiple') {
+      const multi = overrideMulti || bulkMultipleDates;
+      return (multi || []).slice().sort((a, b) => a.valueOf() - b.valueOf());
+    }
+    return [];
+  };
+
+  const syncBulkRows = async (staffIds, dates, overrideExclusions = {}) => {
+    const sIds = staffIds !== undefined ? staffIds : bulkStaffIds;
+    const targetDates = dates !== undefined ? dates : getBulkSelectedDates();
+    const exWo = overrideExclusions.excludeWeeklyOff !== undefined ? overrideExclusions.excludeWeeklyOff : excludeWeeklyOff;
+    const exHol = overrideExclusions.excludeHoliday !== undefined ? overrideExclusions.excludeHoliday : excludeHoliday;
+    const exLeave = overrideExclusions.excludePaidLeave !== undefined ? overrideExclusions.excludePaidLeave : excludePaidLeave;
+
+    if (!sIds || sIds.length === 0 || !targetDates || targetDates.length === 0) {
+      setBulkRows([]);
+      return;
+    }
+
+    let specialDaysMap = {};
+    if (exWo || exHol || exLeave) {
+      try {
+        const dateStrs = targetDates.map(d => d.format('YYYY-MM-DD'));
+        const resp = await api.post('/admin/attendance/check-special-days-batch', {
+          userIds: sIds,
+          dates: dateStrs
+        });
+        if (resp.data?.success) {
+          specialDaysMap = resp.data.results || {};
+        }
+      } catch (err) {
+        console.error('Failed to fetch batch special days:', err);
+      }
+    }
+
+    setBulkRows(prevRows => {
+      const prevMap = new Map(prevRows.map(r => [r.key, r]));
+      const newRows = [];
+
+      for (const uid of sIds) {
+        const staffInfo = staffList.find(s => s.id === uid || s.id === Number(uid));
+        const sName = staffInfo ? `${staffInfo.name} (${staffInfo.staffId || 'N/A'})` : `Staff ${uid}`;
+
+        for (const d of targetDates) {
+          const dateStr = d.format('YYYY-MM-DD');
+          const key = `${uid}_${dateStr}`;
+          const specialInfo = specialDaysMap[key] || {};
+
+          // Skip row if any checked exclusion applies to this date & staff
+          if (exWo && specialInfo.isWeeklyOff) continue;
+          if (exHol && specialInfo.isHoliday) continue;
+          if (exLeave && specialInfo.isLeave) continue;
+
+          if (prevMap.has(key)) {
+            newRows.push(prevMap.get(key));
+          } else {
+            const rec = attendance.find(
+              a => (a.userId === uid || a.userId === Number(uid)) && a.date === dateStr
+            );
+            const parsedIn = parseTimeValue(rec?.checkIn) || parseTimeValue('09:30');
+            const parsedOut = parseTimeValue(rec?.checkOut) || parseTimeValue('18:00');
+            const isNight = parsedIn && parsedOut && parsedOut.isBefore(parsedIn);
+
+            const inDate = rec?.punchedInAt ? dayjs(rec.punchedInAt) : d;
+            const outDate = rec?.punchedOutAt ? dayjs(rec.punchedOutAt) : (isNight ? d.add(1, 'day') : d);
+
+            newRows.push({
+              key,
+              userId: uid,
+              staffName: sName,
+              date: d,
+              dateStr,
+              formattedDate: d.format('DD MMM YYYY'),
+              status: rec?.status || 'present',
+              checkInDate: inDate,
+              checkIn: parsedIn,
+              checkOutDate: outDate,
+              checkOut: parsedOut,
+              hasAutoOT: false,
+            });
+          }
+        }
+      }
+      return newRows;
+    });
+  };
+
+  const handleBulkStaffSelect = (uid) => {
+    const newStaff = [...bulkStaffIds, uid];
+    setBulkStaffIds(newStaff);
+    syncBulkRows(newStaff, getBulkSelectedDates());
+
     const staffInfo = staffList.find(s => s.id === uid || s.id === Number(uid));
-    const dateStr = bulkDate.format('YYYY-MM-DD');
-    const rec = attendance.find(
-      a => (a.userId === uid || a.userId === Number(uid)) && a.date === dateStr
-    );
-
-    let hasAutoOT = false;
-    let shiftData = null;
-    try {
-      const sRes = await api.get(`/admin/shifts/effective/${uid}?date=${dateStr}`);
-      shiftData = sRes.data?.shift;
-      if (shiftData && Number(shiftData.overtimeStartMinutes) > 0) {
-        hasAutoOT = true;
-      }
-    } catch (_) { }
-
-    const parsedIn = parseTimeValue(rec?.checkIn) || parseTimeValue(shiftData?.startTime) || parseTimeValue('09:30');
-    const parsedOut = parseTimeValue(rec?.checkOut) || parseTimeValue(shiftData?.endTime) || parseTimeValue('18:00');
-    const isNight = parsedIn && parsedOut && parsedOut.isBefore(parsedIn);
-
-    const inDate = rec?.punchedInAt ? dayjs(rec.punchedInAt) : bulkDate;
-    const outDate = rec?.punchedOutAt ? dayjs(rec.punchedOutAt) : (isNight ? bulkDate.add(1, 'day') : bulkDate);
-
-    setBulkRows(prev => [
-      ...prev,
-      {
-        userId: uid,
-        name: staffInfo ? `${staffInfo.name} (${staffInfo.staffId || 'N/A'})` : `Staff ${uid}`,
-        status: rec?.status || 'present',
-        checkInDate: inDate,
-        checkIn: parsedIn,
-        checkOutDate: outDate,
-        checkOut: parsedOut,
-        hasAutoOT,
-      }
-    ]);
-
     if (staffInfo && staffInfo.active === false) {
       message.warning(`Warning: ${staffInfo.name} is currently deactivated.`);
     }
   };
 
   const handleBulkStaffDeselect = (uid) => {
-    setBulkRows(prev => prev.filter(r => r.userId !== uid && r.userId !== Number(uid)));
+    const newStaff = bulkStaffIds.filter(id => id !== uid && id !== Number(uid));
+    setBulkStaffIds(newStaff);
+    syncBulkRows(newStaff, getBulkSelectedDates());
   };
 
-  const updateBulkRow = (userId, field, value) => {
+  const updateBulkRowByKey = (key, field, value) => {
     setBulkRows(prev => prev.map(r =>
-      (r.userId === userId || r.userId === Number(userId)) ? { ...r, [field]: value } : r
+      r.key === key ? { ...r, [field]: value } : r
     ));
+  };
+
+  const removeBulkRowByKey = (key) => {
+    setBulkRows(prev => prev.filter(r => r.key !== key));
+  };
+
+  const applyMasterToAll = () => {
+    if (bulkRows.length === 0) return;
+    setBulkRows(prev => prev.map(r => {
+      const isNight = masterCheckIn && masterCheckOut && masterCheckOut.isBefore(masterCheckIn);
+      return {
+        ...r,
+        status: masterStatus || r.status,
+        checkIn: masterCheckIn || r.checkIn,
+        checkOut: masterCheckOut || r.checkOut,
+        checkInDate: r.date,
+        checkOutDate: isNight ? r.date.add(1, 'day') : r.date,
+      };
+    }));
+    message.success(`Applied master timings to all ${bulkRows.length} rows`);
   };
 
   const submitBulkMark = async () => {
     if (bulkRows.length === 0) {
-      message.warning('Please select at least one staff');
+      message.warning('Please select at least one staff and date');
       return;
     }
-    try {
-      if (bulkDate && bulkDate.isSame(dayjs(), 'day')) {
-        const now = dayjs();
-        const futureRow = bulkRows.find(r => {
-          if (!r.checkIn || !r.checkOut) return false;
-          
-          const isNightShift = r.checkOut.isBefore(r.checkIn);
-          if (isNightShift) return false;
-          
-          const checkOutTime = now.hour(r.checkOut.hour()).minute(r.checkOut.minute()).second(r.checkOut.second());
-          return checkOutTime.isAfter(now);
-        });
 
-        if (futureRow) {
-          const nowStr = now.format('hh:mm A');
-          const checkOutStr = futureRow.checkOut.format('hh:mm A');
-          message.error(`For ${futureRow.name}: Current time is ${nowStr}. You can set check-out time as ${checkOutStr} only after it is ${checkOutStr}.`);
-          return;
+    try {
+      const now = dayjs();
+
+      for (const row of bulkRows) {
+        if (row.date.isSame(now, 'day')) {
+          if (row.checkIn && row.checkOut) {
+            const isNightShift = row.checkOut.isBefore(row.checkIn);
+            if (!isNightShift) {
+              const checkOutTime = now.hour(row.checkOut.hour()).minute(row.checkOut.minute()).second(row.checkOut.second());
+              if (checkOutTime.isAfter(now)) {
+                const nowStr = now.format('hh:mm A');
+                const checkOutStr = row.checkOut.format('hh:mm A');
+                message.error(`For ${row.staffName} (${row.formattedDate}): Current time is ${nowStr}. You can set check-out time as ${checkOutStr} only after it is ${checkOutStr}.`);
+                return;
+              }
+            }
+          }
         }
       }
 
-      const dateStr = bulkDate.format('YYYY-MM-DD');
       await Promise.all(bulkRows.map(row =>
         api.post('/admin/attendance', {
           staffId: row.userId,
-          date: dateStr,
-          checkInDate: row.checkInDate ? row.checkInDate.format('YYYY-MM-DD') : dateStr,
+          date: row.dateStr,
+          checkInDate: row.checkInDate ? row.checkInDate.format('YYYY-MM-DD') : row.dateStr,
           checkOutDate: row.checkOutDate ? row.checkOutDate.format('YYYY-MM-DD') : undefined,
           status: row.status,
           checkIn: row.checkIn ? row.checkIn.format('HH:mm:ss') : null,
@@ -389,8 +499,9 @@ const AttendanceManagement = () => {
           overtimeMinutes: row.status === 'overtime' && Number.isFinite(Number(row.overtimeMinutes)) ? Number(row.overtimeMinutes) : undefined,
         })
       ));
-      message.success(`Bulk attendance saved for ${bulkRows.length} staff members`);
+      message.success(`Bulk attendance saved for ${bulkRows.length} record(s)!`);
       setBulkMarkOpen(false);
+      setBulkStaffIds([]);
       setBulkRows([]);
       fetchAttendance();
     } catch (err) {
@@ -1274,50 +1385,167 @@ const AttendanceManagement = () => {
             className="sales-modal"
             destroyOnClose
           >
-            {/* Date picker */}
-            <div style={{ marginBottom: 16 }}>
-              <span className="modal-field-label">Select Date</span>
-              <DatePicker
-                value={bulkDate}
-                onChange={(d) => {
-                  setBulkDate(d);
-                  if (!d) return;
-                  setBulkRows(prev => prev.map(row => {
-                    const dateStr = d.format('YYYY-MM-DD');
-                    const rec = attendance.find(
-                      a => (a.userId === row.userId || a.userId === Number(row.userId)) && a.date === dateStr
-                    );
-                    const parsedIn = parseTimeValue(rec?.checkIn) || row.checkIn || parseTimeValue('09:30');
-                    const parsedOut = parseTimeValue(rec?.checkOut) || row.checkOut || parseTimeValue('18:00');
-                    const isNight = parsedIn && parsedOut && parsedOut.isBefore(parsedIn);
-
-                    const inDate = rec?.punchedInAt ? dayjs(rec.punchedInAt) : d;
-                    const outDate = rec?.punchedOutAt ? dayjs(rec.punchedOutAt) : (isNight ? d.add(1, 'day') : d);
-
-                    return {
-                      ...row,
-                      checkInDate: inDate,
-                      checkOutDate: outDate,
-                      checkIn: parsedIn,
-                      checkOut: parsedOut,
-                      status: rec?.status || row.status,
-                    };
-                  }));
+            {/* Date Selection Section */}
+            <div style={{ marginBottom: 20, background: '#fafafa', padding: 16, borderRadius: 10, border: '1px solid #f0f0f0' }}>
+              <div style={{ marginBottom: 10, fontWeight: 600, color: '#1e293b', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <CalendarOutlined style={{ color: '#1677ff' }} /> Select Date(s) Option:
+              </div>
+              <Radio.Group
+                value={bulkDateMode}
+                onChange={(e) => {
+                  const newMode = e.target.value;
+                  setBulkDateMode(newMode);
+                  syncBulkRows(bulkStaffIds, getBulkSelectedDates(newMode));
                 }}
-                format="DD MMM YYYY"
-                style={{ width: 200 }}
-              />
+                buttonStyle="solid"
+                size="middle"
+                style={{ marginBottom: 14 }}
+              >
+                <Radio.Button value="single">Single Date</Radio.Button>
+                <Radio.Button value="range">Date Range (From - To)</Radio.Button>
+                <Radio.Button value="multiple">Multiple Custom Dates</Radio.Button>
+              </Radio.Group>
+
+              {/* Single Date */}
+              {bulkDateMode === 'single' && (
+                <div>
+                  <span className="modal-field-label" style={{ display: 'block', marginBottom: 4 }}>Date</span>
+                  <DatePicker
+                    value={bulkDate}
+                    onChange={(d) => {
+                      setBulkDate(d);
+                      if (!d) return;
+                      syncBulkRows(bulkStaffIds, [d]);
+                    }}
+                    format="DD MMM YYYY"
+                    style={{ width: 220 }}
+                  />
+                </div>
+              )}
+
+              {/* Date Range */}
+              {bulkDateMode === 'range' && (
+                <div>
+                  <span className="modal-field-label" style={{ display: 'block', marginBottom: 4 }}>Select Date Range</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <DatePicker.RangePicker
+                      value={bulkDateRange}
+                      onChange={(dates) => {
+                        setBulkDateRange(dates);
+                        if (dates && dates[0] && dates[1]) {
+                          syncBulkRows(bulkStaffIds, getBulkSelectedDates('range', null, dates));
+                        }
+                      }}
+                      format="DD MMM YYYY"
+                      style={{ width: 340 }}
+                    />
+                    {bulkDateRange && bulkDateRange[0] && bulkDateRange[1] && (
+                      <Tag color="blue" style={{ padding: '4px 12px', fontSize: 13, borderRadius: 6, fontWeight: 600 }}>
+                        📅 {getBulkSelectedDates().length} Days Selected ({bulkDateRange[0].format('DD MMM')} to {bulkDateRange[1].format('DD MMM YYYY')})
+                      </Tag>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Multiple Custom Dates */}
+              {bulkDateMode === 'multiple' && (
+                <div>
+                  <span className="modal-field-label" style={{ display: 'block', marginBottom: 4 }}>Pick Dates to Add</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <DatePicker
+                      format="DD MMM YYYY"
+                      placeholder="Click to pick & add a date"
+                      onChange={(d) => {
+                        if (!d) return;
+                        if (!bulkMultipleDates.some(existing => existing.isSame(d, 'day'))) {
+                          const newMulti = [...bulkMultipleDates, d];
+                          setBulkMultipleDates(newMulti);
+                          syncBulkRows(bulkStaffIds, getBulkSelectedDates('multiple', null, null, newMulti));
+                        }
+                      }}
+                      style={{ width: 220 }}
+                    />
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        const initMulti = [dayjs()];
+                        setBulkMultipleDates(initMulti);
+                        syncBulkRows(bulkStaffIds, initMulti);
+                      }}
+                      style={{ fontSize: 12 }}
+                    >
+                      Reset Dates
+                    </Button>
+                  </div>
+                  <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {bulkMultipleDates.map((d, idx) => (
+                      <Tag
+                        key={d.format('YYYY-MM-DD')}
+                        color="geekblue"
+                        closable={bulkMultipleDates.length > 1}
+                        onClose={() => {
+                          const newMulti = bulkMultipleDates.filter((_, i) => i !== idx);
+                          setBulkMultipleDates(newMulti);
+                          syncBulkRows(bulkStaffIds, getBulkSelectedDates('multiple', null, null, newMulti));
+                        }}
+                        style={{ padding: '4px 10px', fontSize: 13, borderRadius: 6, fontWeight: 500 }}
+                      >
+                        {d.format('DD MMM YYYY')}
+                      </Tag>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Exclusion Checkboxes */}
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed #cbd5e1', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>🚫 Skip/Exclude:</span>
+                <Checkbox
+                  checked={excludeWeeklyOff}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setExcludeWeeklyOff(val);
+                    syncBulkRows(bulkStaffIds, getBulkSelectedDates(), { excludeWeeklyOff: val });
+                  }}
+                  style={{ fontSize: 13, fontWeight: 500 }}
+                >
+                  Exclude Weekly Off
+                </Checkbox>
+                <Checkbox
+                  checked={excludeHoliday}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setExcludeHoliday(val);
+                    syncBulkRows(bulkStaffIds, getBulkSelectedDates(), { excludeHoliday: val });
+                  }}
+                  style={{ fontSize: 13, fontWeight: 500 }}
+                >
+                  Exclude Holiday
+                </Checkbox>
+                <Checkbox
+                  checked={excludePaidLeave}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setExcludePaidLeave(val);
+                    syncBulkRows(bulkStaffIds, getBulkSelectedDates(), { excludePaidLeave: val });
+                  }}
+                  style={{ fontSize: 13, fontWeight: 500 }}
+                >
+                  Exclude Paid Leave
+                </Checkbox>
+              </div>
             </div>
 
             {/* Staff selector */}
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 16 }}>
               <span className="modal-field-label">Select Staff Members</span>
               <Select
                 mode="multiple"
                 showSearch
                 placeholder="Select staff to add rows below"
                 style={{ width: '100%', marginTop: 6 }}
-                value={bulkRows.map(r => r.userId)}
+                value={bulkStaffIds}
                 onSelect={handleBulkStaffSelect}
                 onDeselect={handleBulkStaffDeselect}
                 optionFilterProp="children"
@@ -1331,92 +1559,159 @@ const AttendanceManagement = () => {
               </Select>
             </div>
 
-            {/* Per-staff editable table */}
+            {/* Summary Box & Master Quick Fill */}
             {bulkRows.length > 0 && (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
-                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Staff</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Status</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-in Date</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-in Time</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-out Date</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: '#595959' }}>Check-out Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bulkRows.map(row => (
-                    <tr key={row.userId} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                      <td style={{ padding: '12px 8px', fontWeight: 500 }}>{row.name}</td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <Select
-                          size="small"
-                          value={row.status}
-                          onChange={v => updateBulkRow(row.userId, 'status', v)}
-                          style={{ width: 100 }}
-                        >
-                          <Option value="present">Present</Option>
-                          <Option value="overtime">Overtime</Option>
-                          <Option value="absent">Absent</Option>
-                          <Option value="half_day">Half Day</Option>
-                          <Option value="leave">Leave</Option>
-                        </Select>
-                        {row.status === 'overtime' && !row.hasAutoOT ? (
-                          <AntInput
-                            type="number"
-                            min={0}
-                            placeholder="OT minutes"
-                            value={row.overtimeMinutes ?? ''}
-                            onChange={(e) => updateBulkRow(row.userId, 'overtimeMinutes', e.target.value)}
-                            style={{ width: 100, marginTop: 6, display: 'block' }}
-                          />
-                        ) : null}
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <DatePicker
-                          size="small"
-                          value={row.checkInDate}
-                          format="DD MMM YYYY"
-                          onChange={d => updateBulkRow(row.userId, 'checkInDate', d)}
-                          style={{ width: 125 }}
-                        />
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <TimePicker
-                          size="small"
-                          value={row.checkIn}
-                          format="HH:mm"
-                          needConfirm={false}
-                          onChange={v => updateBulkRow(row.userId, 'checkIn', v)}
-                          style={{ width: 95 }}
-                        />
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <DatePicker
-                          size="small"
-                          value={row.checkOutDate}
-                          format="DD MMM YYYY"
-                          onChange={d => updateBulkRow(row.userId, 'checkOutDate', d)}
-                          style={{ width: 125 }}
-                        />
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <TimePicker
-                          size="small"
-                          value={row.checkOut}
-                          format="HH:mm"
-                          needConfirm={false}
-                          onChange={v => updateBulkRow(row.userId, 'checkOut', v)}
-                          style={{ width: 95 }}
-                        />
-                      </td>
+              <div style={{ marginBottom: 16, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 14 }}>
+                <div style={{ marginBottom: 10, fontSize: 13, color: '#0050b3', fontWeight: 600 }}>
+                  📌 Bulk Attendance Breakdown: {bulkStaffIds.length} Staff Member(s) × {getBulkSelectedDates().length} Date(s) = <strong>{bulkRows.length} Total Entry Row(s)</strong> below.
+                </div>
+
+                {/* Quick Master Pre-fill Bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingTop: 10, borderTop: '1px dashed #cbd5e1' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>⚡ Quick Pre-Fill All Rows:</span>
+                  <Select
+                    size="small"
+                    value={masterStatus}
+                    onChange={(v) => setMasterStatus(v)}
+                    style={{ width: 110 }}
+                  >
+                    <Option value="present">Present</Option>
+                    <Option value="overtime">Overtime</Option>
+                    <Option value="absent">Absent</Option>
+                    <Option value="half_day">Half Day</Option>
+                    <Option value="leave">Leave</Option>
+                  </Select>
+                  <TimePicker
+                    size="small"
+                    value={masterCheckIn}
+                    format="HH:mm"
+                    needConfirm={false}
+                    onChange={(v) => setMasterCheckIn(v)}
+                    style={{ width: 95 }}
+                  />
+                  <TimePicker
+                    size="small"
+                    value={masterCheckOut}
+                    format="HH:mm"
+                    needConfirm={false}
+                    onChange={(v) => setMasterCheckOut(v)}
+                    style={{ width: 95 }}
+                  />
+                  <Button
+                    type="primary"
+                    size="small"
+                    onClick={applyMasterToAll}
+                    style={{ borderRadius: 6, fontWeight: 600, fontSize: 12 }}
+                  >
+                    Apply to All {bulkRows.length} Rows
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Per-date-staff editable table */}
+            {bulkRows.length > 0 && (
+              <div style={{ maxHeight: 380, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #cbd5e1', position: 'sticky', top: 0, zIndex: 2 }}>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#334155' }}>Date</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#334155' }}>Staff Name</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#334155' }}>Status</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#334155' }}>Check-in Date</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#334155' }}>Check-in Time</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#334155' }}>Check-out Date</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#334155' }}>Check-out Time</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#334155' }}>Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {bulkRows.map(row => (
+                      <tr key={row.key} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: 600 }}>
+                          <Tag color="blue" style={{ fontWeight: 600, margin: 0 }}>{row.formattedDate}</Tag>
+                        </td>
+                        <td style={{ padding: '10px 12px', fontWeight: 500, color: '#1e293b' }}>{row.staffName}</td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <Select
+                            size="small"
+                            value={row.status}
+                            onChange={v => updateBulkRowByKey(row.key, 'status', v)}
+                            style={{ width: 100 }}
+                          >
+                            <Option value="present">Present</Option>
+                            <Option value="overtime">Overtime</Option>
+                            <Option value="absent">Absent</Option>
+                            <Option value="half_day">Half Day</Option>
+                            <Option value="leave">Leave</Option>
+                          </Select>
+                          {row.status === 'overtime' && !row.hasAutoOT ? (
+                            <AntInput
+                              type="number"
+                              min={0}
+                              placeholder="OT min"
+                              value={row.overtimeMinutes ?? ''}
+                              onChange={(e) => updateBulkRowByKey(row.key, 'overtimeMinutes', e.target.value)}
+                              style={{ width: 100, marginTop: 4, display: 'block' }}
+                            />
+                          ) : null}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <DatePicker
+                            size="small"
+                            value={row.checkInDate}
+                            format="DD MMM YYYY"
+                            onChange={d => updateBulkRowByKey(row.key, 'checkInDate', d)}
+                            style={{ width: 125 }}
+                          />
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <TimePicker
+                            size="small"
+                            value={row.checkIn}
+                            format="HH:mm"
+                            needConfirm={false}
+                            onChange={v => updateBulkRowByKey(row.key, 'checkIn', v)}
+                            style={{ width: 95 }}
+                          />
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <DatePicker
+                            size="small"
+                            value={row.checkOutDate}
+                            format="DD MMM YYYY"
+                            onChange={d => updateBulkRowByKey(row.key, 'checkOutDate', d)}
+                            style={{ width: 125 }}
+                          />
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <TimePicker
+                            size="small"
+                            value={row.checkOut}
+                            format="HH:mm"
+                            needConfirm={false}
+                            onChange={v => updateBulkRowByKey(row.key, 'checkOut', v)}
+                            style={{ width: 95 }}
+                          />
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => removeBulkRowByKey(row.key)}
+                            title="Remove this date row"
+                            style={{ borderRadius: 6 }}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             {bulkRows.length === 0 && (
-              <div style={{ textAlign: 'center', color: '#999', padding: 24 }}>Select staff members above to add their rows</div>
+              <div style={{ textAlign: 'center', color: '#999', padding: 24 }}>Select staff members and date(s) above to add breakdown rows</div>
             )}
           </Modal>
 

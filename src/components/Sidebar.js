@@ -139,11 +139,25 @@ const Sidebar = ({ collapsed }) => {
   const hasSidebarModulePermission = (moduleKey) => {
     if (userRole === 'admin' || userRole === 'superadmin') return true;
     if (moduleKey === 'switch_org') return true;
+
+    if (moduleKey === 'leave') {
+      return sidebarPermissionKeys.includes('leave_tab') ||
+             sidebarPermissionKeys.includes('leave_requests_tab') ||
+             sidebarPermissionKeys.includes('leave_encashment_tab');
+    }
+    if (moduleKey === 'leave_requests') {
+      return sidebarPermissionKeys.includes('leave_tab') ||
+             sidebarPermissionKeys.includes('leave_requests_tab');
+    }
+    if (moduleKey === 'leave_encashment') {
+      return sidebarPermissionKeys.includes('leave_tab') ||
+             sidebarPermissionKeys.includes('leave_encashment_tab');
+    }
+
     const map = {
       dashboard: 'dashboard_tab',
       staff: 'staff_management_tab',
       attendance: 'attendance_tab',
-      leave: 'leave_tab',
       payroll: 'payroll_tab',
       loans: 'loans_tab',
       sales: 'sales_tab',
@@ -201,10 +215,12 @@ const Sidebar = ({ collapsed }) => {
           {
             key: '/leave/requests',
             label: 'Leave Requests',
+            module: 'leave_requests'
           },
           {
             key: '/leave/encashment',
             label: 'Leave Encashment Claims',
+            module: 'leave_encashment'
           },
         ]
       },
@@ -364,7 +380,19 @@ const Sidebar = ({ collapsed }) => {
     }
 
     if (userRole === 'staff') {
-      return items.filter((item) => hasSidebarModulePermission(item.module));
+      return items
+        .map((item) => {
+          if (!hasSidebarModulePermission(item.module)) return null;
+          if (item.children) {
+            const validChildren = item.children.filter((child) =>
+              hasSidebarModulePermission(child.module || item.module)
+            );
+            if (validChildren.length === 0) return null;
+            return { ...item, children: validChildren };
+          }
+          return item;
+        })
+        .filter(Boolean);
     }
     return items;
   };

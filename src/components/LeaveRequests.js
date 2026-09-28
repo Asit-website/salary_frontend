@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Typography, Card, Table, Button, Modal, Form, Input, Space, message, Select, DatePicker } from 'antd';
-import { PlusOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { Layout, Typography, Card, Table, Button, Modal, Form, Input, Space, message, Select, DatePicker, Popconfirm } from 'antd';
+import { PlusOutlined, CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
@@ -146,6 +146,18 @@ const LeaveRequests = () => {
         }
     };
 
+    const handleDelete = async (record) => {
+        try {
+            const res = await api.delete(`/leave/${record.id}`);
+            if (res.data.success) {
+                message.success('Leave request deleted and balance restored');
+                fetchRequests();
+            }
+        } catch (error) {
+            message.error(error.response?.data?.message || 'Failed to delete leave request');
+        }
+    };
+
     const columns = [
         {
             title: 'Employee',
@@ -236,30 +248,52 @@ const LeaveRequests = () => {
         {
             title: 'Actions',
             key: 'actions',
-            width: 250,
-            render: (_, record) => record.status === 'PENDING' && (
+            width: 260,
+            render: (_, record) => (
                 <Space size="small">
-                    <Button
-                        type="primary"
-                        ghost
-                        size="small"
-                        icon={<CheckCircleOutlined />}
-                        onClick={() => handleReview(record, 'APPROVED')}
-                        shape="round"
-                        style={{ borderColor: '#52c41a', color: '#52c41a' }}
+                    {record.status === 'PENDING' && (
+                        <>
+                            <Button
+                                type="primary"
+                                ghost
+                                size="small"
+                                icon={<CheckCircleOutlined />}
+                                onClick={() => handleReview(record, 'APPROVED')}
+                                shape="round"
+                                style={{ borderColor: '#52c41a', color: '#52c41a' }}
+                            >
+                                Approve
+                            </Button>
+                            <Button
+                                danger
+                                ghost
+                                size="small"
+                                icon={<CloseCircleOutlined />}
+                                onClick={() => handleReview(record, 'REJECTED')}
+                                shape="round"
+                            >
+                                Reject
+                            </Button>
+                        </>
+                    )}
+                    <Popconfirm
+                        title="Delete Leave Request"
+                        description="Are you sure you want to delete this leave request? If approved, the leave balance will be restored."
+                        onConfirm={() => handleDelete(record)}
+                        okText="Yes, Delete"
+                        cancelText="No"
+                        okButtonProps={{ danger: true }}
                     >
-                        Approve
-                    </Button>
-                    <Button
-                        danger
-                        ghost
-                        size="small"
-                        icon={<CloseCircleOutlined />}
-                        onClick={() => handleReview(record, 'REJECTED')}
-                        shape="round"
-                    >
-                        Reject
-                    </Button>
+                        <Button
+                            danger
+                            ghost
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            shape="round"
+                        >
+                            Delete
+                        </Button>
+                    </Popconfirm>
                 </Space>
             )
         }

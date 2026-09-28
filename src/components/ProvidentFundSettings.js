@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Card, Button, message, Space, Typography, Switch, InputNumber } from 'antd';
-import { ArrowLeftOutlined, PercentageOutlined, SafetyCertificateOutlined, FilterOutlined } from '@ant-design/icons';
+import { Layout, Card, Button, message, Space, Typography, Switch, InputNumber, DatePicker } from 'antd';
+import { ArrowLeftOutlined, PercentageOutlined, SafetyCertificateOutlined, FilterOutlined, CalendarOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 import Sidebar from './Sidebar';
 import MainHeader from './MainHeader';
 import api from '../api';
@@ -16,6 +17,7 @@ export default function ProvidentFundSettings() {
   const [pfCalculationMode, setPfCalculationMode] = useState('basic');
   const [pfCapEnabled, setPfCapEnabled] = useState(false);
   const [pfCapAmount, setPfCapAmount] = useState(1800);
+  const [pfCapEffectiveDate, setPfCapEffectiveDate] = useState(null);
 
   const fetchSettings = async () => {
     try {
@@ -24,6 +26,7 @@ export default function ProvidentFundSettings() {
       setPfCalculationMode(s.pfCalculationMode || 'basic');
       setPfCapEnabled(s.pfCapEnabled === true);
       setPfCapAmount(s.pfCapAmount !== undefined ? Number(s.pfCapAmount) : 1800);
+      setPfCapEffectiveDate(s.pfCapEffectiveDate ? dayjs(s.pfCapEffectiveDate) : null);
     } catch (e) {
       message.error('Failed to load provident fund settings');
     }
@@ -60,7 +63,8 @@ export default function ProvidentFundSettings() {
         ...currentSettings,
         pfCalculationMode,
         pfCapEnabled,
-        pfCapAmount: Number(pfCapAmount) > 0 ? Number(pfCapAmount) : 1800
+        pfCapAmount: Number(pfCapAmount) > 0 ? Number(pfCapAmount) : 1800,
+        pfCapEffectiveDate: pfCapEffectiveDate ? pfCapEffectiveDate.format('YYYY-MM-DD') : null
       };
 
       const resp = await api.put('/admin/settings/salary', payload);
@@ -236,25 +240,41 @@ export default function ProvidentFundSettings() {
                     paddingTop: '16px',
                     borderTop: '1px solid #e2e8f0',
                     display: 'flex',
+                    flexWrap: 'wrap',
                     alignItems: 'center',
-                    gap: '16px'
+                    gap: '24px'
                   }}>
                     <div>
                       <div style={{ fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>
                         Maximum Monthly PF Cap (₹):
                       </div>
                       <InputNumber 
-                        min={1}
-                        max={100000}
+                        min={0}
+                        max={1000000}
                         value={pfCapAmount}
-                        onChange={(val) => setPfCapAmount(val || 1800)}
+                        onChange={(val) => setPfCapAmount(val !== undefined && val !== null ? val : 1800)}
                         size="large"
                         addonBefore="₹"
                         style={{ width: '200px' }}
                       />
                     </div>
-                    <div style={{ fontSize: '12px', color: '#64748b', maxWidth: '400px', marginTop: '20px' }}>
-                      When enabled, employee PF deduction will be capped at a maximum of <strong>₹{pfCapAmount || 1800}</strong> per month even if calculated PF is higher.
+
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>
+                        Effective From Month (Optional):
+                      </div>
+                      <DatePicker
+                        picker="month"
+                        value={pfCapEffectiveDate}
+                        onChange={(date) => setPfCapEffectiveDate(date)}
+                        placeholder="Select effective month"
+                        size="large"
+                        style={{ width: '220px' }}
+                      />
+                    </div>
+
+                    <div style={{ fontSize: '12px', color: '#64748b', maxWidth: '400px', marginTop: '18px' }}>
+                      When enabled, employee PF deduction will be capped at a maximum of <strong>₹{pfCapAmount || 1800}</strong> per month{pfCapEffectiveDate ? ` starting from ${pfCapEffectiveDate.format('MMM YYYY')}` : ''} even if calculated PF is higher.
                     </div>
                   </div>
                 )}

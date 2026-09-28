@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Card, Button, Modal, Input, message, Layout, Space, Typography, Select, Form, DatePicker, Tag, InputNumber, Switch } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, PlusOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { Table, Card, Button, Modal, Input, message, Layout, Space, Typography, Select, Form, DatePicker, Tag, InputNumber, Switch, Popconfirm } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, PlusOutlined, InfoCircleOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Sidebar from './Sidebar';
@@ -182,6 +182,18 @@ const LeaveEncashment = () => {
         }
     };
 
+    const handleDeleteClaim = async (claim) => {
+        try {
+            const res = await api.delete(`/leave/encash/claims/${claim.id}`);
+            if (res.data?.success) {
+                message.success('Leave encashment claim deleted and balance restored');
+                fetchClaims();
+            }
+        } catch (error) {
+            message.error(error.response?.data?.message || 'Failed to delete encashment claim');
+        }
+    };
+
     const columns = [
         {
             title: 'Employee',
@@ -265,29 +277,52 @@ const LeaveEncashment = () => {
         {
             title: 'Actions',
             key: 'actions',
-            render: (_, record) => record.status === 'PENDING' && (
-                <Space>
-                    <Button
-                        type="primary"
-                        ghost
-                        size="small"
-                        icon={<CheckCircleOutlined />}
-                        onClick={() => handleReview(record, 'APPROVED')}
-                        shape="round"
-                        style={{ borderColor: '#52c41a', color: '#52c41a' }}
+            width: 260,
+            render: (_, record) => (
+                <Space size="small">
+                    {record.status === 'PENDING' && (
+                        <>
+                            <Button
+                                type="primary"
+                                ghost
+                                size="small"
+                                icon={<CheckCircleOutlined />}
+                                onClick={() => handleReview(record, 'APPROVED')}
+                                shape="round"
+                                style={{ borderColor: '#52c41a', color: '#52c41a' }}
+                            >
+                                Approve
+                            </Button>
+                            <Button
+                                danger
+                                ghost
+                                size="small"
+                                icon={<CloseCircleOutlined />}
+                                onClick={() => handleReview(record, 'REJECTED')}
+                                shape="round"
+                            >
+                                Reject
+                            </Button>
+                        </>
+                    )}
+                    <Popconfirm
+                        title="Delete Encashment Claim"
+                        description="Are you sure you want to delete this encashment claim? If approved, the encashed leave balance will be restored."
+                        onConfirm={() => handleDeleteClaim(record)}
+                        okText="Yes, Delete"
+                        cancelText="No"
+                        okButtonProps={{ danger: true }}
                     >
-                        Approve
-                    </Button>
-                    <Button
-                        danger
-                        ghost
-                        size="small"
-                        icon={<CloseCircleOutlined />}
-                        onClick={() => handleReview(record, 'REJECTED')}
-                        shape="round"
-                    >
-                        Reject
-                    </Button>
+                        <Button
+                            danger
+                            ghost
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            shape="round"
+                        >
+                            Delete
+                        </Button>
+                    </Popconfirm>
                 </Space>
             )
         }
