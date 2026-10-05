@@ -92,6 +92,7 @@ const normalizeAttendanceSummary = (summary, monthKey) => {
     weeklyOff,
     holidays,
     payableDays,
+    woHolidayExtraDays: Number(s.woHolidayExtraDays || 0),
     latePenaltyDays,
     lateCount: Number(s.lateCount || 0),
     latePenalty: Number(s.latePunchInPenalty || s.latePenalty || 0),
@@ -1803,6 +1804,13 @@ const PayrollList = () => {
                     </Space>
                   </Descriptions.Item>
                 )}
+                {Number(normalizedAtt?.woHolidayExtraDays || viewRow?.attendanceSummary?.woHolidayExtraDays || 0) > 0 && (
+                  <Descriptions.Item label="Extra Day Pay" span={2}>
+                    <Tag color="green" style={{ fontSize: '13px', fontWeight: '700', borderRadius: '12px', padding: '3px 12px' }}>
+                      +{Number(normalizedAtt?.woHolidayExtraDays || viewRow?.attendanceSummary?.woHolidayExtraDays)} Day(s) Extra Salary (WO/Holiday Work)
+                    </Tag>
+                  </Descriptions.Item>
+                )}
                 <Descriptions.Item label="Payable Days" span={2}>
                   {normalizedAtt.multiplierBreakdown && normalizedAtt.multiplierBreakdown.length > 0 ? (
                     <Popover
@@ -1832,9 +1840,16 @@ const PayrollList = () => {
                       </Button>
                     </Popover>
                   ) : (
-                    <Text strong style={{ color: '#52c41a', fontSize: '16px' }}>
-                      {normalizedAtt.payableDays || 0} days
-                    </Text>
+                    <Space style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      <Text strong style={{ color: '#52c41a', fontSize: '16px' }}>
+                        {normalizedAtt.payableDays || 0} days
+                      </Text>
+                      {Number(normalizedAtt?.woHolidayExtraDays || viewRow?.attendanceSummary?.woHolidayExtraDays || 0) > 0 && (
+                        <Tag color="green" style={{ fontWeight: '700', borderRadius: '10px' }}>
+                          +{Number(normalizedAtt?.woHolidayExtraDays || viewRow?.attendanceSummary?.woHolidayExtraDays)} Extra Day Pay
+                        </Tag>
+                      )}
+                    </Space>
                   )}
                 </Descriptions.Item>
                 {(Number(viewRow?.attendanceSummary?.overtimeMinutes || 0) > 0 ||

@@ -844,6 +844,13 @@ export default function PayrollCycle() {
             <Descriptions.Item label="Absent">{viewRow?.attendanceSummary?.absent || 0}</Descriptions.Item>
             <Descriptions.Item label="Weekly Off">{viewRow?.attendanceSummary?.weeklyOff || 0}</Descriptions.Item>
             <Descriptions.Item label="Holiday">{viewRow?.attendanceSummary?.holidays || 0}</Descriptions.Item>
+            {Number(viewRow?.attendanceSummary?.woHolidayExtraDays || 0) > 0 && (
+              <Descriptions.Item label="Extra Day Pay" span={2}>
+                <Tag color="green" style={{ fontSize: '13px', fontWeight: '700', borderRadius: '12px', padding: '3px 12px' }}>
+                  +{Number(viewRow.attendanceSummary.woHolidayExtraDays)} Day(s) Extra Salary (WO/Holiday Work)
+                </Tag>
+              </Descriptions.Item>
+            )}
             <Descriptions.Item label="Tenure Bonus">
               {viewRow?.attendanceSummary?.tenureBonus ? (
                 <Space>

@@ -33,7 +33,7 @@ const { Content } = Layout;
 const { Title, Text } = Typography;
 
 // Function to calculate leave balance for each staff member
-const calculateLeaveBalance = async (staffWithAssignments, balances) => {
+const calculateLeaveBalance = async (staffWithAssignments, balances, approvedLeaves = []) => {
   const today = new Date().toISOString().slice(0, 10);
   const leaveBalanceData = [];
 
@@ -54,20 +54,30 @@ const calculateLeaveBalance = async (staffWithAssignments, balances) => {
       }
     }
 
+    // Find balances from LeaveBalance table for this staff member
+    const staffBalances = (balances || []).filter(balance =>
+      String(balance.userId) === String(staffMember.id)
+    );
+
+    const usedFromBalance = staffBalances.reduce((sum, balance) =>
+      sum + (parseFloat(balance.used) || 0) + (parseFloat(balance.encashed) || 0), 0
+    );
+
+    // Also calculate used leaves from approved leave requests
+    const staffApprovedRequests = (approvedLeaves || []).filter(l =>
+      String(l.userId || l.user_id) === String(staffMember.id) &&
+      String(l.status || '').toUpperCase() === 'APPROVED'
+    );
+    const usedFromRequests = staffApprovedRequests.reduce((sum, l) =>
+      sum + (parseFloat(l.days) || 0), 0
+    );
+
+    const usedLeaves = Math.max(usedFromBalance, usedFromRequests);
+
     if (activeTemplate) {
       // Calculate total leaves from template categories
       const totalLeaves = (activeTemplate.categories || []).reduce((sum, category) =>
         sum + (parseFloat(category.leaveCount) || 0), 0
-      );
-
-      // Find balances for this staff member
-      const staffBalances = (balances || []).filter(balance =>
-        String(balance.userId) === String(staffMember.id)
-      );
-
-      // Calculate used leaves from balances (including encashed)
-      const usedLeaves = staffBalances.reduce((sum, balance) =>
-        sum + (parseFloat(balance.used) || 0) + (parseFloat(balance.encashed) || 0), 0
       );
 
       // Calculate remaining leaves
@@ -86,7 +96,7 @@ const calculateLeaveBalance = async (staffWithAssignments, balances) => {
       leaveBalanceData.push({
         employeeName: staffMember.profile?.name || staffMember.phone || `Staff ${staffMember.id}`,
         totalLeaves: 0,
-        usedLeaves: 0,
+        usedLeaves,
         remainingLeaves: 0,
         templateName: 'No Policy Assigned',
         staffId: staffMember.id
@@ -94,10 +104,8 @@ const calculateLeaveBalance = async (staffWithAssignments, balances) => {
     }
   }
 
-  // Sort by remaining leaves (descending) and take top 10
-  return leaveBalanceData
-    .sort((a, b) => b.remainingLeaves - a.remainingLeaves)
-    .slice(0, 10);
+  // Return ALL staff members sorted by employeeName
+  return leaveBalanceData.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
 };
 
 const Dashboard = () => {
@@ -164,6 +172,7 @@ const Dashboard = () => {
       setLoading(true);
       let fetchedLoans = [];
       let fetchedExpenses = [];
+      let fetchedLeaves = [];
       let fetchedTodayApprovedExpenseAmount = 0;
 
       // Fetch dashboard stats (now includes leaveToday)
@@ -284,9 +293,11 @@ const Dashboard = () => {
       try {
         const leavesResponse = await api.get('/admin/leaves');
         if (leavesResponse.data.success || leavesResponse.data.data) {
-          setLeaves(leavesResponse.data.data || []);
+          fetchedLeaves = leavesResponse.data.data || [];
+          setLeaves(fetchedLeaves);
         }
       } catch (_) {
+        fetchedLeaves = [];
         setLeaves([]);
       }
 
@@ -325,7 +336,7 @@ const Dashboard = () => {
         const balanceResponse = await api.get('/admin/leave/balances');
         const balances = balanceResponse.data.balances || [];
 
-        const leaveBalanceData = await calculateLeaveBalance(staffWithAssignments, balances);
+        const leaveBalanceData = await calculateLeaveBalance(staffWithAssignments, balances, fetchedLeaves);
         setLeaveBalance(leaveBalanceData);
       } catch (error) {
         console.error('Error fetching leave balance data:', error);
@@ -1341,98 +1352,103 @@ const Dashboard = () => {
                 }
                 bodyStyle={{ padding: '24px' }}
               >
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart
-                    data={leaveBalance.length > 0 ? leaveBalance : [
-                      { employeeName: 'No Data', totalLeaves: 0, usedLeaves: 0, remainingLeaves: 0 }
-                    ]}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis
-                      dataKey="employeeName"
-                      stroke="#8c8c8c"
-                      fontSize="12"
-                      tickLine={{ stroke: '#e8e8e8' }}
-                      axisLine={{ stroke: '#e8e8e8' }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={100}
-                    />
-                    <YAxis
-                      stroke="#8c8c8c"
-                      fontSize="12"
-                      tickLine={{ stroke: '#e8e8e8' }}
-                      axisLine={{ stroke: '#e8e8e8' }}
-                      label={{ value: 'Leave Days', angle: -90, position: 'insideLeft', style: { fontSize: '12px', fill: '#8c8c8c' } }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#fff',
-                        border: '1px solid #d9d9d9',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        color: '#000',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-                      }}
-                      labelStyle={{
-                        color: '#262626',
-                        fontWeight: '600',
-                        marginBottom: '4px'
-                      }}
-                      itemStyle={{ color: '#000' }}
-                      formatter={(value, name) => {
-                        const labels = {
-                          totalLeaves: 'Total Leaves',
-                          usedLeaves: 'Used Leaves',
-                          remainingLeaves: 'Remaining Leaves'
-                        };
-                        return [
-                          `${value} days`,
-                          labels[name] || name
-                        ];
-                      }}
-                    />
-                    <Legend
-                      wrapperStyle={{ paddingTop: '20px' }}
-                      iconType="square"
-                      formatter={(value) => {
-                        const labels = {
-                          totalLeaves: 'Total Leaves',
-                          usedLeaves: 'Used Leaves',
-                          remainingLeaves: 'Remaining Leaves'
-                        };
-                        return <span style={{ color: '#000' }}>{labels[value]}</span>;
-                      }}
-                      payload={[
-                        { value: 'totalLeaves', type: 'square', color: '#1677ff' },
-                        { value: 'usedLeaves', type: 'square', color: '#fa8c16' },
-                        { value: 'remainingLeaves', type: 'square', color: '#52c41a' }
-                      ]}
-                    />
-                    <Bar
-                      dataKey="totalLeaves"
-                      fill="#e6f7ff"
-                      stroke="#1677ff"
-                      strokeWidth={1}
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="usedLeaves"
-                      fill="#fff2e8"
-                      stroke="#fa8c16"
-                      strokeWidth={1}
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="remainingLeaves"
-                      fill="#f6ffed"
-                      stroke="#52c41a"
-                      strokeWidth={1}
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div style={{ width: '100%', overflowX: 'auto', paddingBottom: '12px' }}>
+                  <div style={{ minWidth: Math.max(700, leaveBalance.length * 55), height: 360 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={leaveBalance.length > 0 ? leaveBalance : [
+                          { employeeName: 'No Data', totalLeaves: 0, usedLeaves: 0, remainingLeaves: 0 }
+                        ]}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 65 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis
+                          dataKey="employeeName"
+                          stroke="#8c8c8c"
+                          fontSize="12"
+                          tickLine={{ stroke: '#e8e8e8' }}
+                          axisLine={{ stroke: '#e8e8e8' }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          interval={0}
+                        />
+                        <YAxis
+                          stroke="#8c8c8c"
+                          fontSize="12"
+                          tickLine={{ stroke: '#e8e8e8' }}
+                          axisLine={{ stroke: '#e8e8e8' }}
+                          label={{ value: 'Leave Days', angle: -90, position: 'insideLeft', style: { fontSize: '12px', fill: '#8c8c8c' } }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #d9d9d9',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            color: '#000',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                          }}
+                          labelStyle={{
+                            color: '#262626',
+                            fontWeight: '600',
+                            marginBottom: '4px'
+                          }}
+                          itemStyle={{ color: '#000' }}
+                          formatter={(value, name) => {
+                            const labels = {
+                              totalLeaves: 'Total Leaves',
+                              usedLeaves: 'Used Leaves',
+                              remainingLeaves: 'Remaining Leaves'
+                            };
+                            return [
+                              `${value} days`,
+                              labels[name] || name
+                            ];
+                          }}
+                        />
+                        <Legend
+                          wrapperStyle={{ paddingTop: '20px' }}
+                          iconType="square"
+                          formatter={(value) => {
+                            const labels = {
+                              totalLeaves: 'Total Leaves',
+                              usedLeaves: 'Used Leaves',
+                              remainingLeaves: 'Remaining Leaves'
+                            };
+                            return <span style={{ color: '#000' }}>{labels[value]}</span>;
+                          }}
+                          payload={[
+                            { value: 'totalLeaves', type: 'square', color: '#1677ff' },
+                            { value: 'usedLeaves', type: 'square', color: '#fa8c16' },
+                            { value: 'remainingLeaves', type: 'square', color: '#52c41a' }
+                          ]}
+                        />
+                        <Bar
+                          dataKey="totalLeaves"
+                          fill="#e6f7ff"
+                          stroke="#1677ff"
+                          strokeWidth={1}
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="usedLeaves"
+                          fill="#fff2e8"
+                          stroke="#fa8c16"
+                          strokeWidth={1}
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="remainingLeaves"
+                          fill="#f6ffed"
+                          stroke="#52c41a"
+                          strokeWidth={1}
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
 
                 {/* Summary Statistics */}
                 {leaveBalance.length > 0 && (
