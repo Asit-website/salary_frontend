@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Row, Col, Statistic, Typography, Spin, Menu, Table } from 'antd';
+import { Layout, Card, Row, Col, Statistic, Typography, Spin, Menu, Table, Modal, Input, Tag, Button } from 'antd';
 import {
   UserOutlined,
   CalendarOutlined,
@@ -8,7 +8,8 @@ import {
   MenuUnfoldOutlined,
   LogoutOutlined,
   TeamOutlined,
-  HomeOutlined
+  HomeOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
@@ -123,6 +124,34 @@ const Dashboard = () => {
   const [leaves, setLeaves] = useState([]);
   const [leaveBalance, setLeaveBalance] = useState([]);
   const [expenses, setExpenses] = useState([]);
+
+  const [cardModalVisible, setCardModalVisible] = useState(false);
+  const [cardModalType, setCardModalType] = useState('');
+  const [cardModalTitle, setCardModalTitle] = useState('');
+  const [cardModalData, setCardModalData] = useState([]);
+  const [cardModalLoading, setCardModalLoading] = useState(false);
+  const [cardSearchText, setCardSearchText] = useState('');
+
+  const handleCardClick = async (type, title) => {
+    setCardModalType(type);
+    setCardModalTitle(title);
+    setCardModalVisible(true);
+    setCardModalLoading(true);
+    setCardSearchText('');
+    try {
+      const resp = await api.get('/admin/dashboard/card-details', { params: { type } });
+      if (resp.data.success) {
+        setCardModalData(resp.data.data || []);
+      } else {
+        setCardModalData([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch card details:', err);
+      setCardModalData([]);
+    } finally {
+      setCardModalLoading(false);
+    }
+  };
 
   const navigate = useNavigate();
 
@@ -373,13 +402,17 @@ const Dashboard = () => {
           <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
             <Col xs={24} sm={12} md={6}>
               <Card
+                onClick={() => handleCardClick('total', 'Total Staff')}
                 style={{
                   background: '#ffffff',
                   border: '1px solid #f0f2f5',
                   boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
                   borderRadius: '16px',
-                  height: '100%'
+                  height: '100%',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease-in-out'
                 }}
+                className="dashboard-card-hover"
                 bodyStyle={{ padding: '20px' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -421,13 +454,17 @@ const Dashboard = () => {
             </Col>
             <Col xs={24} sm={12} md={6}>
               <Card
+                onClick={() => handleCardClick('present', 'Present Today')}
                 style={{
                   background: '#ffffff',
                   border: '1px solid #f0f2f5',
                   boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
                   borderRadius: '16px',
-                  height: '100%'
+                  height: '100%',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease-in-out'
                 }}
+                className="dashboard-card-hover"
                 bodyStyle={{ padding: '20px' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -471,13 +508,17 @@ const Dashboard = () => {
             </Col>
             <Col xs={24} sm={12} md={6}>
               <Card
+                onClick={() => handleCardClick('absent', 'Absent Today')}
                 style={{
                   background: '#ffffff',
                   border: '1px solid #f0f2f5',
                   boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
                   borderRadius: '16px',
-                  height: '100%'
+                  height: '100%',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease-in-out'
                 }}
+                className="dashboard-card-hover"
                 bodyStyle={{ padding: '20px' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -521,13 +562,17 @@ const Dashboard = () => {
             </Col>
             <Col xs={24} sm={12} md={6}>
               <Card
+                onClick={() => handleCardClick('leave', 'Today Leave')}
                 style={{
                   background: '#ffffff',
                   border: '1px solid #f0f2f5',
                   boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
                   borderRadius: '16px',
-                  height: '100%'
+                  height: '100%',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease-in-out'
                 }}
+                className="dashboard-card-hover"
                 bodyStyle={{ padding: '20px' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -1448,6 +1493,127 @@ const Dashboard = () => {
               </Card>
             </Col>
           </Row>
+
+          {/* Card Employee List Modal */}
+          <Modal
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '24px' }}>
+                <span style={{ fontSize: '18px', fontWeight: 600 }}>{cardModalTitle} ({cardModalData.length})</span>
+              </div>
+            }
+            open={cardModalVisible}
+            onCancel={() => setCardModalVisible(false)}
+            footer={[
+              <Button key="close" type="primary" onClick={() => setCardModalVisible(false)}>
+                Close
+              </Button>
+            ]}
+            width={750}
+            destroyOnClose
+          >
+            <div style={{ marginBottom: '16px', marginTop: '12px' }}>
+              <Input
+                placeholder="Search employee by name, phone, department..."
+                prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                value={cardSearchText}
+                onChange={(e) => setCardSearchText(e.target.value)}
+                allowClear
+              />
+            </div>
+            {cardModalLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <Spin size="large" />
+              </div>
+            ) : (
+              <Table
+                dataSource={cardModalData.filter(item => {
+                  if (!cardSearchText) return true;
+                  const q = cardSearchText.toLowerCase();
+                  return (
+                    (item.name && item.name.toLowerCase().includes(q)) ||
+                    (item.phone && item.phone.toLowerCase().includes(q)) ||
+                    (item.department && item.department.toLowerCase().includes(q)) ||
+                    (item.designation && item.designation.toLowerCase().includes(q))
+                  );
+                })}
+                rowKey="id"
+                pagination={{ pageSize: 7, showSizeChanger: false }}
+                size="small"
+                columns={[
+                  {
+                    title: 'Staff Member',
+                    key: 'name',
+                    render: (record) => (
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#262626' }}>{record.name}</div>
+                        <div style={{ fontSize: '12px', color: '#8c8c8c' }}>{record.phone} {record.staffId ? `• ${record.staffId}` : ''}</div>
+                      </div>
+                    )
+                  },
+                  {
+                    title: 'Department',
+                    dataIndex: 'department',
+                    key: 'department',
+                    render: (val) => <Tag color="blue">{val || 'General'}</Tag>
+                  },
+                  {
+                    title: 'Designation',
+                    dataIndex: 'designation',
+                    key: 'designation',
+                    render: (val) => val || 'Staff'
+                  },
+                  ...(cardModalType === 'total' ? [
+                    {
+                      title: 'Account Status',
+                      dataIndex: 'status',
+                      key: 'status',
+                      render: (val) => <Tag color={val === 'Active' ? 'green' : 'red'}>{val}</Tag>
+                    },
+                    {
+                      title: "Today's Status",
+                      dataIndex: 'todayStatus',
+                      key: 'todayStatus',
+                      render: (val) => <Tag color={val === 'Present' ? 'green' : val === 'Leave' ? 'purple' : 'orange'}>{val}</Tag>
+                    }
+                  ] : []),
+                  ...(cardModalType === 'present' ? [
+                    {
+                      title: 'Punch In',
+                      dataIndex: 'punchedInAt',
+                      key: 'punchedInAt',
+                      render: (val) => <Tag color="green">{val || 'Present'}</Tag>
+                    },
+                    {
+                      title: 'Punch Out',
+                      dataIndex: 'punchedOutAt',
+                      key: 'punchedOutAt',
+                      render: (val) => <Tag color={val !== '-' ? 'blue' : 'default'}>{val || '-'}</Tag>
+                    }
+                  ] : []),
+                  ...(cardModalType === 'leave' ? [
+                    {
+                      title: 'Leave Type',
+                      dataIndex: 'leaveType',
+                      key: 'leaveType',
+                      render: (val) => <Tag color="purple">{val}</Tag>
+                    },
+                    {
+                      title: 'Reason / Note',
+                      dataIndex: 'reason',
+                      key: 'reason'
+                    }
+                  ] : []),
+                  ...(cardModalType === 'absent' ? [
+                    {
+                      title: 'Today Status',
+                      key: 'absentStatus',
+                      render: () => <Tag color="red">Absent Today</Tag>
+                    }
+                  ] : [])
+                ]}
+              />
+            )}
+          </Modal>
         </Content>
       </Layout>
     </Layout>

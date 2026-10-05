@@ -286,7 +286,21 @@ export default function ShiftSettings() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  const [enableMultiplePunches, setEnableMultiplePunches] = useState(false);
+
+  const loadAddonSettings = async () => {
+    try {
+      const res = await api.get('/admin/addon-settings');
+      if (res.data?.success) {
+        setEnableMultiplePunches(!!res.data?.addonSetting?.enableMultiplePunches);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    load();
+    loadAddonSettings();
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
@@ -297,6 +311,7 @@ export default function ShiftSettings() {
       code: '',
       startTime: null,
       endTime: null,
+      timeSlots: [{ startTime: null, endTime: null }],
       workMinutes: 480,
       workHours: 8,
       workMins: 0,
@@ -316,12 +331,22 @@ export default function ShiftSettings() {
   const openEdit = (tpl) => {
     setEditing(tpl);
     form.resetFields();
+
+    const rawSlots = Array.isArray(tpl.timeSlots) ? tpl.timeSlots : (Array.isArray(tpl.time_slots) ? tpl.time_slots : []);
+    const formattedSlots = rawSlots.length > 0 ? rawSlots.map(s => ({
+      startTime: timeFromStr(s.startTime),
+      endTime: timeFromStr(s.endTime),
+    })) : [
+      { startTime: timeFromStr(tpl.startTime), endTime: timeFromStr(tpl.endTime) }
+    ];
+
     form.setFieldsValue({
       shiftType: tpl.shiftType || 'fixed',
       name: tpl.name || '',
       code: tpl.code || '',
       startTime: timeFromStr(tpl.startTime),
       endTime: timeFromStr(tpl.endTime),
+      timeSlots: formattedSlots,
       workMinutes: tpl.workMinutes || null,
       workHours: tpl.workMinutes ? Math.floor((tpl.workMinutes || 0) / 60) : 8,
       workMins: tpl.workMinutes ? ((tpl.workMinutes || 0) % 60) : 0,
@@ -350,12 +375,32 @@ export default function ShiftSettings() {
   const save = async () => {
     try {
       const v = await form.validateFields();
+
+      let startTimeVal = v.shiftType !== 'open' ? toHHmmss(v.startTime) : null;
+      let endTimeVal = v.shiftType !== 'open' ? toHHmmss(v.endTime) : null;
+
+      let slotsArr = null;
+      if (v.shiftType !== 'open' && enableMultiplePunches && Array.isArray(v.timeSlots)) {
+        const cleanSlots = v.timeSlots.map((s, idx) => ({
+          slotNumber: idx + 1,
+          startTime: toHHmmss(s.startTime),
+          endTime: toHHmmss(s.endTime),
+        })).filter(s => s.startTime && s.endTime);
+
+        if (cleanSlots.length > 0) {
+          slotsArr = cleanSlots;
+          startTimeVal = cleanSlots[0].startTime;
+          endTimeVal = cleanSlots[cleanSlots.length - 1].endTime;
+        }
+      }
+
       const payload = {
         shiftType: v.shiftType,
         name: v.name,
         code: v.code || undefined,
-        startTime: v.shiftType !== 'open' ? toHHmmss(v.startTime) : null,
-        endTime: v.shiftType !== 'open' ? toHHmmss(v.endTime) : null,
+        startTime: startTimeVal,
+        endTime: endTimeVal,
+        timeSlots: slotsArr,
         workMinutes: v.shiftType === 'open' ? (Number(v.workHours || 0) * 60 + Number(v.workMins || 0)) : null,
         bufferMinutes: Number(v.bufferMinutes || 0),
         earliestPunchInTime: v.earliestPunchInTime ? toHHmmss(v.earliestPunchInTime) : null,
@@ -483,22 +528,68 @@ export default function ShiftSettings() {
               <Form.Item shouldUpdate noStyle>
                 {() =>
                   form.getFieldValue('shiftType') !== 'open' ? (
-                    <Space size={12} style={{ display: 'flex' }}>
-                      <Form.Item name="startTime" label="Start Time" style={{ flex: 1 }}>
-                        <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
-                      </Form.Item>
-                      <Form.Item
-                        name="endTime"
-                        label="End Time"
-                        style={{ flex: 1 }}
-                        dependencies={['startTime']}
-                        rules={[
-                          { required: true, message: 'Please select end time' },
-                        ]}
-                      >
-                        <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
-                      </Form.Item>
-                    </Space>
+                    enableMultiplePunches ? (
+                      <Form.List name="timeSlots">
+                        {(fields, { add, remove }) => (
+                          <>
+                            {fields.map((field, index) => (
+                              <Space key={field.key} style={{ display: 'flex', marginBottom: 12 }} align="start">
+                                <Text style={{ minWidth: 55, paddingTop: 6, fontWeight: 600, color: '#475569' }}>Slot {index + 1}:</Text>
+                                <Form.Item
+                                  {...field}
+                                  name={[field.name, 'startTime']}
+                                  label={index === 0 ? 'Start Time' : ''}
+                                  rules={[{ required: true, message: 'Start time required' }]}
+                                  style={{ flex: 1, marginBottom: 0 }}
+                                >
+                                  <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
+                                </Form.Item>
+                                <Form.Item
+                                  {...field}
+                                  name={[field.name, 'endTime']}
+                                  label={index === 0 ? 'End Time' : ''}
+                                  rules={[{ required: true, message: 'End time required' }]}
+                                  style={{ flex: 1, marginBottom: 0 }}
+                                >
+                                  <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
+                                </Form.Item>
+                                {fields.length > 1 && (
+                                  <Button 
+                                    type="text" 
+                                    danger 
+                                    onClick={() => remove(field.name)} 
+                                    icon={<DeleteOutlined />} 
+                                    style={{ marginTop: index === 0 ? 30 : 2 }}
+                                  />
+                                )}
+                              </Space>
+                            ))}
+                            <Form.Item style={{ marginTop: 8, marginBottom: 0 }}>
+                              <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                                Add More Time Slot
+                              </Button>
+                            </Form.Item>
+                          </>
+                        )}
+                      </Form.List>
+                    ) : (
+                      <Space size={12} style={{ display: 'flex' }}>
+                        <Form.Item name="startTime" label="Start Time" style={{ flex: 1 }} rules={[{ required: true, message: 'Please select start time' }]}>
+                          <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
+                        </Form.Item>
+                        <Form.Item
+                          name="endTime"
+                          label="End Time"
+                          style={{ flex: 1 }}
+                          dependencies={['startTime']}
+                          rules={[
+                            { required: true, message: 'Please select end time' },
+                          ]}
+                        >
+                          <TimePicker format="HH:mm" style={{ width: '100%' }} minuteStep={5} />
+                        </Form.Item>
+                      </Space>
+                    )
                   ) : (
                     <>
                       <div style={{ marginBottom: 8, fontSize: 12, color: '#8c8c8c' }}>

@@ -239,6 +239,9 @@ export default function Settings() {
   const [qrStaffLoading, setQrStaffLoading] = useState(false);
   const [qrSelectedStaffIds, setQrSelectedStaffIds] = useState([]);
   const [qrStaffSearchText, setQrStaffSearchText] = useState('');
+  const [addonOpen, setAddonOpen] = useState(false);
+  const [addonSaving, setAddonSaving] = useState(false);
+  const [enableMultiplePunches, setEnableMultiplePunches] = useState(false);
   const normalizeBrand = (value) => {
     const raw = String(value || '').trim();
     if (!raw) return DEFAULT_BRAND_TEXT;
@@ -290,6 +293,12 @@ export default function Settings() {
       try {
         const subResp = await api.get('/subscription/subscription-info');
         setSubscriptionInfo(subResp.data?.subscriptionInfo);
+      } catch (_) { }
+      try {
+        const addonResp = await api.get('/admin/addon-settings');
+        if (addonResp.data?.success) {
+          setEnableMultiplePunches(!!addonResp.data.addonSetting?.enableMultiplePunches);
+        }
       } catch (_) { }
     };
     loadData();
@@ -1021,6 +1030,33 @@ export default function Settings() {
     }
   };
 
+  const openAddonModal = async () => {
+    try {
+      const resp = await api.get('/admin/addon-settings');
+      if (resp.data?.success) {
+        setEnableMultiplePunches(!!resp.data.addonSetting?.enableMultiplePunches);
+      }
+    } catch (_) { }
+    setAddonOpen(true);
+  };
+
+  const saveAddonSettings = async () => {
+    try {
+      setAddonSaving(true);
+      const resp = await api.post('/admin/addon-settings', { enableMultiplePunches });
+      if (resp.data?.success) {
+        message.success('Add-on settings updated successfully');
+        setAddonOpen(false);
+      } else {
+        message.error(resp.data?.message || 'Failed to update settings');
+      }
+    } catch (e) {
+      message.error(e?.response?.data?.message || 'Failed to update settings');
+    } finally {
+      setAddonSaving(false);
+    }
+  };
+
   const tiles = useMemo(() => [
     {
       key: 'attendance',
@@ -1029,6 +1065,7 @@ export default function Settings() {
         // { key: 'att-tpl', icon: <ProfileOutlined />, label: 'Attendance Templates', desc: 'Set standard baselines for attendance tracking', onClick: () => navigate('/settings/attendance-templates') },
         { key: 'att-geo', icon: <EnvironmentOutlined />, label: 'Attendance Geofence Settings', desc: 'Set up virtual boundaries for attendance tracking', onClick: () => navigate('/settings/geofence') },
         { key: 'shift', icon: <ScheduleOutlined />, label: 'Shift Settings', desc: 'Create and manage shifts for employees', onClick: () => navigate('/settings/shifts') },
+        { key: 'addon-settings', icon: <ThunderboltOutlined />, label: 'Multiple Punch / Split Shift Settings', desc: enableMultiplePunches ? 'Multiple Punches: Enabled' : 'Multiple Punches: Disabled', onClick: openAddonModal },
         { key: 'rules', icon: <ThunderboltOutlined />, label: 'Automation Rules', desc: 'Track late entry, overtime, early exit, breaks and biometric sync', onClick: () => navigate('/settings/automation-rules') },
         { key: 'holiday-work-pay', icon: <ThunderboltOutlined />, label: 'Holiday Work Pay Rules', desc: 'Configure multipliers for working on holidays/off-days', onClick: () => navigate('/settings/holiday-work-pay') },
         { key: 'mobile-punch-restriction', icon: <LockOutlined />, label: 'Mobile Punch Restriction', desc: 'Restrict staff from punching via mobile app', onClick: openMobileRestrictionModal },
@@ -2037,6 +2074,34 @@ export default function Settings() {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
             <Button shape="round" onClick={() => setQrRestrictedOpen(false)}>Close</Button>
+          </div>
+        </Space>
+      </Modal>
+
+      <Modal
+        title="Multiple Punch / Split Shift Settings"
+        open={addonOpen}
+        onCancel={() => setAddonOpen(false)}
+        footer={null}
+        destroyOnClose
+        width={500}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <div style={{ color: '#6b7280', fontSize: 13 }}>
+            Enable multiple punches and split shifts for your organization. When enabled, you can configure multiple time slots per shift template under Shift Settings.
+          </div>
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', marginTop: 8 }}>
+            <div>
+              <Text strong style={{ fontSize: 14, color: '#1e293b' }}>Enable Multiple Punches / Split Shifts</Text>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Allow employees to punch in/out multiple times a day for split shifts</div>
+            </div>
+            <Switch checked={enableMultiplePunches} onChange={setEnableMultiplePunches} />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <Button onClick={() => setAddonOpen(false)}>Cancel</Button>
+            <Button type="primary" loading={addonSaving} onClick={saveAddonSettings}>Save Settings</Button>
           </div>
         </Space>
       </Modal>
