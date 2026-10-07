@@ -724,8 +724,9 @@ const OrgReports = () => {
     },
     {
       title: 'Category',
-      dataIndex: 'categoryKey',
-      key: 'categoryKey'
+      dataIndex: 'categoryName',
+      key: 'categoryName',
+      render: (text, record) => text || record.category || record.categoryKey || 'N/A'
     },
     {
       title: 'Allocated',

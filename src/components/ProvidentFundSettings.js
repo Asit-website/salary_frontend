@@ -142,69 +142,122 @@ export default function ProvidentFundSettings() {
                 {options.map((opt) => {
                   const isSelected = pfCalculationMode === opt.value;
                   return (
-                    <div 
-                      key={opt.value}
-                      onClick={() => setPfCalculationMode(opt.value)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '16px 20px',
-                        borderRadius: '12px',
-                        border: isSelected ? '2px solid #1677ff' : '1px solid #e2e8f0',
-                        backgroundColor: isSelected ? '#f0f7ff' : '#fff',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        boxShadow: isSelected ? '0 4px 12px rgba(22, 119, 255, 0.08)' : '0 2px 4px rgba(0,0,0,0.02)',
-                        position: 'relative'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <div style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '8px',
-                          backgroundColor: isSelected ? '#e6f4ff' : '#f8fafc',
+                    <div key={opt.value}>
+                      <div 
+                        onClick={() => setPfCalculationMode(opt.value)}
+                        style={{
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          transition: 'background-color 0.2s'
-                        }}>
-                          {opt.icon}
-                        </div>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontWeight: '700', fontSize: '14px', color: '#1e293b' }}>{opt.label}</span>
-                            {opt.badge && (
-                              <span style={{
-                                fontSize: '9px',
-                                fontWeight: '700',
-                                padding: '2px 8px',
-                                borderRadius: '10px',
-                                textTransform: 'uppercase',
-                                color: isSelected ? '#0050b3' : '#64748b',
-                                backgroundColor: isSelected ? '#bae0ff' : '#f1f5f9',
-                                letterSpacing: '0.5px'
-                              }}>
-                                {opt.badge}
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px', lineHeight: '1.4' }}>{opt.desc}</div>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', paddingLeft: '16px' }}>
-                        <div style={{
-                          width: '20px',
-                          height: '20px',
-                          borderRadius: '50%',
-                          border: isSelected ? '6px solid #1677ff' : '2px solid #cbd5e1',
-                          backgroundColor: '#fff',
+                          justifyContent: 'space-between',
+                          padding: '16px 20px',
+                          borderRadius: isSelected ? '12px 12px 0 0' : '12px',
+                          border: isSelected ? '2px solid #1677ff' : '1px solid #e2e8f0',
+                          backgroundColor: isSelected ? '#f0f7ff' : '#fff',
+                          cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          flexShrink: 0
-                        }} />
+                          boxShadow: isSelected ? '0 4px 12px rgba(22, 119, 255, 0.08)' : '0 2px 4px rgba(0,0,0,0.02)',
+                          position: 'relative'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '8px',
+                            backgroundColor: isSelected ? '#e6f4ff' : '#f8fafc',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            transition: 'background-color 0.2s'
+                          }}>
+                            {opt.icon}
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: '700', fontSize: '14px', color: '#1e293b' }}>{opt.label}</span>
+                              {opt.badge && (
+                                <span style={{
+                                  fontSize: '9px',
+                                  fontWeight: '700',
+                                  padding: '2px 8px',
+                                  borderRadius: '10px',
+                                  textTransform: 'uppercase',
+                                  color: isSelected ? '#0050b3' : '#64748b',
+                                  backgroundColor: isSelected ? '#bae0ff' : '#f1f5f9',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  {opt.badge}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px', lineHeight: '1.4' }}>{opt.desc}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', paddingLeft: '16px' }}>
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            border: isSelected ? '6px solid #1677ff' : '2px solid #cbd5e1',
+                            backgroundColor: '#fff',
+                            transition: 'all 0.2s ease',
+                            flexShrink: 0
+                          }} />
+                        </div>
                       </div>
+                      {isSelected && opt.value === 'basic_minus_penalties' && (
+                        <div style={{
+                          padding: '14px 18px',
+                          backgroundColor: '#f6ffed',
+                          border: '2px solid #1677ff',
+                          borderTop: 'none',
+                          borderRadius: '0 0 12px 12px',
+                          fontSize: '12px',
+                          color: '#135200',
+                          boxShadow: '0 4px 12px rgba(22, 119, 255, 0.08)'
+                        }}>
+                          <div style={{ fontWeight: '700', fontSize: '13px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>✓ Penalties Deducted Calculation Rule Active</span>
+                          </div>
+                          <div style={{ lineHeight: '1.5', color: '#274e13' }}>
+                            Late punch-in penalties and early exit penalties will be automatically subtracted from Basic + DA Salary before calculating the Employee PF contribution (12%).
+                          </div>
+                          <div style={{
+                            marginTop: '8px',
+                            fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace',
+                            fontSize: '11px',
+                            background: '#ffffff',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #d9f7be',
+                            display: 'inline-block',
+                            color: '#237804',
+                            fontWeight: '600'
+                          }}>
+                            PF Contribution = 12% × [(Basic Salary + DA) - Late Punch-In Penalties - Early Exit Penalties]
+                          </div>
+                        </div>
+                      )}
+                      {isSelected && opt.value === 'basic' && (
+                        <div style={{
+                          padding: '14px 18px',
+                          backgroundColor: '#f0f7ff',
+                          border: '2px solid #1677ff',
+                          borderTop: 'none',
+                          borderRadius: '0 0 12px 12px',
+                          fontSize: '12px',
+                          color: '#003a8c',
+                          boxShadow: '0 4px 12px rgba(22, 119, 255, 0.08)'
+                        }}>
+                          <div style={{ fontWeight: '700', fontSize: '13px', marginBottom: '4px' }}>
+                            Standard Basic + DA Calculation Active
+                          </div>
+                          <div style={{ lineHeight: '1.5', color: '#1d39c4' }}>
+                            Employee PF contribution (12%) will be calculated directly on full Basic + DA Salary without deducting late or early exit penalties.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
